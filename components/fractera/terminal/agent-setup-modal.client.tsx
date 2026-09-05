@@ -342,16 +342,22 @@ export function AgentSetupModal({
 
         {/* ── 3. запуск ───────────────────────────────────────────────── */}
         <section className="flex flex-col gap-2 rounded-lg border border-border p-3">
-          <span className="font-medium text-[13px]">3. Запуск канала</span>
+          <span className="font-medium text-[13px]">3. Сессия агента</span>
           <p className="text-[12px] text-muted-foreground leading-relaxed">
-            Запустите канал, затем напишите боту с телефона.{" "}
-            <strong className="text-foreground">
-              Код привязки появится здесь сам
-            </strong>{" "}
-            — переписывать его никуда не нужно.
+            Канал уже работает — он поднят при установке сервера и живёт сам.
+            Кнопка <strong className="text-foreground">показывает</strong> его
+            живой экран в этой вкладке.
             <br />
-            <strong className="text-foreground">Пока вкладка открыта</strong> —
-            канал жив; закроете браузер — сессия закончится вместе с ним.
+            Напишите боту с телефона —{" "}
+            <strong className="text-foreground">
+              код привязки появится здесь сам
+            </strong>
+            , переписывать его никуда не нужно.
+            <br />
+            <strong className="text-foreground">
+              Закроете браузер — канал продолжит работать.
+            </strong>{" "}
+            Вкладка им не владеет.
           </p>
           <Button
             disabled={!(loggedIn && hasToken)}
@@ -360,9 +366,7 @@ export function AgentSetupModal({
             variant={channelRunning ? "outline" : "default"}
           >
             <SendIcon size={14} />
-            {channelRunning
-              ? "Перезапустить канал"
-              : "Запустить канал Telegram"}
+            {channelRunning ? "Показать заново" : "Показать сессию агента"}
           </Button>
           {loggedIn && hasToken ? null : (
             <span className="text-[11px] text-muted-foreground">
@@ -398,8 +402,8 @@ export function AgentSetupModal({
               </span>
             ) : (
               <span className="text-[11px] text-muted-foreground">
-                Сначала запустите канал: команду привязки принимает та сессия, в
-                которой он работает.
+                Сначала нажмите «Показать сессию агента» выше: команду привязки
+                принимает та сессия, в которой работает канал.
               </span>
             )}
           </section>
