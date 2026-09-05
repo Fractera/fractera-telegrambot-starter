@@ -36,6 +36,18 @@ import { Input } from "@/components/ui/input";
 const BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 const ENDPOINT = `${BASE}/api/fractera/agent-setup`;
 
+/**
+ * Дверь ключа OpenAI — ЧУЖАЯ И ЕДИНСТВЕННАЯ.
+ *
+ * 🔒 Она уже умеет всё: читает маску из файла слота, а пишет через
+ * `POST /platform/openai-key` службы данных, которая одна знает список
+ * потребителей. Своего хранения здесь нет и заводить его нельзя — второй путь
+ * ключа разошёлся бы с первым молча (оплачено шагом 109-3).
+ */
+const KEY_ENDPOINT = `${BASE}/api/fractera/openai-key`;
+
+type OpenAiState = { masked: string; present: boolean };
+
 type Setup = {
   subscription: { loggedIn: boolean | null; method: string | null };
   telegram: {
@@ -140,6 +152,80 @@ export function AgentSetupModal({
   const [note, setNote] = useState("");
   const pairRef = useRef<HTMLElement | null>(null);
   const [pairVisible, setPairVisible] = useState(false);
+  const [openai, setOpenai] = useState<OpenAiState | null>(null);
+  const [openaiKey, setOpenaiKey] = useState("");
+  const [keyBusy, setKeyBusy] = useState(false);
+  const [keyNote, setKeyNote] = useState("");
+
+  // 🔒 КЛЮЧ СПРАШИВАЕТСЯ ОДИН РАЗ, А НЕ КАЖДЫЕ ТРИ СЕКУНДЫ. Опрос нужен там, где
+  // состояние меняется САМО — код привязки прилетает от бота, пока человек
+  // смотрит на экран. Ключ меняет только он сам, здесь и сейчас.
+  const loadKey = useCallback(async () => {
+    try {
+      const res = await fetch(KEY_ENDPOINT, { cache: "no-store" });
+      if (res.ok) {
+        setOpenai((await res.json()) as OpenAiState);
+      }
+    } catch {
+      /* дверь недоступна — раздел просто покажет «не задан» */
+    }
+  }, []);
+
+  useEffect(() => {
+    loadKey();
+  }, [loadKey]);
+
+  const handleKeyChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      setOpenaiKey(e.target.value);
+    },
+    []
+  );
+
+  const handleSaveKey = useCallback(async () => {
+    const value = openaiKey.trim();
+    if (value.length < 20) {
+      return;
+    }
+    setKeyBusy(true);
+    setKeyNote("");
+    try {
+      const res = await fetch(KEY_ENDPOINT, {
+        body: JSON.stringify({ key: value }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        applied?: { chat?: boolean; project?: boolean };
+        error?: string;
+        masked?: string;
+        reason?: string;
+      };
+      if (res.ok) {
+        setOpenai({ masked: data.masked ?? "", present: true });
+        setOpenaiKey("");
+        // 🛑 «СОХРАНЁН» И «ПРИМЕНЁН» — РАЗНЫЕ УТВЕРЖДЕНИЯ, И ДВЕРЬ ГОВОРИТ ЭТО
+        // ОТВЕТОМ. Разбор входящих подхватит ключ сразу — он читает файл на
+        // каждом обращении; само приложение читает окружение при старте и до
+        // пересборки работает со старым. Обещать обратное значило бы соврать.
+        setKeyNote(
+          data.applied?.project
+            ? "Ключ сохранён и применён везде."
+            : "Ключ сохранён. Разбор входящих подхватит сразу; само приложение — после ближайшей пересборки."
+        );
+        return;
+      }
+      setKeyNote(
+        data.error === "bad-format"
+          ? "Это не похоже на ключ OpenAI: ожидается вид sk-…"
+          : `Не сохранён: ${data.reason ?? data.error ?? res.status}`
+      );
+    } catch {
+      setKeyNote("Не сохранён: дверь недоступна.");
+    } finally {
+      setKeyBusy(false);
+    }
+  }, [openaiKey]);
 
   const jumpToPair = useCallback(() => {
     pairRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -424,6 +510,71 @@ export function AgentSetupModal({
             отвечает.
           </p>
         ) : null}
+
+        {/* ── 5. ключ OpenAI — НЕОБЯЗАТЕЛЬНО ────────────────────────────────
+            🔒 РАЗДЕЛ ВНИЗУ И БЛЕДНЕЕ ОСТАЛЬНЫХ, ПОТОМУ ЧТО ОН НЕ НУЖЕН ДЛЯ
+            РАБОТЫ БОТА. Бот отвечает по подписке владельца; ключ тратится
+            только на разбор входящих — расшифровку речи, описание изображений
+            и укладку в векторную память и граф знаний. Раздел, выглядящий как
+            четыре обязательных шага выше, читался бы как пятое препятствие.
+
+            🔒 ЭТО ДВЕРЬ К ОБЩЕМУ ХРАНИЛИЩУ, А НЕ ЕЩЁ ОДНО МЕСТО ХРАНЕНИЯ.
+            Слово владельца: «во множестве мест вводим ключ, но если он хотя бы
+            в одном месте введён — он виден везде». Так и устроено: запись идёт
+            единственной дверью `POST /platform/openai-key` службы данных, и
+            список потребителей знает она одна. ✗ шагом 109-3 оплачено обратное:
+            чат писал файл слота сам, ключ доезжал только до приложения, а граф
+            знаний и слой данных о нём не знали — и молчали об этом.
+
+            🛑 ДВЕРЬ СУЩЕСТВОВАЛА С ШАГА 96 И НЕ ИМЕЛА НИ ОДНОГО ЭКРАНА.
+            Способность была построена и заперта: ввести ключ отсюда было
+            нельзя, хотя код для этого лежал готовым. */}
+        <section className="flex flex-col gap-2 rounded-lg border border-border/60 border-dashed p-3">
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-medium text-[13px] text-muted-foreground">
+              Ключ OpenAI — необязательно
+            </span>
+            <span className="font-mono text-[11px] text-muted-foreground">
+              {openai?.present ? openai.masked : "не задан"}
+            </span>
+          </div>
+          <p className="text-[12px] text-muted-foreground leading-relaxed">
+            Боту он не нужен — тот отвечает по вашей подписке. Ключ тратится
+            только на{" "}
+            <strong className="text-foreground">разбор входящих</strong>:
+            расшифровку голосовых, описание изображений и укладку в векторную
+            память и граф знаний. Расход экономный — короткие вызовы по одному
+            на сообщение, и только когда сообщение пришло.
+          </p>
+          <p className="text-[12px] text-muted-foreground leading-relaxed">
+            Ключ в проекте{" "}
+            <strong className="text-foreground">один на всё</strong>: введённый
+            здесь, он становится виден и приложению, и слою данных, и графу
+            знаний. Если вы уже задавали его в другом месте — здесь он показан
+            маской, вводить второй раз не нужно.
+          </p>
+          <div className="flex gap-2">
+            <Input
+              autoComplete="off"
+              className="font-mono text-[13px]"
+              onChange={handleKeyChange}
+              placeholder="sk-…"
+              type="password"
+              value={openaiKey}
+            />
+            <Button
+              disabled={keyBusy || openaiKey.trim().length < 20}
+              onClick={handleSaveKey}
+              type="button"
+              variant="outline"
+            >
+              {keyBusy ? "…" : "Сохранить"}
+            </Button>
+          </div>
+          {keyNote ? (
+            <span className="text-[11px] text-muted-foreground">{keyNote}</span>
+          ) : null}
+        </section>
 
         {note ? (
           <p className="rounded-lg bg-amber-500/10 px-3 py-2 text-[12px] text-amber-600 dark:text-amber-300">
