@@ -1,7 +1,13 @@
 "use client";
 
-import { CheckIcon, KeyRoundIcon, LinkIcon, SendIcon } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import {
+  ArrowDownIcon,
+  CheckIcon,
+  KeyRoundIcon,
+  LinkIcon,
+  SendIcon,
+} from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -83,6 +89,34 @@ function PairRow({
   );
 }
 
+/**
+ * Пульсирующая стрелка к четвёртому шагу.
+ *
+ * 🔒 РАЗДЕЛ, ПОЯВИВШИЙСЯ НИЖЕ ВИДИМОЙ ЧАСТИ, РАВЕН ОТСУТСТВУЮЩЕМУ. Окно
+ * прокручиваемое (`max-h-[85vh] overflow-y-auto`), а четвёртый шаг возникает
+ * САМ, когда бот получил сообщение, — человек в этот момент смотрит на третий
+ * и не догадывается, что ниже что-то выросло.
+ *
+ * ✗ ОПЛАЧЕНО ВЛАДЕЛЬЦЕМ 2026-09-05: «когда появляется четвёртый шаг, его не
+ * видно». Он ждал всплывающего окна с кодом и решил, что привязка сломалась, —
+ * при том, что код лежал на экране, просто ниже края.
+ *
+ * 🛑 ЦВЕТ ВЗЯТ ЯНТАРНЫЙ, А НЕ ФИРМЕННЫЙ: фирменный уже носят кнопки шагов, и
+ * ещё одна такая же не позвала бы взгляд. Здесь нужен именно чужой цвет.
+ */
+function ScrollHint({ onJump }: { onJump: () => void }) {
+  return (
+    <button
+      className="-translate-x-1/2 fixed bottom-6 left-1/2 z-50 flex animate-bounce items-center gap-2 rounded-full bg-orange-500 px-4 py-2 font-medium text-[13px] text-white shadow-lg shadow-orange-500/40 ring-4 ring-orange-500/30 transition hover:bg-orange-600 sm:absolute sm:bottom-4"
+      onClick={onJump}
+      type="button"
+    >
+      <ArrowDownIcon className="animate-pulse" size={16} />
+      Бот прислал код — подтвердите
+    </button>
+  );
+}
+
 type Props = {
   /** Идёт ли в этой вкладке сессия с каналом — команду привязки принимает она. */
   channelRunning: boolean;
@@ -104,6 +138,33 @@ export function AgentSetupModal({
   const [token, setToken] = useState("");
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
+  const pairRef = useRef<HTMLElement | null>(null);
+  const [pairVisible, setPairVisible] = useState(false);
+
+  const jumpToPair = useCallback(() => {
+    pairRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, []);
+
+  /**
+   * 🔒 ПРИВЯЗКА ЗАКРЫВАЕТ ОКНО, И ЭТО НЕ УКРАШЕНИЕ, А ПОЧИНКА.
+   *
+   * ✗ ОПЛАЧЕНО ВЛАДЕЛЬЦЕМ 2026-09-05: «когда мы нажимаем кнопку привязать,
+   * очевидно, что что-то происходит, но непонятно что». Команда уходит в
+   * терминал вкладки И СРАЗУ ИСПОЛНЯЕТСЯ — она отправляется с переводом строки,
+   * как код входа по подписке. Но результат печатается в терминал, а терминал в
+   * этот момент закрыт этим самым окном. Работа шла, видно её не было.
+   *
+   * 🛑 ДЕЙСТВИЕ, РЕЗУЛЬТАТ КОТОРОГО ЗАКРЫТ СОБСТВЕННЫМ ОКНОМ, НЕОТЛИЧИМО ОТ
+   * БЕЗДЕЙСТВИЯ. Правило шире этой кнопки: всё, что пишет ответ в терминал,
+   * обязано освободить его перед тем, как писать.
+   */
+  const handlePairAndClose = useCallback(
+    (code: string) => {
+      onPair(code);
+      onClose();
+    },
+    [onClose, onPair]
+  );
 
   const load = useCallback(async () => {
     try {
@@ -180,10 +241,34 @@ export function AgentSetupModal({
   const hasToken = setup?.telegram.present === true;
   const pending = setup?.telegram.pending ?? [];
   const allowed = setup?.telegram.allowed ?? 0;
+  const pendingCount = pending.length;
+
+  // 🔒 СТРЕЛКА ГАСНЕТ САМА, КОГДА ЦЕЛЬ ВИДНА, И ЭТО ОБЯЗАТЕЛЬНО. Подсказка,
+  // висящая поверх того, на что она указывает, перестаёт быть подсказкой и
+  // становится помехой: она закрывает собой кнопку «Привязать».
+  // 🛑 ВИДИМОСТЬ ИЗМЕРЯЕТСЯ НАБЛЮДАТЕЛЕМ, А НЕ ВЫСОТОЙ ОКНА. Раздел появляется
+  // и исчезает сам, окно прокручивают руками, у людей разные экраны — считать
+  // «влезло или нет» по числам значило бы угадывать.
+  useEffect(() => {
+    const el = pairRef.current;
+    if (!(el && pendingCount > 0)) {
+      setPairVisible(false);
+      return;
+    }
+    const io = new IntersectionObserver(
+      ([entry]) => setPairVisible(entry.isIntersecting),
+      { threshold: 0.6 }
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [pendingCount]);
 
   return (
     <Dialog onOpenChange={handleOpenChange} open>
-      <DialogContent className="flex max-h-[85vh] flex-col overflow-y-auto sm:max-w-lg">
+      <DialogContent className="relative flex max-h-[85vh] flex-col overflow-y-auto sm:max-w-lg">
+        {pending.length > 0 && !pairVisible ? (
+          <ScrollHint onJump={jumpToPair} />
+        ) : null}
         <DialogHeader>
           <div className="mb-1 flex items-center gap-3">
             <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary/10">
@@ -291,7 +376,10 @@ export function AgentSetupModal({
             нечего, показывать нечего; пустой раздел «ожидание кода» на экране
             читался бы как незавершённая настройка. */}
         {pending.length > 0 ? (
-          <section className="flex flex-col gap-2 rounded-lg border border-primary/40 bg-primary/5 p-3">
+          <section
+            className="flex flex-col gap-2 rounded-lg border-2 border-orange-500/70 bg-orange-500/10 p-3"
+            ref={pairRef}
+          >
             <span className="font-medium text-[13px]">
               4. Бот получил сообщение — подтвердите, что это вы
             </span>
@@ -300,10 +388,15 @@ export function AgentSetupModal({
                 canPair={channelRunning}
                 code={p.code}
                 key={p.code}
-                onPair={onPair}
+                onPair={handlePairAndClose}
               />
             ))}
-            {channelRunning ? null : (
+            {channelRunning ? (
+              <span className="text-[11px] text-muted-foreground">
+                Окно закроется, и команда выполнится в терминале сама —
+                дописывать ничего не нужно. Ответ увидите там же.
+              </span>
+            ) : (
               <span className="text-[11px] text-muted-foreground">
                 Сначала запустите канал: команду привязки принимает та сессия, в
                 которой он работает.
