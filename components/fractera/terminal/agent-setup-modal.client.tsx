@@ -8,6 +8,7 @@ import {
   SendIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useUiLang } from "@/components/fractera/use-ui-lang";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -156,6 +157,7 @@ export function AgentSetupModal({
   const [openaiKey, setOpenaiKey] = useState("");
   const [keyBusy, setKeyBusy] = useState(false);
   const [keyNote, setKeyNote] = useState("");
+  const uiLang = useUiLang();
 
   // 🔒 КЛЮЧ СПРАШИВАЕТСЯ ОДИН РАЗ, А НЕ КАЖДЫЕ ТРИ СЕКУНДЫ. Опрос нужен там, где
   // состояние меняется САМО — код привязки прилетает от бота, пока человек
@@ -510,6 +512,37 @@ export function AgentSetupModal({
             отвечает.
           </p>
         ) : null}
+
+        {/* ── карточка «узнайте больше» ──────────────────────────────────────
+            🎯 ЦЕЛЬ ВЛАДЕЛЬЦА: «если пользователь, которому не нужен сайт,
+            придёт только на чат-бот, то ему будет достаточно всей информации».
+            Отсюда карточка ведёт на страницу, переехавшую с порта 3000, — и
+            человек, попавший в окно подключения, узнаёт, что у бота есть
+            описание возможностей, а не только четыре шага настройки.
+
+            🔒 ЯЗЫК В АДРЕСЕ БЕРЁТСЯ ТОТ ЖЕ, ЧТО У ИНТЕРФЕЙСА ОКНА. У страницы
+            есть сегмент `[lang]`, у остального чата — нет; связывает их
+            `useUiLang()`, единственный источник языка на весь чат. */}
+        <a
+          className="flex items-center justify-between gap-3 rounded-lg border-2 border-orange-500/60 bg-orange-500/10 px-3 py-3 transition hover:bg-orange-500/15"
+          href={`/${uiLang}/settings`}
+          rel="noreferrer"
+          target="_blank"
+        >
+          <span className="flex flex-col gap-0.5">
+            <span className="font-medium text-[13px] text-foreground">
+              Узнайте больше о возможностях вашего Telegram-бота
+            </span>
+            <span className="text-[12px] text-muted-foreground">
+              Что он умеет и чего не умеет, журнал разбора сообщений, настройки
+              и паспорт проекта — на отдельной странице.
+            </span>
+          </span>
+          <ArrowDownIcon
+            className="-rotate-90 shrink-0 text-orange-500"
+            size={18}
+          />
+        </a>
 
         {/* ── 5. ключ OpenAI — НЕОБЯЗАТЕЛЬНО ────────────────────────────────
             🔒 РАЗДЕЛ ВНИЗУ И БЛЕДНЕЕ ОСТАЛЬНЫХ, ПОТОМУ ЧТО ОН НЕ НУЖЕН ДЛЯ

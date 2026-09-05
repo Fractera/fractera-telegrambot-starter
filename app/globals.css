@@ -498,3 +498,37 @@ textarea:focus-visible {
 [data-testid="artifact"] {
   isolation: isolate;
 }
+
+/* ── ШКАЛА ТЕКСТА ДЛЯ ПЕРЕЕХАВШЕЙ СТРАНИЦЫ БОТА (шаг 137) ───────────────────
+ *
+ * 🔒 ПЕРЕМЕННЫЕ ПРИЕХАЛИ ВМЕСТЕ С `components/ui/typography.tsx`, А НЕ ВМЕСТО
+ * НЕГО. Компонент перенесён из гостевого стартера БЕЗ ПРАВОК — один и тот же
+ * файл в двух репозиториях расходится молча, если его «слегка приспособить».
+ * Он читает `--fs-*`, которые там порождает слой дизайна; здесь слоя дизайна
+ * нет, поэтому значения записаны прямо — те же, что порождает он.
+ *
+ * 🔒 `--type-scale` = 1 — то есть шкала владельца на 3000 здесь не действует, и
+ * это честно: чат не участвует в его дизайне. Появится настройка — переменная
+ * станет читаться из неё, и это будет одна правка здесь.
+ */
+:root {
+  --type-scale: 1;
+  --fs-eyebrow: calc(0.75rem * var(--type-scale));
+  --fs-small: calc(0.875rem * var(--type-scale));
+  --fs-body: calc(1rem * var(--type-scale));
+  --fs-body-md: calc(1.0625rem * var(--type-scale));
+  --fs-lead: calc(1.125rem * var(--type-scale));
+  --fs-lead-md: calc(1.25rem * var(--type-scale));
+  --fs-hero: calc(2.4375rem * var(--type-scale));
+  --fs-hero-md: calc(2.9375rem * var(--type-scale));
+  --fs-hero-lg: calc(3.875rem * var(--type-scale));
+  --fs-h1: calc(1.875rem * var(--type-scale));
+  --fs-h1-md: calc(2.25rem * var(--type-scale));
+  --fs-h1-lg: calc(3rem * var(--type-scale));
+  --fs-h2: calc(1.5rem * var(--type-scale));
+  --fs-h2-md: calc(1.875rem * var(--type-scale));
+  --fs-h3: calc(1.25rem * var(--type-scale));
+  --fs-h3-md: calc(1.5rem * var(--type-scale));
+  --fs-h4: calc(1.125rem * var(--type-scale));
+  --fs-h5: calc(1rem * var(--type-scale));
+}
