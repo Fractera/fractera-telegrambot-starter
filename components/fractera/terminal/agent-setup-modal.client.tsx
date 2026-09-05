@@ -107,7 +107,7 @@ function PairRow({
 function ScrollHint({ onJump }: { onJump: () => void }) {
   return (
     <button
-      className="-translate-x-1/2 fixed bottom-6 left-1/2 z-50 flex animate-bounce items-center gap-2 rounded-full bg-orange-500 px-4 py-2 font-medium text-[13px] text-white shadow-lg shadow-orange-500/40 ring-4 ring-orange-500/30 transition hover:bg-orange-600 sm:absolute sm:bottom-4"
+      className="-translate-x-1/2 fixed bottom-8 left-1/2 z-[60] flex animate-bounce items-center gap-2 rounded-full bg-orange-500 px-4 py-2 font-medium text-[13px] text-white shadow-lg shadow-orange-500/40 ring-4 ring-orange-500/30 transition hover:bg-orange-600"
       onClick={onJump}
       type="button"
     >
@@ -265,7 +265,16 @@ export function AgentSetupModal({
 
   return (
     <Dialog onOpenChange={handleOpenChange} open>
-      <DialogContent className="relative flex max-h-[85vh] flex-col overflow-y-auto sm:max-w-lg">
+      {/* 🛑 СЮДА НЕЛЬЗЯ ДОБАВЛЯТЬ `relative`, И ЭТО ОПЛАЧЕНО (136-5, 2026-09-05).
+          `DialogContent` центрируется классами `fixed top-1/2 left-1/2
+          -translate-x-1/2 -translate-y-1/2` (`components/ui/dialog.tsx:64`).
+          `relative` — та же группа `position`, и он перебивает `fixed`: сдвиг
+          на −50% начинает считаться от потока страницы, и окно уезжает на
+          пол-экрана вниз. Владелец: «оно открывается на 50% ниже нижней части
+          экрана».
+          🔒 Подсказке-стрелке позиционирующий предок НЕ НУЖЕН: она `fixed`,
+          то есть привязана к окну просмотра, а не к диалогу. */}
+      <DialogContent className="flex max-h-[85vh] flex-col overflow-y-auto sm:max-w-lg">
         {pending.length > 0 && !pairVisible ? (
           <ScrollHint onJump={jumpToPair} />
         ) : null}
