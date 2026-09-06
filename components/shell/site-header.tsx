@@ -1,4 +1,5 @@
-import Link from "next/link";
+import Link from "next/link"
+import { shellUi } from "./shell.i18n";
 
 // ШАПКА СЛУЖБЫ — ОДНА КНОПКА СЛЕВА, И БОЛЬШЕ НИЧЕГО.
 //
@@ -19,7 +20,16 @@ import Link from "next/link";
 // кнопка аккаунта, корзина, мобильное меню, выключатель `featureOn("topMenu")`.
 // Удалён 2026-09-06, восстанавливается из git.
 
+// 🔒 КНОПКА НАВИГАЦИИ СПРАВА, А ИМЯ СЛЕВА (2026-09-06, слово владельца: «в
+// верхнем меню сделай кнопку навигации, которая открывает страницу settings»).
+// Место у неё то же, к которому человек привык на любом сайте; переносить её к
+// имени значило бы ломать привычку ради симметрии.
+// 🔒 ОБЫЧНАЯ ССЫЛКА, А НЕ ОСТРОВОК: она никуда не ведёт, кроме адреса, и
+// работает без единой строки JavaScript. Клиентский компонент ради перехода —
+// это отказ навигации у того, у кого скрипты не выполнились.
 export function SiteHeader({ lang }: { lang: string }) {
+  const ui = shellUi(lang)
+
   return (
     <header className="sticky top-0 z-40 w-full border-b border-border bg-background/80 backdrop-blur-sm">
       <div className="flex h-14 w-full items-center px-6 md:px-8">
@@ -28,6 +38,14 @@ export function SiteHeader({ lang }: { lang: string }) {
           href={`/${lang}`}
         >
           Fractera
+        </Link>
+
+        <Link
+          className="ml-auto shrink-0 rounded-md px-3 py-1.5 text-[length:var(--fs-small)] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          data-header-settings
+          href={`/${lang}/settings`}
+        >
+          {ui.settings}
         </Link>
       </div>
     </header>

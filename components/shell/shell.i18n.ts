@@ -9,7 +9,9 @@
 // смешивать две правки в одной.
 
 export type ShellUi = {
-  rights: string;
+  rights: string
+  /** Подпись кнопки навигации в шапке — ведёт в настройки проекта. */
+  settings: string;
   system: string;
   light: string;
   dark: string;
@@ -20,18 +22,21 @@ const UI: Record<string, ShellUi> = {
     dark: "Theme: dark",
     light: "Theme: light",
     rights: "All rights reserved.",
+    settings: "Settings",
     system: "Theme: system",
   },
   es: {
     dark: "Tema: oscuro",
     light: "Tema: claro",
     rights: "Todos los derechos reservados.",
+    settings: "Ajustes",
     system: "Tema: sistema",
   },
   ru: {
     dark: "Тема: тёмная",
     light: "Тема: светлая",
     rights: "Все права защищены.",
+    settings: "Настройки",
     system: "Тема: системная",
   },
 };
