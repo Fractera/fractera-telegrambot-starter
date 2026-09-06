@@ -85,7 +85,11 @@ export type TelegramUi = {
     inProgress: string;
     instructionTitle: string;
     instructionLead: string;
-    views: Record<"automations" | "parse" | "db" | "media" | "vectors" | "rag", string>;
+    views: Record<
+      | "automations" | "parse" | "db" | "media" | "vectors" | "rag"
+      | "calendar" | "geo" | "links",
+      string
+    >;
   };
 
   /**
@@ -854,7 +858,10 @@ const EN: TelegramUi = {
     instructionTitle: "Your own instruction for the bot",
     views: {
       automations: "Automations",
+      calendar: "Calendar",
       db: "Database",
+      geo: "Map pins",
+      links: "Links and resources",
       media: "Media library",
       parse: "Request breakdown",
       rag: "Agentic RAG",
@@ -1266,7 +1273,10 @@ const RU: TelegramUi = {
     instructionTitle: "Ваша собственная инструкция боту",
     views: {
       automations: "Автоматизации",
+      calendar: "Календарь",
       db: "База данных",
+      geo: "Геометки",
+      links: "Ссылки и ресурсы",
       media: "Медиатека",
       parse: "Разбор запроса",
       rag: "Агентный RAG",
