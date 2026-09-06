@@ -132,6 +132,24 @@ export function FooterMenu({ lang }: { lang: string }) {
   // рендере, а не окно браузера — подвал обязан быть в статическом HTML.
   const chatUrl = chatUrlFromSite(cfg.url);
 
+  // ✗ ССЫЛКИ СЛОЯ АРХИТЕКТОРА ВЕЛИ В НИКУДА, И ЭТО НАШЁЛ ВЛАДЕЛЕЦ (137-6,
+  // 2026-09-06): «проверь ссылки на части подвала — эти ссылки наследуют твой
+  // префикс chat и поэтому теряют работоспособность».
+  //
+  // ЧТО БЫЛО НЕ ТАК. В источнике адреса относительные (`/{lang}/architect/…`),
+  // и это верно ТАМ: страницы свои. Файл приехал в службу бота дословно — и те
+  // же адреса стали указывать на `chat.<домен>`, где таких страниц нет. Отказ
+  // выглядел как обычная ссылка: она есть, она нажимается, она ведёт в 404.
+  //
+  // 🔒 ПРЕФИКС БЕРЁТСЯ ИЗ АДРЕСА САЙТА — ТОГО ЖЕ ИСТОЧНИКА, ЧТО У ПАНЕЛИ И
+  // ЧАТА, а не из окна браузера: подвал серверный и обязан быть в статическом
+  // HTML. На 3000 `SITE_BASE` пуст, и адреса остаются прежними, относительными;
+  // на 3600 он даёт полный адрес наружу.
+  // 🛑 ПУСТОЙ АДРЕС САЙТА — ЗАКОННОЕ СОСТОЯНИЕ (свежий сервер, настройки ещё не
+  // сохраняли). Тогда ссылки этой группы не показываются вовсе — ровно как
+  // соседние кнопки панели и чата: выдуманный адрес хуже отсутствующего.
+  const layerBase = (cfg.url ?? "").replace(/\/$/, "");
+
   return (
     <footer className="border-t border-border bg-background text-foreground mt-auto">
       {/* 🔒 ПОДВАЛ ПЕРЕКЛЮЧАТЕЛЮ ШИРИНЫ НЕ ПОДЧИНЯЕТСЯ (2026-08-15).
@@ -206,6 +224,15 @@ export function FooterMenu({ lang }: { lang: string }) {
             🔒 ГРУППА ПОДПИСАНА, А НЕ ПРОСТО ОТДЕЛЕНА ЛИНИЕЙ. Разделитель говорит
             «это другое», подпись говорит «другое ЧТО»; без неё четыре служебные
             ссылки выглядят как забытая владельцем настройка подвала. */}
+        {/* 🛑 ГРУППА ЦЕЛИКОМ СКРЫТА, ПОКА АДРЕС САЙТА НЕ ЗАДАН (137-6). Все её
+            ссылки ведут на страницы проекта на 3000, и без адреса они собрались
+            бы относительными — то есть указывали бы на `chat.<домен>`, где
+            таких страниц нет. Ссылка, ведущая в 404, хуже отсутствующей: она
+            выглядит рабочей. То же правило, что у соседних кнопок панели и
+            чата, — там оно уже стоит и оплачено.
+            🛑 На свежем сервере это и есть законное состояние: настройки ещё не
+            сохраняли, адреса нет, группы не видно. */}
+        {layerBase.length > 0 && (
         <div data-architect-links className="border-t border-border pt-6">
           <p className="mb-2 text-[length:var(--fs-small)] font-medium text-muted-foreground">
             {architectGroupUi(lang).title}
@@ -221,7 +248,7 @@ export function FooterMenu({ lang }: { lang: string }) {
                 выше: тот список владелец собирает сам в настройках, и чужая
                 строка в нём выглядела бы как его собственная забытая настройка. */}
             <Link
-              href={`/${lang}/architecture`}
+              href={`${layerBase}/${lang}/architecture`}
               className={buttonVariants({ variant: "ghost", size: "sm" }) + " gap-1.5 text-muted-foreground hover:text-foreground"}
             >
               {/* 🔒 НА ТЕЛЕФОНЕ ОСТАЁТСЯ ТОЛЬКО СЛОВО (владелец 2026-08-19).
@@ -248,7 +275,7 @@ export function FooterMenu({ lang }: { lang: string }) {
                 нужна, но она СВОЯ — в отличие от панели, которая живёт на чужом
                 поддомене и потому берёт `<a>`. */}
             <Link
-              href={`/${lang}/architect/app-config`}
+              href={`${layerBase}/${lang}/architect/app-config`}
               rel="nofollow"
               className={buttonVariants({ variant: "ghost", size: "sm" }) + " gap-1.5 text-muted-foreground hover:text-foreground"}
             >
@@ -269,7 +296,7 @@ export function FooterMenu({ lang }: { lang: string }) {
                 `rel="nofollow"` — страница служебная, `Link` — она СВОЯ, в отличие
                 от панели на чужом поддомене. */}
             <Link
-              href={`/${lang}/architect/design`}
+              href={`${layerBase}/${lang}/architect/design`}
               rel="nofollow"
               className={buttonVariants({ variant: "ghost", size: "sm" }) + " gap-1.5 text-muted-foreground hover:text-foreground"}
             >
@@ -290,7 +317,7 @@ export function FooterMenu({ lang }: { lang: string }) {
                 открывает постороннему (замок — на макете слоя и на дверях),
                 `rel="nofollow"` — страница служебная, `Link` — она СВОЯ. */}
             <Link
-              href={`/${lang}/architect/dev-mode`}
+              href={`${layerBase}/${lang}/architect/dev-mode`}
               rel="nofollow"
               className={buttonVariants({ variant: "ghost", size: "sm" }) + " gap-1.5 text-muted-foreground hover:text-foreground"}
             >
@@ -368,7 +395,7 @@ export function FooterMenu({ lang }: { lang: string }) {
                 дверях), `rel="nofollow"` — страница служебная, `Link` — она СВОЯ,
                 в отличие от панели на чужом поддомене. */}
             <Link
-              href={`/${lang}/architect/auth`}
+              href={`${layerBase}/${lang}/architect/auth`}
               rel="nofollow"
               className={buttonVariants({ variant: "ghost", size: "sm" }) + " gap-1.5 text-muted-foreground hover:text-foreground"}
             >
@@ -400,6 +427,7 @@ export function FooterMenu({ lang }: { lang: string }) {
             <AdminLink href={adminUrl} label={adminLinkLabels(lang).admin} />
           </div>
         </div>
+        )}
 
 
         {/* Section 3 — company: copyright + address, social, theme toggle, language.

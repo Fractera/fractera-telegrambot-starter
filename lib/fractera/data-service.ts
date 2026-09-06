@@ -1,3 +1,4 @@
+import { slotEnv } from "@/lib/fractera/slot-env";
 // One place that answers "where is the data layer, and what proves me to it".
 //
 // The same code runs in two places and must not care which:
@@ -14,9 +15,35 @@
 
 export type DataService = { url: string; key: string };
 
+// ✗ ЗДЕСЬ БЫЛО ТОЛЬКО `process.env`, И ЭТО СЛОМАЛО КАРТОЧКУ КЛЮЧА (137-6,
+// 2026-09-06). Слово владельца: «у нас есть ключ в системе, но новая панель
+// пишет, что ключ не задан».
+//
+// ЧТО ИЗМЕРЕНО. В `.env.local` службы бота нет ни `DATA_SECRET`, ни
+// `REMOTE_DATA_URL` — установщик их туда не пишет и не должен: секреты слоя
+// данных живут в `.env.local` СЛОТА, а служба читает их оттуда. Файл стартера
+// приехал сюда дословно и продолжил спрашивать своё окружение, где пусто, —
+// отсюда «ключ не задан» при живом ключе.
+//
+// 🔒 ФОЛБЭК ВЗЯТ У РАБОЧЕГО КОДА ЭТОГО ЖЕ РЕПОЗИТОРИЯ, А НЕ ПРИДУМАН:
+// `app/api/fractera/openai-key/route.ts` и медиатека читают ровно так же, через
+// `slotEnv()`. Порядок важен: своё окружение сильнее, потому что на машине
+// разработчика слота нет вовсе.
+//
+// 🔒 ВТОРОЙ КОПИИ СЕКРЕТА ПРИ ЭТОМ НЕ ЗАВОДИТСЯ — читается тот же файл, что и
+// на 3000. Скопируй мы значение в окружение службы, оно разошлось бы с
+// оригиналом в тот день, когда владелец поменяет его в одном месте из двух.
 export function dataService(): DataService {
-  const url = process.env.REMOTE_DATA_URL || "http://localhost:3300";
-  const key = process.env.DATA_API_KEY || process.env.DATA_SECRET || "";
+  const url =
+    process.env.REMOTE_DATA_URL ||
+    slotEnv("REMOTE_DATA_URL") ||
+    "http://localhost:3300";
+  const key =
+    process.env.DATA_API_KEY ||
+    process.env.DATA_SECRET ||
+    slotEnv("DATA_SECRET") ||
+    slotEnv("DATA_API_KEY") ||
+    "";
   return { url, key };
 }
 
