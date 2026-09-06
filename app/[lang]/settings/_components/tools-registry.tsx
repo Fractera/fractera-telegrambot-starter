@@ -1,14 +1,7 @@
 import { Wrench } from "lucide-react"
 import { Small } from "@/components/ui/typography"
 import { SettingsCard } from "./settings-card"
-import {
-  INBOX_STORE,
-  FACT_MATCHER,
-  REGISTRY_EVOLUTION,
-  LINK_FINDER,
-  HERMES,
-  type Actor,
-} from "@/lib/task/actors"
+import { allTools } from "@/lib/tools/store"
 
 // РЕЕСТР ИНСТРУМЕНТОВ — соседняя карточка реестра признаков (правка владельца
 // 2026-09-02).
@@ -25,16 +18,16 @@ import {
 // который отвечает 200 и ничего не делает, выглядит работающим ровно до того дня,
 // когда на него понадобится опереться.
 
-/** Порядок — порядок исполнения в разборе, а не алфавит. */
-const TOOLS: { actor: Actor; real: boolean; where: string }[] = [
-  { actor: INBOX_STORE, real: true, where: "строка 2 разбора" },
-  { actor: FACT_MATCHER, real: true, where: "строка 3 разбора" },
-  { actor: REGISTRY_EVOLUTION, real: false, where: "строка 4 разбора" },
-  { actor: LINK_FINDER, real: true, where: "строка 5 разбора" },
-  { actor: HERMES, real: false, where: "второй режим бота, пока не подключён" },
-]
+// 🔒 ДАННЫЕ ЖИВУТ В `TOOLS-CONFIG/tools-config.json`, А НЕ ЗДЕСЬ (2026-09-06).
+// Прежде этот массив стоял прямо в разметке: пять записей с именами, порядком и
+// пометкой «заглушка». Данные в компоненте означают, что добавить инструмент
+// нельзя, не правя экран, — и что снаружи их не прочесть ничем.
+// 🔒 ПОРЯДОК БЕРЁТСЯ ИЗ ФАЙЛА И НЕ ПЕРЕСОРТИРОВЫВАЕТСЯ: это порядок исполнения в
+// разборе, а не алфавит.
 
 export function ToolsRegistry() {
+  const tools = allTools()
+
   return (
     // 🔒 КАРТОЧКА СКЛАДНАЯ И САМА НЕСЁТ СВОЮ РАМКУ (111). Прежде рамку рисовал
     // ВЫЗЫВАЮЩИЙ — `<div className="rounded-lg border p-4">` в двух местах
@@ -46,7 +39,7 @@ export function ToolsRegistry() {
       title="Реестр инструментов"
       status={
         <Small data-tools-count className="text-muted-foreground">
-          {TOOLS.length} шт.
+          {tools.length} шт.
         </Small>
       }
       bodyClassName="flex flex-col gap-4 p-3"
@@ -58,15 +51,15 @@ export function ToolsRegistry() {
       </Small>
 
       <div className="flex flex-col gap-3">
-        {TOOLS.map(({ actor, real, where }) => (
+        {tools.map(({ id, name, what, real, where }) => (
           <div
-            key={actor.name}
-            data-tool={actor.name}
+            key={id}
+            data-tool={name}
             data-tool-real={String(real)}
             className="rounded-md border p-4"
           >
             <div className="flex flex-wrap items-center gap-2">
-              <span className="font-medium text-foreground">{actor.name}</span>
+              <span className="font-medium text-foreground">{name}</span>
               {/* 🔒 Пометка честная и краткая: «заглушка» значит, что за именем
                   сегодня нет работы, и это видно раньше, чем на него обопрутся. */}
               <span
@@ -80,7 +73,7 @@ export function ToolsRegistry() {
               </span>
               <span className="text-[0.8em] text-muted-foreground">{where}</span>
             </div>
-            <Small className="mt-2 block text-muted-foreground">{actor.what}</Small>
+            <Small className="mt-2 block text-muted-foreground">{what}</Small>
           </div>
         ))}
       </div>

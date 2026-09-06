@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbo",
-    "build": "tsx lib/db/migrate && next build",
+    "build": "node scripts/check-registry.mjs && tsx lib/db/migrate && next build",
     "start": "node server.mjs",
     "check": "ultracite check",
     "fix": "ultracite fix",
@@ -17,7 +17,8 @@
     "db:check": "drizzle-kit check",
     "db:up": "drizzle-kit up",
     "test": "export PLAYWRIGHT=True && pnpm exec playwright test",
-    "start:next": "next start"
+    "start:next": "next start",
+    "check:registry": "node scripts/check-registry.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai": "^4.0.57",

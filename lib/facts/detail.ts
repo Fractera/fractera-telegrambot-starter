@@ -140,7 +140,7 @@ function functionsOf(fact: Fact): string[] {
       : ["lib/facts/collect.ts — значение кладётся при разборе сообщения"]
   }
   const family = fact.key.split(".")[0]
-  return [...(ORIGIN[family] ?? []), "lib/facts/builtin.ts — здесь эта карточка и порождается"]
+  return [...(ORIGIN[family] ?? []), "REGISTRY-CONFIG/registry-config.json — здесь описана эта запись"]
 }
 
 /**
