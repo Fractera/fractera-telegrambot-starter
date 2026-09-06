@@ -1,7 +1,7 @@
 import { Suspense } from "react"
 import { Breadcrumbs } from "@/components/nav/breadcrumbs.server"
 import { Eyebrow, H1, Lead, Small } from "@/components/ui/typography"
-import { automationById } from "../../settings/_lib/automations"
+import { automationById, listAutomations } from "../../settings/_lib/automations"
 import { automationUi } from "./_i18n/automation.i18n"
 
 // СТРАНИЦА ОДНОЙ АВТОМАТИЗАЦИИ — ШАБЛОН (2026-09-06).
@@ -26,6 +26,22 @@ import { automationUi } from "./_i18n/automation.i18n"
 //
 // 🛑 НАСТРОЕК СЕГМЕНТА ЗДЕСЬ НЕТ: у шаблона включён `cacheComponents`, и он
 // несовместим с `runtime`/`dynamic`.
+
+// 🔒 НАБОР АДРЕСОВ ОБЪЯВЛЕН, КАК У `settings`, И БЕЗ НЕГО СБОРКА НЕ ИДЁТ.
+// У страницы ДВА динамических сегмента: язык и ключ автоматизации. Пока набор
+// вторым неизвестен, Next не может собрать даже оболочку и отвечает: «Route
+// "/[lang]/automation/[id]": Uncached data was accessed outside of <Suspense>»,
+// показывая стеком корневую раскладку — то есть место, где дефекта нет.
+// 🛑 ЗАПРЕТ, КОТОРЫЙ ЗДЕСЬ НЕЛЬЗЯ НАРУШИТЬ: `dynamic = "force-dynamic"` роняет
+// сборку целиком — у шаблона включён `cacheComponents`. Это уже оплачено в
+// двери `agent-setup` и в `proxy.ts`.
+// 🔒 КОГДА ПРИДУТ НАСТОЯЩИЕ ЦЕПОЧКИ, СЮДА ВСТАНЕТ ИХ СПИСОК ИЗ ЛОГОВ — функция
+// уже читает тот же источник, что и экран, а не второй свой.
+const LANGS = ["en", "ru"] as const
+
+export function generateStaticParams() {
+  return LANGS.flatMap((lang) => listAutomations().map(({ id }) => ({ id, lang })))
+}
 
 // ✗ ПЕРВАЯ ВЕРСИЯ ЧИТАЛА ПАРАМЕТРЫ В ТЕЛЕ СТРАНИЦЫ И УРОНИЛА СБОРКУ, А НЕ
 // НАШЛАСЬ ГЛАЗАМИ: «Route "/[lang]/automation/[id]": Uncached data was accessed
