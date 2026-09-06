@@ -37,6 +37,7 @@
     "classnames": "^2.5.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
+    "cn": "^0.2.6",
     "codemirror": "^6.0.2",
     "date-fns": "^4.4.0",
     "diff-match-patch": "^1.0.5",

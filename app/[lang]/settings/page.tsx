@@ -8,6 +8,7 @@ import { Eyebrow, H1, Lead, Small } from "@/components/ui/typography";
 import { WorkspaceShell } from "@/components/workspace/workspace-shell";
 import { readChannels } from "@/lib/architect/channels";
 import { fracteraRoles } from "@/lib/fractera/session";
+import { AutomationsView } from "./_components/automations-view.client";
 import { AutoRefresh } from "./_components/auto-refresh.client";
 import { InProgress } from "./_components/in-progress";
 import { PassportBody } from "./_components/passport-body.client";
@@ -18,6 +19,7 @@ import { TelegramAbout } from "./_components/telegram-about";
 import { TelegramSettings } from "./_components/telegram-settings";
 import { architectLayerUi } from "./_i18n/architect-layer.i18n";
 import { telegramUi } from "./_i18n/telegram.i18n";
+import { listAutomations } from "./_lib/automations";
 import { passportOutline } from "./_lib/passport-outline";
 import {
   hrefOfTelegramLogView,
@@ -372,7 +374,13 @@ async function BotSettingsGate({
                 `WorkspaceShell` с самого начала. Построен первый вид, остальные
                 честно называют себя. */}
             {active === "logs" &&
-              (view === "parse" ? (
+              (view === "automations" ? (
+                <AutomationsView
+                  items={listAutomations()}
+                  lang={lang}
+                  words={ui.automations}
+                />
+              ) : view === "parse" ? (
                 <TaskParseSection
                   dialogUi={appDialogUi(lang)}
                   state={channels}

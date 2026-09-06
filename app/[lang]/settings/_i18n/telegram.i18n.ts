@@ -14,6 +14,14 @@ export type TelegramUi = {
   title: string;
   /** Подпись группы в левом меню. */
   menuTitle: string;
+  /** Слова списка автоматизаций во вкладке «Логи». */
+  automations: {
+    open: string
+    close: string
+    steps: string
+    empty: string
+    demo: string
+  };
   /**
    * Подпись пункта «Терминал» в левом меню.
    *
@@ -61,7 +69,7 @@ export type TelegramUi = {
     inProgress: string;
     instructionTitle: string;
     instructionLead: string;
-    views: Record<"parse" | "db" | "media" | "vectors" | "rag", string>;
+    views: Record<"automations" | "parse" | "db" | "media" | "vectors" | "rag", string>;
   };
 
   /**
@@ -647,6 +655,13 @@ const EN: TelegramUi = {
       "Nothing here is ever dropped: the journal keeps the whole history for as long as the server lives. Only the newest part is loaded at once.",
     title: "What the bot has heard",
   },
+  automations: {
+    close: "Hide page",
+    demo: "Demo records: real chains will come from the logs at the next step.",
+    empty: "No automations yet.",
+    open: "Show page",
+    steps: "{n} messages",
+  },
   menuTitle: "Telegram bot",
   terminalLabel: "Terminal",
   openai: {
@@ -806,6 +821,7 @@ const EN: TelegramUi = {
       "A text you write yourself and the bot follows in addition to its own rules — your limits, your tone, your subject. It is added to the instruction the bot already has, not instead of it.",
     instructionTitle: "Your own instruction for the bot",
     views: {
+      automations: "Automations",
       db: "Database",
       media: "Media library",
       parse: "Request breakdown",
@@ -1035,6 +1051,13 @@ const RU: TelegramUi = {
       "Отсюда ничего не удаляется: журнал хранит всю переписку, пока жив сервер. Разом загружается только свежая часть.",
     title: "Что бот услышал",
   },
+  automations: {
+    close: "Скрыть страницу",
+    demo: "Выдуманные записи: настоящие цепочки придут из логов следующим шагом.",
+    empty: "Автоматизаций пока нет.",
+    open: "Показать страницу",
+    steps: "сообщений: {n}",
+  },
   menuTitle: "Telegram-бот",
   terminalLabel: "Терминал",
   openai: {
@@ -1194,6 +1217,7 @@ const RU: TelegramUi = {
       "Текст, который вы пишете сами, а бот исполняет вдобавок к своим правилам: ваши ограничения, ваш тон, ваша предметная область. Он добавляется к инструкции бота, а не заменяет её.",
     instructionTitle: "Ваша собственная инструкция боту",
     views: {
+      automations: "Автоматизации",
       db: "База данных",
       media: "Медиатека",
       parse: "Разбор запроса",
