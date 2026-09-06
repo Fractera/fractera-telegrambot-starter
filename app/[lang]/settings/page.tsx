@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { appDialogUi } from "@/components/dialog/app-dialog.i18n";
+import { Breadcrumbs } from "@/components/nav/breadcrumbs.server";
 import { Eyebrow, H1, Lead, Small } from "@/components/ui/typography";
 import { WorkspaceShell } from "@/components/workspace/workspace-shell";
 import { readChannels } from "@/lib/architect/channels";
@@ -152,11 +153,26 @@ async function BotSettingsGate({
   return (
     <main className="min-h-screen bg-background">
       <div className="px-6 py-[var(--page-py-work)]" data-app-column>
-        <header className="flex flex-col gap-4 border-border border-b pb-8">
-          <Eyebrow>{t.layer}</Eyebrow>
-          <H1>{ui.title}</H1>
-          <Lead className="max-w-3xl">{ui.subtitle}</Lead>
-        </header>
+        {/* 🔒 ПОРЯДОК ШАПКИ ВЗЯТ У `PageHeader` ИСТОЧНИКА: крошки, затем
+            заголовочный блок с чертой снизу. Крошки — свои, хардкодом (слово
+            владельца): тамошние тянут имя сайта из `APP-CONFIG` и разметку для
+            поисковика из `lib/jsonld`, а служба бота обязана жить и без слота
+            на 3000. Причины расписаны в самом компоненте. */}
+        <div className="flex flex-col gap-4">
+          <Breadcrumbs
+            trail={[
+              { label: t.layer },
+              { href: hrefOfTelegramSection(lang, "about"), label: ui.title },
+              { label: ui.pages[active].title },
+            ]}
+          />
+
+          <header className="flex flex-col gap-4 border-border border-b pb-8">
+            <Eyebrow>{t.layer}</Eyebrow>
+            <H1>{ui.title}</H1>
+            <Lead className="max-w-3xl">{ui.subtitle}</Lead>
+          </header>
+        </div>
 
         <WorkspaceShell
           id="telegram"
