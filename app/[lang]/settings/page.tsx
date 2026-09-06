@@ -194,7 +194,7 @@ async function BotSettingsGate({
             return id === "logs"
               ? [
                   item,
-                  { href: "/terminal", label: ui.terminalLabel, newTab: true },
+                  { href: `/${lang}/terminal`, label: ui.terminalLabel, newTab: true },
                 ]
               : [item];
           })}

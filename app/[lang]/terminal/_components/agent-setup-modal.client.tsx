@@ -8,7 +8,6 @@ import {
   SendIcon,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useUiLang } from "@/components/fractera/use-ui-lang";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -142,11 +141,12 @@ type Props = {
 
 export function AgentSetupModal({
   channelRunning,
+  lang,
   onClose,
   onLaunchChannel,
   onLogin,
   onPair,
-}: Props) {
+}: Props & { lang: string }) {
   const [setup, setSetup] = useState<Setup | null>(null);
   const [token, setToken] = useState("");
   const [busy, setBusy] = useState(false);
@@ -157,7 +157,11 @@ export function AgentSetupModal({
   const [openaiKey, setOpenaiKey] = useState("");
   const [keyBusy, setKeyBusy] = useState(false);
   const [keyNote, setKeyNote] = useState("");
-  const uiLang = useUiLang();
+  // 🔒 ЯЗЫК ПРИХОДИТ ПРОПСОМ ИЗ МАРШРУТА, А НЕ УГАДЫВАЕТСЯ В БРАУЗЕРЕ
+  // (2026-09-06). Пока страница жила вне `[lang]`, сервер языка не знал, и
+  // хук `useUiLang()` выяснял его после разметки — первый проход всегда был
+  // английским. Теперь язык известен до единого байта.
+  const uiLang = lang;
 
   // 🔒 КЛЮЧ СПРАШИВАЕТСЯ ОДИН РАЗ, А НЕ КАЖДЫЕ ТРИ СЕКУНДЫ. Опрос нужен там, где
   // состояние меняется САМО — код привязки прилетает от бота, пока человек
@@ -522,7 +526,7 @@ export function AgentSetupModal({
 
             🔒 ЯЗЫК В АДРЕСЕ БЕРЁТСЯ ТОТ ЖЕ, ЧТО У ИНТЕРФЕЙСА ОКНА. У страницы
             есть сегмент `[lang]`, у остального чата — нет; связывает их
-            `useUiLang()`, единственный источник языка на весь чат. */}
+            язык маршрута, переданный пропсом от страницы. */}
         <a
           className="flex items-center justify-between gap-3 rounded-lg border-2 border-orange-500/60 bg-orange-500/10 px-3 py-3 transition hover:bg-orange-500/15"
           href={`/${uiLang}/settings`}

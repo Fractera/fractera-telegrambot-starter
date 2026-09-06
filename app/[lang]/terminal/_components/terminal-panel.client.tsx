@@ -2,12 +2,12 @@
 
 import { BotIcon, KeyRoundIcon, RotateCcwIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AgentSetupModal } from "@/components/fractera/terminal/agent-setup-modal.client";
-import { AuthFlowModal } from "@/components/fractera/terminal/auth-flow-modal.client";
+import { AgentSetupModal } from "./agent-setup-modal.client";
+import { AuthFlowModal } from "./auth-flow-modal.client";
 import {
   type XtermHandle,
   XtermTerminal,
-} from "@/components/fractera/terminal/xterm-terminal.client";
+} from "./xterm-terminal.client";
 import { Button } from "@/components/ui/button";
 import { createMouseFilter, MOUSE_OFF } from "@/lib/fractera/mouse-filter.mjs";
 import { extractAuthUrl } from "@/lib/fractera/terminal-auth.mjs";
@@ -71,7 +71,7 @@ type Mode = "claude-channel" | "claude-check" | "claude-login" | "system";
 
 type Status = "closed" | "connected" | "connecting" | "idle";
 
-export function TerminalPanel() {
+export function TerminalPanel({ lang }: { lang: string }) {
   const [status, setStatus] = useState<Status>("idle");
   const [note, setNote] = useState("");
   const [authUrl, setAuthUrl] = useState<string | null>(null);
@@ -401,6 +401,7 @@ export function TerminalPanel() {
       {setupOpen ? (
         <AgentSetupModal
           channelRunning={mode === "claude-channel"}
+          lang={lang}
           onClose={handleCloseSetup}
           onLaunchChannel={handleLaunchChannel}
           onLogin={handleLogin}

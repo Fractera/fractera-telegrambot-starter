@@ -40,7 +40,11 @@ export async function proxy(request: NextRequest) {
 
   // 🔒 СТРАНИЦА-ЗАГЛУШКА ЖИВЁТ БЕЗ СЕССИИ — иначе она отправляла бы к входу
   // того, кто на неё же и вернулся после выхода, и человек ходил бы по кругу.
-  if (pathname === "/welcome") {
+  // 🔒 АДРЕС ЗАГЛУШКИ СТАЛ ЯЗЫКОВЫМ (2026-09-06): страница переехала в
+  // `app/[lang]/welcome`, чтобы получить шапку, подвал и словарь. Проверка
+  // по СУФФИКСУ, а не по точному пути: языков много, и перечислять их здесь
+  // значило бы завести второй список языков рядом с настоящим.
+  if (pathname === "/welcome" || pathname.endsWith("/welcome")) {
     return NextResponse.next();
   }
 
@@ -96,13 +100,13 @@ export async function proxy(request: NextRequest) {
     //
     // 🔒 СТАНДАРТ ССЫЛКИ ВЫХОДА ПРИ ЭТОМ НЕ ТРОНУТ: он общий с панелью, и второй
     // стандарт ради одного случая — это ровно то, чего мы избегаем.
-    return NextResponse.redirect(`${publicOrigin(request)}/welcome`);
+    return NextResponse.redirect(`${publicOrigin(request)}/${langOf(request)}/welcome`);
   }
 
   // Вошедшему незачем видеть формы входа шаблона и заглушку: единственная точка
   // входа — служба, и её страницы живут по другому адресу.
-  if (["/login", "/register", "/welcome"].includes(pathname)) {
-    return NextResponse.redirect(`${publicOrigin(request)}/terminal`);
+  if (["/login", "/register"].includes(pathname) || pathname.endsWith("/welcome")) {
+    return NextResponse.redirect(`${publicOrigin(request)}/${langOf(request)}/terminal`);
   }
 
   // 🔒 КОРЕНЬ СЛУЖБЫ ВЕДЁТ В ТЕРМИНАЛ АГЕНТА, А НЕ В ЛЕНТУ ЧАТА (124,
@@ -123,10 +127,26 @@ export async function proxy(request: NextRequest) {
   // 🔒 ЗДЕСЬ ЖЕ ПЕРЕАДРЕСАЦИЯ СЛУЧАЕТСЯ ДО ЕДИНОГО БАЙТА РАЗМЕТКИ и работает
   // без JavaScript — тем же приёмом, что три соседние выше.
   if (pathname === "/") {
-    return NextResponse.redirect(`${publicOrigin(request)}/terminal`);
+    return NextResponse.redirect(`${publicOrigin(request)}/${langOf(request)}/terminal`);
   }
 
   return NextResponse.next();
+}
+
+// 🔒 ЯЗЫК ДЛЯ ПЕРЕАДРЕСАЦИИ БЕРЁТСЯ ИЗ САМОГО АДРЕСА, А НЕ ЗАШИТ (2026-09-06).
+// Страницы переехали под `[lang]`, и привратник обязан уводить человека на
+// СВОЙ язык: увести русского на `/en/welcome` значит показать ему чужой язык
+// в первый же момент, когда он ещё не вошёл и объяснить некому.
+// 🛑 СПИСКА ЯЗЫКОВ ЗДЕСЬ НЕТ НАМЕРЕННО: второй список рядом с настоящим
+// разошёлся бы с ним молча. Берём первый сегмент, если он похож на код языка,
+// иначе смотрим заголовок браузера, иначе английский.
+function langOf(request: NextRequest): string {
+  const first = new URL(request.url).pathname.split("/")[1] ?? "";
+  if (/^[a-z]{2}$/.test(first)) {
+    return first;
+  }
+  const accept = request.headers.get("accept-language") ?? "";
+  return accept.toLowerCase().startsWith("ru") ? "ru" : "en";
 }
 
 export const config = {
