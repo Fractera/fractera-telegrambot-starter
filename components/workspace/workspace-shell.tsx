@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { Menu, X } from 'lucide-react'
 import { H3, H4, P, Small } from '@/components/ui/typography'
@@ -90,18 +91,26 @@ function Item({
   const body = content ?? item.label
   if (item.href) {
     return (
-      // biome-ignore lint/a11y/useAnchorContent: подпись приходит пропсом `body`
-      <a
+      // 🔒 `scroll={false}` — ЭТО ЛЕЧЕНИЕ ПРЫЖКА СТРАНИЦЫ, НАЙДЕННОГО ВЛАДЕЛЬЦЕМ
+      // 2026-09-06: «каждый раз, когда я нажимаю на какой-то фильтр, моя
+      // страница прыгает, меня отбрасывает вверх». Браузер на КАЖДОЙ навигации
+      // отматывает к началу — это его умолчание, а не наш дефект; но человек,
+      // переключающий вкладку в середине длинного экрана, теряет место каждый
+      // раз. `Link` вместо `<a>` даёт клиентский переход, а `scroll={false}` —
+      // сохранение позиции.
+      // 🛑 ВНЕШНЯЯ ССЫЛКА ОСТАЁТСЯ ОБЫЧНОЙ: `Link` с `target="_blank"` не
+      // выигрывает ничего — вкладка всё равно новая, — а `prefetch` тянул бы
+      // чужую страницу заранее.
+      <Link
         aria-current={item.active ? 'page' : undefined}
         className={cls}
         href={item.href}
-        // 🔒 `noopener` ОБЯЗАТЕЛЕН ПРИ `_blank`: без него открытая страница
-        // получает `window.opener` и может увести исходную вкладку куда угодно.
         rel={item.newTab ? 'noopener noreferrer' : undefined}
+        scroll={false}
         target={item.newTab ? '_blank' : undefined}
       >
         {body}
-      </a>
+      </Link>
     )
   }
   if (closes) {

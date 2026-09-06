@@ -3,7 +3,6 @@ import {
   CircleCheck,
   CircleDot,
   MapPin,
-  Search,
   Tag,
 } from "lucide-react"
 import Link from "next/link"
@@ -16,6 +15,7 @@ import { Small } from "@/components/ui/typography"
 import type { Automation, AutomationPage, AutomationQuery } from "../_lib/automations"
 import { PER_PAGE } from "../_lib/automations"
 import { AutomationPreview, AutomationsFeed } from "./automation-preview.client"
+import { AutomationsSearch } from "./automations-search.client"
 
 // СПИСОК АВТОМАТИЗАЦИЙ — СЕРВЕРНАЯ ТАБЛИЦА С ОТБОРОМ И СТРАНИЦАМИ.
 //
@@ -127,6 +127,7 @@ function Choice<T extends string>({
               : "rounded px-2 py-1 text-[length:var(--fs-small)] text-muted-foreground transition-colors hover:text-foreground"
           }
           href={hrefWith(lang, query, { [field]: o.value, page: 1 } as Partial<AutomationQuery>)}
+          scroll={false}
           key={o.value}
         >
           {o.label}
@@ -205,35 +206,22 @@ export function AutomationsView({
 
       {/* ── ПАНЕЛЬ УПРАВЛЕНИЯ ТАБЛИЦЕЙ ─────────────────────────────────────── */}
       <div className="flex flex-col gap-3 rounded-md border border-border p-3">
-        <form action={`/${lang}/settings`} className="flex flex-wrap items-center gap-2" method="get">
-          {/* Скрытые поля держат остальной отбор: поиск не имеет права его сбросить. */}
-          <input name="section" type="hidden" value="logs" />
-          <input name="view" type="hidden" value="automations" />
-          <input name="status" type="hidden" value={query.status} />
-          <input name="calendar" type="hidden" value={query.calendar} />
-          <input name="map" type="hidden" value={query.map} />
-          <input name="sort" type="hidden" value={query.sort} />
-          <input name="per" type="hidden" value={String(query.per)} />
-
-          <div className="relative min-w-[16rem] flex-1">
-            <Search
-              aria-hidden
-              className="-translate-y-1/2 absolute top-1/2 left-2.5 size-4 text-muted-foreground"
-            />
-            <input
-              className="h-9 w-full rounded-md border border-border bg-background pr-3 pl-8 text-[length:var(--fs-small)] text-foreground placeholder:text-muted-foreground"
-              data-automations-search
-              defaultValue={query.q}
-              name="q"
-              placeholder={words.search}
-              type="search"
-            />
-          </div>
-
-          <button className={navLink} type="submit">
-            {words.searchDo}
-          </button>
-        </form>
+        <AutomationsSearch
+          action={`/${lang}/settings`}
+          defaultValue={query.q}
+          hidden={{
+            calendar: query.calendar,
+            map: query.map,
+            per: String(query.per),
+            section: "logs",
+            sort: query.sort,
+            status: query.status,
+            view: "automations",
+          }}
+          placeholder={words.search}
+          submitClassName={navLink}
+          submitLabel={words.searchDo}
+        />
 
         <div className="flex flex-wrap items-center gap-2">
           <Choice
@@ -287,6 +275,7 @@ export function AutomationsView({
           <Link
             className="ml-auto text-[length:var(--fs-small)] text-muted-foreground underline-offset-4 hover:underline"
             href={`/${lang}/settings?section=logs&view=automations`}
+            scroll={false}
           >
             {words.reset}
           </Link>
@@ -356,7 +345,12 @@ export function AutomationsView({
         <Pagination className="mx-0 w-auto">
           <PaginationContent data-automations-pager={`${page.page}/${page.pages}`}>
             <PaginationItem>
-              <Link aria-label={words.first} className={`${navLink} ${atFirst ? navOff : ""}`} href={jump(1)}>
+              <Link
+                aria-label={words.first}
+                className={`${navLink} ${atFirst ? navOff : ""}`}
+                href={jump(1)}
+                scroll={false}
+              >
                 ««
               </Link>
             </PaginationItem>
@@ -365,6 +359,7 @@ export function AutomationsView({
                 aria-label={words.prev}
                 className={`${navLink} ${atFirst ? navOff : ""}`}
                 href={jump(Math.max(1, page.page - 1))}
+                scroll={false}
               >
                 {words.prev}
               </Link>
@@ -379,12 +374,18 @@ export function AutomationsView({
                 aria-label={words.next}
                 className={`${navLink} ${atLast ? navOff : ""}`}
                 href={jump(Math.min(page.pages, page.page + 1))}
+                scroll={false}
               >
                 {words.next}
               </Link>
             </PaginationItem>
             <PaginationItem>
-              <Link aria-label={words.last} className={`${navLink} ${atLast ? navOff : ""}`} href={jump(page.pages)}>
+              <Link
+                aria-label={words.last}
+                className={`${navLink} ${atLast ? navOff : ""}`}
+                href={jump(page.pages)}
+                scroll={false}
+              >
                 »»
               </Link>
             </PaginationItem>
