@@ -1,6 +1,5 @@
 import { type ClassValue, clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import type { Document } from '@/lib/db/schema';
 import { ChatbotError, type ErrorCode } from './errors';
 
 export function cn(...inputs: ClassValue[]) {
@@ -48,15 +47,8 @@ export function generateUUID(): string {
   });
 }
 
-export function getDocumentTimestampByIndex(
-  documents: Document[],
-  index: number,
-) {
-  if (!documents) { return new Date(); }
-  if (index > documents.length) { return new Date(); }
-
-  return documents[index].createdAt;
-}
+// 🪦 `getDocumentTimestampByIndex()` УДАЛЕНА 2026-09-06: она работала с типом
+// `Document` таблицы шаблона `ai-chatbot`, а таблиц этих больше нет.
 
 export function sanitizeText(text: string) {
   return text.replace('<has_function_call>', '');

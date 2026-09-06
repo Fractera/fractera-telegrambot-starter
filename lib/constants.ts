@@ -1,4 +1,3 @@
-import { generateDummyPassword } from "./db/utils";
 
 export const isProductionEnvironment = process.env.NODE_ENV === "production";
 export const isDevelopmentEnvironment = process.env.NODE_ENV === "development";
@@ -10,7 +9,9 @@ export const isTestEnvironment = Boolean(
 
 export const guestRegex = /^guest-\d+$/;
 
-export const DUMMY_PASSWORD = generateDummyPassword();
+// 🪦 `DUMMY_PASSWORD` УДАЛЁН 2026-09-06 вместе со входом шаблона: он гасил
+// разницу во времени ответа между «нет такого человека» и «неверный пароль».
+// Своего входа у службы нет — гасить нечего.
 
 export const suggestions = [
   "What are the advantages of using Next.js?",

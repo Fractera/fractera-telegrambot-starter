@@ -4,7 +4,6 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 import "./globals.css";
-import { SessionProvider } from "next-auth/react";
 import { chatLang } from "@/lib/fractera/i18n";
 
 export const metadata: Metadata = {
@@ -82,11 +81,11 @@ export default function RootLayout({
           disableTransitionOnChange
           enableSystem
         >
-          <SessionProvider
-            basePath={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/api/auth`}
-          >
-            <TooltipProvider>{children}</TooltipProvider>
-          </SessionProvider>
+          {/* 🪦 ЗДЕСЬ БЫЛ `SessionProvider` NextAuth — УДАЛЁН 2026-09-06 вместе со
+              входом шаблона: он опрашивал `/api/auth/session`, маршрута которого
+              больше нет. Человека узнаёт служба входа `:3001` на СЕРВЕРЕ, и
+              клиентская сессия здесь не нужна вовсе. Восстанавливается из git. */}
+          <TooltipProvider>{children}</TooltipProvider>
         </ThemeProvider>
       </body>
     </html>

@@ -1,5 +1,4 @@
 import { cookies } from "next/headers";
-import { createUser, getUser } from "@/lib/db/queries";
 import { generateUUID } from "@/lib/utils";
 
 // ЕДИНАЯ ТОЧКА ВХОДА — СЛУЖБА `:3001`, И ЧАТ К НЕЙ ПЕРЕАДРЕСУЕТ (шаг 96).
@@ -64,26 +63,10 @@ export async function fracteraSession(): Promise<FracteraSession | null> {
   }
 }
 
-/**
- * Строка чата для вошедшего человека.
- *
- * 🔒 ИДЕНТИЧНОСТЬ ПРИНАДЛЕЖИТ СЛУЖБЕ ВХОДА, А СТРОКА В БАЗЕ ЧАТА — ЭТО ВСЕГО
- * ЛИШЬ ВНЕШНИЙ КЛЮЧ. У разговоров и документов чата есть ссылка на `User`, и
- * без строки они не сохранятся; поэтому строка заводится по ПОЧТЕ — тому
- * единственному, что обе стороны знают одинаково.
- *
- * 🛑 ПАРОЛЬ В ЭТОЙ СТРОКЕ СЛУЧАЙНЫЙ И НИКОМУ НЕ ИЗВЕСТЕН — им нельзя войти.
- * Вход идёт только через службу; поле заполнено потому, что его требует схема
- * шаблона, а не потому, что мы завели второй способ входа.
- */
-export async function chatUserIdFor(email: string): Promise<string> {
-  const found = await getUser(email);
-  if (found.length > 0) return found[0].id;
-
-  await createUser(email, generateUUID());
-  const created = await getUser(email);
-  return created[0].id;
-}
+// 🪦 `chatUserIdFor()` УДАЛЕНА 2026-09-06 ВМЕСТЕ С БАЗОЙ ЧАТА. Она заводила
+// человеку строку в таблице `User` шаблона `ai-chatbot`, чтобы его формат
+// сессии сошёлся. Шаблона больше нет: путь к ИИ — Telegram → Claude Code, и
+// нашего кода в нём ноль. Восстанавливается из git.
 
 /**
  * Роли вошедшего человека — по мнению единственной службы входа.
