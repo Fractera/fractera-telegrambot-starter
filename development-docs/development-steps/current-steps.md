@@ -1,3 +1,36 @@
+> # 🔒 ОТПРАВКА С СЕРВЕРА В GitHub ОТКРЫТА 2026-09-06 (137-16, доказано)
+>
+> **Владелец добавил Deploy key с правом записи**; отпечаток на GitHub
+> `SHA256:7rhPFUSHRBuOip85w7xKUnK2RyV1LWlzQx1N+rEQxr4` совпал с `ssh-keygen -lf`
+> нашего `/root/.ssh/telegrambot_deploy.pub` — ключ именно наш, а не чей-то ещё.
+>
+> 🔒 **АДРЕСА РАЗВЕДЕНЫ НАМЕРЕННО: чтение по HTTPS, отправка по SSH.**
+> `fetch = https://github.com/Fractera/fractera-telegrambot-starter.git` ·
+> `push = git@github-telegrambot:Fractera/fractera-telegrambot-starter.git`,
+> алиас `github-telegrambot` описан в `/root/.ssh/config` с `IdentitiesOnly yes`.
+> ✗ оплачено в тот же день: переключив remote ЦЕЛИКОМ на SSH до того, как ключ был добавлен,
+> я сломал получение обновлений — сервер перестал видеть GitHub вовсе.
+> **Отбирать работающее чтение ради будущей отправки нельзя.**
+>
+> 🔒 **ТОКЕН ВЛАДЕЛЬЦА НА СЕРВЕР НЕ ПОЕХАЛ, И ЭТО РЕШЕНИЕ, А НЕ ОБХОД.** Личный PAT даёт доступ ко
+> ВСЕМ его репозиториям, а на этой машине живёт автономный агент канала. Deploy key ограничен одним
+> репозиторием — измерено негативным контролем: `git ls-remote` в соседний репозиторий отвечает
+> `ERROR: Repository not found`, `rc=128`.
+>
+> **Два доказательства из разных плоскостей, снятые 2026-09-06:**
+> 1. **Аутентификация.** `ssh -T git@github-telegrambot` →
+>    `Hi Fractera/fractera-telegrambot-starter! You've successfully authenticated`.
+>    До добавления ключа тот же вызов давал `Permission denied (publickey)`.
+> 2. **Настоящая ЗАПИСЬ, а не `--dry-run`.** Пробник `deploy-key-probe` создан на GitHub
+>    (`* [new branch]`, виден в `ls-remote`) и удалён (`- [deleted]`, `ls-remote` пуст).
+>    🔒 **`push --dry-run` права записи НЕ доказывает** — при `Everything up-to-date` он проходит
+>    и на ключе только для чтения.
+>
+> Состояние на момент записи: `main` = `origin/main` = `04d58b3`, дерево чистое, лишних веток на
+> GitHub нет (`main`, `new-step-97`, `new-step-101`).
+
+---
+
 # === 137-5 / 137-6: ПАДЕНИЕ СТРАНИЦЫ, ССЫЛКИ ПОДВАЛА, ДВА КЛЮЧА — 2026-09-06 ===
 
 **Сервер:** `72c5dfe`, `BUILD_RC=0`, ⨯ в логе после рестарта — **0**.
