@@ -1,3 +1,4 @@
+import { Suspense } from "react"
 import { Breadcrumbs } from "@/components/nav/breadcrumbs.server"
 import { Eyebrow, H1, Lead, Small } from "@/components/ui/typography"
 import { automationById } from "../../settings/_lib/automations"
@@ -26,7 +27,28 @@ import { automationUi } from "./_i18n/automation.i18n"
 // 🛑 НАСТРОЕК СЕГМЕНТА ЗДЕСЬ НЕТ: у шаблона включён `cacheComponents`, и он
 // несовместим с `runtime`/`dynamic`.
 
-export default async function AutomationPage({
+// ✗ ПЕРВАЯ ВЕРСИЯ ЧИТАЛА ПАРАМЕТРЫ В ТЕЛЕ СТРАНИЦЫ И УРОНИЛА СБОРКУ, А НЕ
+// НАШЛАСЬ ГЛАЗАМИ: «Route "/[lang]/automation/[id]": Uncached data was accessed
+// outside of <Suspense>. This delays the entire page from rendering».
+// 🔒 ПРИЧИНА МЕХАНИЧЕСКАЯ И КАСАЕТСЯ ИМЕННО ЭТОЙ СТРАНИЦЫ: у неё сегмент `[id]`
+// без заранее известного набора значений, поэтому ЧТЕНИЕ ПАРАМЕТРОВ здесь —
+// уже обращение к запросу. У соседей `terminal` и `welcome` тот же `await
+// params` проходит: у них динамический сегмент один — язык, и его набор известен.
+// 🔒 ЛЕЧЕНИЕ — ГРАНИЦА ОЖИДАНИЯ ВОКРУГ ВСЕГО ТЕЛА, тем же приёмом, что замок в
+// терминале. Заглушка держит высоту, чтобы страница не прыгала при подстановке.
+export default function AutomationPage({
+  params,
+}: {
+  params: Promise<{ id: string; lang: string }>
+}) {
+  return (
+    <Suspense fallback={<div className="min-h-[420px] w-full" />}>
+      <AutomationBody params={params} />
+    </Suspense>
+  )
+}
+
+async function AutomationBody({
   params,
 }: {
   params: Promise<{ id: string; lang: string }>
