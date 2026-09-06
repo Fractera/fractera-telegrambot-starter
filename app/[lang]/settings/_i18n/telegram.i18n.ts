@@ -143,6 +143,16 @@ export type TelegramUi = {
     required: string;
     noTable: string;
     counted: string;
+    /** Передача задачи агенту вместо формы записи (137-13). */
+    handoffHint: string;
+    handoffTrigger: string;
+    handoffTitle: string;
+    handoffLead: string;
+    handoffAdvice: string;
+    handoffEditTrigger: string;
+    handoffEditTitle: string;
+    handoffCopy: string;
+    handoffCopied: string;
     /** Слова формы добавления (81-4). */
     addTitle: string;
     keyLabel: string;
@@ -372,6 +382,9 @@ export type TelegramUi = {
     demoReadTitle: string;
     demoRead: string;
     demoWhy: string;
+    /** Страница на каждый запрос (137-14). */
+    pageTitle: string;
+    page: string;
     whatTitle: string;
     what: string;
     arrangedTitle: string;
@@ -447,6 +460,9 @@ const EN: TelegramUi = {
     demoWrite:
       "One sentence does not land as one line of text. It is taken apart: the record itself, when it happened, what it was about, the money in it, the place, the links to everything said before. Each part goes to the kind of memory that can answer questions about it later.",
     demoWriteTitle: "What happens to what you tell it.",
+    page:
+      "Every request gets its own page. It shows how the request was handled, step by step: what was understood, what was found, what was done. You can come back to it to re-read the research the agent wrapped up for you, or share the finished result as a link. By default such a page is protected by routing and visible only to you — you can turn it public when you want to show it.",
+    pageTitle: "A page for every request.",
     start:
       "Ask @BotFather in Telegram for a new bot, take the token it gives you, and paste it into Settings here. Then link your account and write to the bot — the first message appears in Logs.",
     startTitle: "How to get a bot.",
@@ -497,6 +513,15 @@ const EN: TelegramUi = {
   },
 
   facts: {
+    handoffHint: "The registry is edited through the agent — it builds and commits.",
+    handoffTrigger: "Request a new fact",
+    handoffTitle: "Task for the development agent",
+    handoffLead: "Copy this text and send it to the Fractera development Telegram bot.",
+    handoffAdvice: "Fill in the angle brackets in your own words — the agent will work out the rest.",
+    handoffEditTrigger: "Request a change",
+    handoffEditTitle: "Change request for this fact",
+    handoffCopy: "Copy",
+    handoffCopied: "Copied",
     addTitle: "Add a fact",
     builtin: "built-in",
     counted: "{n} facts",
@@ -777,7 +802,7 @@ const EN: TelegramUi = {
   soonTitle: "This section is not built yet",
   soonWhere: "Where this works today:",
   subtitle:
-    "The architect's own tool, built to make their work faster — and a live demonstration of how this project remembers.",
+    "The architect's own tool: it builds automations of any shape, using Claude Code and the special memory of Fractera.",
   title: "Telegram bot",
 };
 
@@ -807,17 +832,20 @@ const RU: TelegramUi = {
     cannotTitle: "Чего он не умеет — сказано прямо",
     canTitle: "Что он умеет сегодня",
     demoRead:
-      "Ответ не берётся из одной строки. Читаются сразу несколько источников — сами записи, их смысл и связи между ними, — и ответ собирается из всего этого, поэтому он получается целостным, а не буквальным.",
+      "Ответ не берётся из одной строки. Читаются сразу несколько источников — сами записи, их смысл, связи между ними, время и место, — и ответ собирается из всего этого. Поэтому он получается целостным, а не буквальным: система отвечает на то, что вы имели в виду, а не на то, какими словами спросили.",
     demoReadTitle: "Как части собираются обратно.",
     demoTitle:
-      "Ваш стартовый бот — работающая демонстрация того, как этот проект помнит.",
+      "Ваш бот — вход в автоматизацию: вы говорите словами, а строит Claude Code, опираясь на специальную память Fractera.",
     demoWhat:
-      "Это не игрушка и не заглушка. Всё, что он делает, собрано из тех же частей, что есть у вашего проекта, — поэтому поговорить с ним быстрее всего, чтобы увидеть память Fractera в работе.",
+      "Специальная память Fractera — это синергия специально настроенной базы данных, объектного хранилища, календарей, гео-меток, а также векторного хранилища и графа знаний. Ни одна из этих частей по отдельности не отвечает на вопрос целиком; отвечают они вместе.",
     demoWhy:
-      "Поэтому с ним стоит поговорить до того, как вы начнёте строить своё: здесь видно поведение, которое можно дать вашему проекту.",
+      "Отсюда и главное отличие: вам не нужно описывать автоматизацию языком настроек. Вы говорите, чего хотите, — остальное собирает агент.",
     demoWrite:
-      "Одна фраза не ложится одной строкой текста. Она раскладывается на части: сама запись, когда это случилось, о чём речь, какие в ней деньги, где это было, с чем связано из сказанного раньше. Каждая часть уходит в тот вид памяти, который потом сможет отвечать на вопросы о ней.",
+      "Сначала сказанное разделяется по роду: общий вопрос, обращение к памяти на извлечение или запись, просьба о разработке. Это разделение делает Claude Code, и только после него что-то происходит. Дальше фраза раскладывается на части — когда это случилось, о чём речь, какие в ней деньги, где это было, с чем связано из сказанного раньше, — и каждая уходит в тот вид памяти, который потом сможет о ней ответить.",
     demoWriteTitle: "Что происходит с тем, что вы ему сказали.",
+    page:
+      "У каждого запроса появляется своя страница. На ней видно, как шла обработка: что было понято, что найдено, что сделано. К ней можно вернуться, чтобы перечитать исследование, которое агент свернул в ответ, — и ею же можно поделиться как готовым результатом через ссылку. По умолчанию такая страница защищена маршрутизацией и видна только вам; вы можете сделать её публичной, когда захотите показать.",
+    pageTitle: "Страница на каждый запрос.",
     start:
       "Попросите у @BotFather в Telegram нового бота, возьмите выданный токен и вставьте его здесь, в «Настройках». Потом привяжите свою учётную запись и напишите боту — первое сообщение появится в «Логах».",
     startTitle: "Как завести бота.",
@@ -867,6 +895,15 @@ const RU: TelegramUi = {
   },
 
   facts: {
+    handoffHint: "Реестр правится через агента — он строит и кладёт коммит.",
+    handoffTrigger: "Запросить новый признак",
+    handoffTitle: "Задача агенту разработки",
+    handoffLead: "Скопируйте этот текст и отправьте его в Telegram-бот агента разработки Fractera.",
+    handoffAdvice: "Заполните угловые скобки своими словами — остальное агент разберёт сам.",
+    handoffEditTrigger: "Запросить правку",
+    handoffEditTitle: "Задача на правку этого признака",
+    handoffCopy: "Скопировать",
+    handoffCopied: "Скопировано",
     addTitle: "Добавить признак",
     builtin: "встроенный",
     counted: "признаков: {n}",
@@ -1148,7 +1185,7 @@ const RU: TelegramUi = {
   soonTitle: "Этот раздел ещё не построен",
   soonWhere: "Где это работает сегодня:",
   subtitle:
-    "Личный инструмент архитектора, созданный для повышения его профессиональной эффективности и как демонстрация работы памяти проекта.",
+    "Личный инструмент архитектора: позволяет создавать самые разные автоматизации при помощи Claude Code и специальной памяти Fractera.",
   title: "Telegram-бот",
 };
 

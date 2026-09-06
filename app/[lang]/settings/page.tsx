@@ -245,6 +245,17 @@ async function BotSettingsGate({
                         </strong>{" "}
                         {ui.about.demoRead}
                       </Small>
+                      {/* 🔒 СТРАНИЦА НА КАЖДЫЙ ЗАПРОС СТОИТ ПОСЛЕ «КАК ЧАСТИ
+                          СОБИРАЮТСЯ», А НЕ ПЕРВОЙ: человек сперва понимает, что
+                          вообще происходит с его фразой, и только потом — где
+                          это можно увидеть и чем поделиться. Абзац, поставленный
+                          раньше объяснения, читается как реклама. */}
+                      <Small>
+                        <strong className="text-foreground">
+                          {ui.about.pageTitle}
+                        </strong>{" "}
+                        {ui.about.page}
+                      </Small>
                       <Small>{ui.about.demoWhy}</Small>
                       <Small>
                         <strong className="text-foreground">
