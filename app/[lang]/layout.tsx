@@ -1,34 +1,20 @@
 import { connection } from "next/server";
 import { type ReactNode, Suspense } from "react";
-import { DrawerMenu } from "@/components/menu/drawer/drawer-menu.server";
-import { FooterMenu } from "@/components/menu/footer/footer-menu.server";
-import { TopMenu } from "@/components/menu/top/top-menu.server";
+import { SiteFooter } from "@/components/shell/site-footer";
+import { SiteHeader } from "@/components/shell/site-header";
 import { buildDesignCss } from "@/lib/design-css";
-import { DrawerProvider } from "@/providers/drawer-provider.client";
 
 // РАСКЛАДКА ЯЗЫКОВОГО СЕГМЕНТА СЛУЖБЫ БОТА (137-3, 2026-09-06).
 //
-// 🎯 ЗАКАЗ ВЛАДЕЛЬЦА, ДОСЛОВНО: «add header and footer 1:1 as in port 3000 /
-// Страницы должно быть выглядеть одинаково, ты подключаешь те же самые
-// компоненты, но естественно layout ты создаёшь свой».
+// 🎯 ЗАКАЗ ВЛАДЕЛЬЦА 2026-09-06, ДОСЛОВНО: «никакие другие импорты из слоя 3000
+// нам не нужны… от футера у нас остаётся только надпись год — Fractera, все права
+// защищены… хедер убираем кнопку войти и оставляем только слева кнопку Fractera».
 //
-// 🔒 КОМПОНЕНТЫ ТЕ ЖЕ, РАСКЛАДКА СВОЯ — И РАЗНИЦА МЕХАНИЧЕСКАЯ. `TopMenu`,
-// `FooterMenu`, `DrawerMenu` перенесены из стартера ПОБАЙТНО и здесь только
-// зовутся. А раскладка стартера — КОРНЕВАЯ: она печатает `<html>`, `<head>`,
-// `<body>`, шрифты, дизайн-CSS, JSON-LD, аналитику. Скопировать её сюда
-// нельзя — корень у чата уже есть, со своим `ThemeProvider`, `SessionProvider`
-// и `TooltipProvider`. Поэтому здесь ровно то, что даёт вид страницы: ящик,
-// шапка, содержимое, подвал.
-//
-// 🔒 `min-h-screen flex flex-col` СТОИТ ЗДЕСЬ, ПОТОМУ ЧТО В КОРНЕ ЧАТА ЕГО НЕТ.
-// В стартере эти классы висят на `<body>`; без них подвал прижимается к тексту,
-// а не к низу экрана, и страница «выглядит одинаково» перестаёт быть правдой на
-// коротком содержимом.
-//
-// 🛑 ЧЕГО ЗДЕСЬ НЕТ И ЭТО НАЗВАНО: куки-баннера, PWA-подсказки, заставок iOS,
-// индикатора ширины и разметки для поисковика. Всё это принадлежит ПУБЛИЧНОМУ
-// сайту на 3000; служба бота стоит за замком, её никто не индексирует и на
-// домашний экран не ставит. Приедет тогда, когда для этого будет причина.
+// 🪦 ОТМЕНЯЕТ ЗАКАЗ ТОГО ЖЕ ВЛАДЕЛЬЦА ОТ 137-3: «add header and footer 1:1 as in
+// port 3000». Тогда шапку и подвал перенесли из стартера побайтно, и вместе с
+// видом приехал ИСТОЧНИК — `APP-CONFIG` и `PLATFORM-CONFIG` чужого проекта.
+// Теперь у службы своя оболочка: `components/shell/`, ноль чужих конфигов.
+// Прежние `TopMenu`, `FooterMenu`, `DrawerMenu` удалены, восстанавливаются из git.
 
 // ✗ ПОДВАЛ ПЕЧАТАЕТ ГОД КОПИРАЙТА, И ПОД `cacheComponents` ЭТО ОТКАЗ СБОРКИ:
 // «used `new Date()` before accessing either uncached data or Request data».
@@ -42,7 +28,7 @@ import { DrawerProvider } from "@/providers/drawer-provider.client";
 // линтера.
 async function FooterAtRequestTime({ lang }: { lang: string }) {
   await connection();
-  return <FooterMenu lang={lang} />;
+  return <SiteFooter lang={lang} />;
 }
 
 export default async function BotLangLayout({
@@ -73,7 +59,7 @@ export default async function BotLangLayout({
   const { css: designCss, fontLinks: designFontLinks } = buildDesignCss();
 
   return (
-    <DrawerProvider>
+    <>
       {/* 🔒 СТИЛЬ ПЕЧАТАЕТСЯ ВНУТРИ СЕГМЕНТА, А НЕ В `<head>`. На 3000 это
           корневая раскладка и место в голове документа; здесь корень чужой —
           общий для чата, — и трогать его ради одной страницы значило бы менять
@@ -87,18 +73,18 @@ export default async function BotLangLayout({
       ))}
 
       <div className="flex min-h-screen flex-col">
-        <TopMenu lang={lang} />
+        <SiteHeader lang={lang} />
         {children}
         {/* Подвал ждёт запроса из-за года копирайта — см. адаптер выше.
             Заглушка держит высоту, чтобы страница не прыгала при подстановке. */}
         <Suspense fallback={<div className="min-h-[200px]" />}>
           <FooterAtRequestTime lang={lang} />
         </Suspense>
-        {/* Выдвижные панели слева и справа — та же пара, что на 3000: каждая
-            не рисует ничего, пока её сторону не включит группа меню. */}
-        <DrawerMenu lang={lang} side="left" />
-        <DrawerMenu lang={lang} side="right" />
+        {/* 🪦 ЗДЕСЬ БЫЛА ПАРА ВЫДВИЖНЫХ ПАНЕЛЕЙ `DrawerMenu` — УДАЛЕНЫ 2026-09-06.
+            Они рисовались группами меню из `APP-CONFIG` порта 3000: у службы своих
+            групп нет и не будет, значит панели были пустыми всегда, а зависимость
+            от чужого конфига — настоящей. Восстанавливаются из git. */}
       </div>
-    </DrawerProvider>
+    </>
   );
 }
