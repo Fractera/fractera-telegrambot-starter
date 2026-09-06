@@ -5,7 +5,47 @@
       "mcp__plugin_telegram_telegram__reply",
       "mcp__plugin_telegram_telegram__download_attachment",
       "mcp__intake__intake",
-      "mcp__intake__request_development"
+      "mcp__intake__request_development",
+
+      "Read",
+      "Glob",
+      "Grep",
+      "Write",
+      "Edit",
+      "TodoWrite",
+
+      "Bash(git:*)",
+      "Bash(pnpm:*)",
+      "Bash(npx:*)",
+      "Bash(node:*)",
+      "Bash(pm2:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(wc:*)",
+      "Bash(grep:*)",
+      "Bash(find:*)",
+      "Bash(mkdir:*)",
+      "Bash(cp:*)",
+      "Bash(mv:*)",
+      "Bash(curl:*)",
+      "Bash(ss:*)",
+      "Bash(pgrep:*)"
+    ],
+    "deny": [
+      "Bash(rm -rf /*)",
+      "Bash(sudo:*)",
+      "Bash(shutdown:*)",
+      "Bash(reboot:*)",
+      "Bash(useradd:*)",
+      "Bash(userdel:*)",
+      "Bash(passwd:*)",
+      "Bash(ufw:*)",
+      "Bash(iptables:*)",
+      "Bash(systemctl:*)",
+      "WebFetch",
+      "WebSearch"
     ]
   }
 }
