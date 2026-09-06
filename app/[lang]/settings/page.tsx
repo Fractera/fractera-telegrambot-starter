@@ -1,18 +1,28 @@
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
+import { appDialogUi } from "@/components/dialog/app-dialog.i18n";
 import { Eyebrow, H1, Lead, Small } from "@/components/ui/typography";
 import { WorkspaceShell } from "@/components/workspace/workspace-shell";
 import { readChannels } from "@/lib/architect/channels";
 import { fracteraRoles } from "@/lib/fractera/session";
+import { AutoRefresh } from "./_components/auto-refresh.client";
 import { InProgress } from "./_components/in-progress";
+import { PassportBody } from "./_components/passport-body.client";
 import { SectionIntro } from "./_components/section-intro.client";
+import { TaskParseSection } from "./_components/task-parse-section";
 import { TelegramAbout } from "./_components/telegram-about";
 import { TelegramSettings } from "./_components/telegram-settings";
 import { architectLayerUi } from "./_i18n/architect-layer.i18n";
 import { telegramUi } from "./_i18n/telegram.i18n";
+import { passportOutline } from "./_lib/passport-outline";
 import {
+  hrefOfTelegramLogView,
   hrefOfTelegramSection,
+  resolveTelegramLogView,
   resolveTelegramSection,
+  TELEGRAM_LOG_VIEWS,
   TELEGRAM_SECTIONS,
 } from "./_lib/telegram-sections";
 
@@ -93,10 +103,40 @@ async function BotSettingsGate({
     notFound();
   }
 
-  const { section: rawSection } = await searchParams;
+  const { section: rawSection, view: rawView } = await searchParams;
   const active = resolveTelegramSection(rawSection);
+  const view = resolveTelegramLogView(rawView);
   const t = architectLayerUi(lang);
   const ui = telegramUi(lang);
+
+  // 🔒 ПАСПОРТ ЧИТАЕТСЯ ФАЙЛОМ ПРОЕКТА (правка владельца 2026-09-02): он живёт
+  // в `development-docs/PASSPORT.md`, правится обычной правкой файла, и второй
+  // копии текста не существует. Файла может не быть — это законный исход, и
+  // раздел скажет об этом словами.
+  //
+  // 🛑 ЗДЕСЬ ЭТО ФАЙЛ СЛУЖБЫ БОТА, А НЕ СЛОТА НА 3000, И РАЗНИЦА СОДЕРЖАТЕЛЬНА.
+  // `process.cwd()` — `/opt/fractera/telegrambot`. Паспорт описывает проект, у
+  // которого свой репозиторий; чей паспорт показывать на этом экране — решение
+  // владельца, и пока читается свой, потому что читать чужую папку значило бы
+  // молча связать две службы там, где связи никто не объявлял.
+  let passport = "";
+  if (active === "passport") {
+    try {
+      passport = await readFile(
+        join(process.cwd(), "development-docs", "PASSPORT.md"),
+        "utf8"
+      );
+    } catch {
+      passport = "";
+    }
+  }
+  // 🔒 ЗАГОЛОВКИ ПЕРВОГО УРОВНЯ СТАНОВЯТСЯ ЛИПКИМ МЕНЮ — той же полосой, что
+  // виды раздела «Логи»: одна раскладка, один вид, никакого второго меню.
+  const passportTabs = passportOutline(passport).map((i) => ({
+    active: false,
+    href: `#${i.id}`,
+    label: i.title,
+  }));
 
   // 🔒 ОДИН ВОПРОС СЛУЖБЕ НА СТРАНИЦУ, А НЕ ПО ОДНОМУ НА РАЗДЕЛ — как в
   // источнике. Служба ходит в Telegram за именем бота, то есть вызов не
@@ -128,6 +168,17 @@ async function BotSettingsGate({
           }))}
           menuTitle={ui.menuTitle}
           menuWord={t.menuTitle}
+          tabs={
+            active === "passport"
+              ? passportTabs
+              : active === "logs"
+                ? TELEGRAM_LOG_VIEWS.map((v) => ({
+                    active: v === view,
+                    href: hrefOfTelegramLogView(lang, v),
+                    label: ui.skeleton.views[v],
+                  }))
+                : undefined
+          }
           title={ui.pages[active].title}
         >
           {/* 🔒 ПРИЗНАКИ СТОЯТ НА КОНТЕЙНЕРЕ РАЗДЕЛА, А НЕ ВНУТРИ ОСТРОВКА —
@@ -260,13 +311,42 @@ async function BotSettingsGate({
               </>
             )}
 
-            {active !== "about" && active !== "settings" && (
-              <InProgress
-                label={ui.pages[active].title}
-                lead={ui.skeleton.inProgress}
-                where={`telegram-${active}`}
-              />
-            )}
+            {/* 🔒 ПОЛОСА ОБНОВЛЕНИЯ ЖИВЁТ В ПРАВОМ КОНТЕЙНЕРЕ, ПЕРВОЙ СТРОКОЙ
+                ПОД ЛИДОМ РАЗДЕЛА, а не на общем холсте — прямая правка
+                владельца. Она относится к таблице разбора, а не к странице: на
+                холсте она обещала бы, что живая вся страница. */}
+            {active === "logs" && view === "parse" && <AutoRefresh />}
+
+            {/* 🔒 «ЛОГИ» — ЕДИНСТВЕННЫЙ РАЗДЕЛ ВХОДА, КОТОРЫЙ НЕ ПЕРЕНОС САМ ПО
+                СЕБЕ (77-5): в панели такого экрана нет. Верхнее меню видов даёт
+                РАСКЛАДКА (`tabs`), а не эта страница — полоса была в
+                `WorkspaceShell` с самого начала. Построен первый вид, остальные
+                честно называют себя. */}
+            {active === "logs" &&
+              (view === "parse" ? (
+                <TaskParseSection
+                  dialogUi={appDialogUi(lang)}
+                  state={channels}
+                  ui={ui}
+                />
+              ) : (
+                <InProgress
+                  label={ui.skeleton.views[view]}
+                  lead={ui.skeleton.inProgress}
+                  where={`logs-${view}`}
+                />
+              ))}
+
+            {active === "passport" &&
+              (passport ? (
+                <PassportBody text={passport} />
+              ) : (
+                <div className="rounded-md border border-muted-foreground/30 border-dashed p-6 text-[length:var(--fs-small)] text-muted-foreground">
+                  {lang === "ru"
+                    ? "Паспорт ещё не написан. Он лежит файлом development-docs/PASSPORT.md в самом проекте — создайте его, и он появится здесь."
+                    : "The passport is not written yet. It lives as development-docs/PASSPORT.md in the project itself — create it and it will appear here."}
+                </div>
+              ))}
           </div>
         </WorkspaceShell>
       </div>
