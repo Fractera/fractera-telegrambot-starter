@@ -1,5 +1,5 @@
-import { readFileSync } from "node:fs";
 import { NextResponse } from "next/server";
+import { machineEnv } from "@/lib/fractera/machine-env";
 import { fracteraRoles } from "@/lib/fractera/session";
 
 // РАСШИФРОВКА ГОЛОСА — НАШИМ КЛЮЧОМ, БЕЗ ВТОРОГО ПУТИ (шаг 96).
@@ -16,17 +16,7 @@ import { fracteraRoles } from "@/lib/fractera/session";
 const MAX_BYTES = 25 * 1024 * 1024;
 
 function openAiKey(): string {
-  const path = process.env.FRACTERA_SLOT_ENV || "/opt/fractera/app/.env.local";
-  try {
-    const raw = readFileSync(path, "utf8");
-    const found = (raw.match(/^OPENAI_API_KEY=(.+)$/m) ?? [])[1];
-    if (found?.trim()) {
-      return found.trim();
-    }
-  } catch {
-    // Файла нет — берём окружение процесса.
-  }
-  return process.env.OPENAI_API_KEY ?? "";
+  return machineEnv("OPENAI_API_KEY") || process.env.OPENAI_API_KEY || "";
 }
 
 export async function POST(request: Request) {
@@ -52,7 +42,10 @@ export async function POST(request: Request) {
   const upstream = new FormData();
   upstream.append("file", audio, audio.name || "voice.webm");
   // 🔒 ИМЯ МОДЕЛИ — НАСТРОЙКА, А НЕ ЛИТЕРАЛ, как и у текстовых моделей.
-  upstream.append("model", process.env.OPENAI_TRANSCRIBE_MODEL || "gpt-4o-transcribe");
+  upstream.append(
+    "model",
+    process.env.OPENAI_TRANSCRIBE_MODEL || "gpt-4o-transcribe"
+  );
 
   try {
     const res = await fetch("https://api.openai.com/v1/audio/transcriptions", {
@@ -66,8 +59,8 @@ export async function POST(request: Request) {
       // «модель не та» лечатся по-разному, а выглядят одинаково.
       const text = await res.text();
       return NextResponse.json(
-        { error: "upstream", detail: text.slice(0, 200) },
-        { status: 502 },
+        { detail: text.slice(0, 200), error: "upstream" },
+        { status: 502 }
       );
     }
 

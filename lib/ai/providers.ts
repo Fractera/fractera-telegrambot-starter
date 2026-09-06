@@ -1,6 +1,6 @@
-import { readFileSync } from "node:fs";
 import { createOpenAI } from "@ai-sdk/openai";
 import { customProvider } from "ai";
+import { machineEnv } from "@/lib/fractera/machine-env";
 import { isTestEnvironment } from "../constants";
 import { titleModel } from "./models";
 
@@ -27,17 +27,7 @@ import { titleModel } from "./models";
  * сообщения — «сохранено» и «применено» здесь совпадают.
  */
 function openAiKey(): string {
-  const path = process.env.FRACTERA_SLOT_ENV || "/opt/fractera/app/.env.local";
-  try {
-    const raw = readFileSync(path, "utf8");
-    const found = (raw.match(/^OPENAI_API_KEY=(.+)$/m) ?? [])[1];
-    if (found?.trim()) {
-      return found.trim();
-    }
-  } catch {
-    // Файла нет — это чужая машина или разработка: берём окружение.
-  }
-  return process.env.OPENAI_API_KEY ?? "";
+  return machineEnv("OPENAI_API_KEY") || process.env.OPENAI_API_KEY || "";
 }
 
 /**

@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 // СТРАТЕГИЯ АВТОМАТИЗАЦИИ — ЧЕМ ПРОЕКТ АВТОМАТИЗИРУЕТСЯ (112-1, 2026-09-04).
 //
@@ -38,7 +39,9 @@ export const AUTOMATION_MODES = ["claude", "openai"] as const;
 export type AutomationMode = (typeof AUTOMATION_MODES)[number];
 
 export function isAutomationMode(v: unknown): v is AutomationMode {
-  return typeof v === "string" && (AUTOMATION_MODES as readonly string[]).includes(v);
+  return (
+    typeof v === "string" && (AUTOMATION_MODES as readonly string[]).includes(v)
+  );
 }
 
 /**
@@ -49,15 +52,22 @@ export function isAutomationMode(v: unknown): v is AutomationMode {
  * совпадать с читателем на экране архитектора один в один — иначе две
  * поверхности назовут ненастроенный проект по-разному.
  */
-export function automationModeOf(config: Record<string, unknown>): AutomationMode {
-  return isAutomationMode(config.automationMode) ? config.automationMode : "claude";
+export function automationModeOf(
+  config: Record<string, unknown>
+): AutomationMode {
+  return isAutomationMode(config.automationMode)
+    ? config.automationMode
+    : "claude";
 }
 
-/** Путь к `PLATFORM-CONFIG` слота. Переопределяется окружением — как у `slotEnv`. */
+// 🪦 УМОЛЧАНИЕМ БЫЛ `PLATFORM-CONFIG` СЛОТА 3000 — ОТМЕНЕНО 2026-09-06.
+// Служба читала выключатели чужого приложения; сотри владелец порт 3000 — она
+// читала бы пустоту, не сказав об этом. Умолчание теперь СВОЁ дерево, а
+// отсутствие файла — законное состояние: включается режим по умолчанию.
 function platformConfigPath(): string {
   return (
     process.env.FRACTERA_SLOT_PLATFORM_CONFIG ||
-    "/opt/fractera/app/PLATFORM-CONFIG/platform-config.json"
+    join(process.cwd(), "PLATFORM-CONFIG", "platform-config.json")
   );
 }
 
@@ -74,8 +84,12 @@ function platformConfigPath(): string {
  */
 export function readSlotPlatformConfig(): Record<string, unknown> {
   try {
-    const parsed: unknown = JSON.parse(readFileSync(platformConfigPath(), "utf8"));
-    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+    const parsed: unknown = JSON.parse(
+      readFileSync(platformConfigPath(), "utf8")
+    );
+    return typeof parsed === "object" &&
+      parsed !== null &&
+      !Array.isArray(parsed)
       ? (parsed as Record<string, unknown>)
       : {};
   } catch {

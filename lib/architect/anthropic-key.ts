@@ -1,5 +1,5 @@
 import "server-only"
-import { readEnvValue, writeEnvValue } from "@/lib/architect/env-writer"
+import { machineEnv, writeMachineEnv } from "@/lib/fractera/machine-env"
 
 // КЛЮЧ ANTHROPIC — СОСТОЯНИЕ, ЗАПИСЬ И ПРОВЕРКА (113-1, 2026-09-04).
 //
@@ -28,6 +28,10 @@ import { readEnvValue, writeEnvValue } from "@/lib/architect/env-writer"
 // agent; it doesn't load `.env` files automatically».
 
 /** Имя переменной — то, которое читает сам SDK. Второго имени у неё нет. */
+// 🪦 КЛЮЧ ПИСАЛСЯ В `.env.local` СЛОТА 3000 ЧЕРЕЗ `env-writer` — ОТМЕНЕНО
+// 2026-09-06. Это была не просто зависимость, а ЗАПИСЬ в чужое приложение:
+// служба бота правила файл соседа, о котором ничего не знает. Теперь ключ
+// живёт в складе секретов машины, рядом с остальными.
 export const ANTHROPIC_KEY_VAR = "ANTHROPIC_API_KEY"
 
 export type AnthropicKeyState = {
@@ -43,7 +47,7 @@ export type AnthropicKeyState = {
  * хватает, чтобы им воспользоваться.
  */
 export function readAnthropicKeyState(): AnthropicKeyState {
-  const key = readEnvValue(ANTHROPIC_KEY_VAR) ?? ""
+  const key = machineEnv(ANTHROPIC_KEY_VAR)
   return { configured: Boolean(key), tail: key ? key.slice(-4) : null }
 }
 
@@ -59,8 +63,14 @@ export function looksLikeAnthropicKey(key: string): boolean {
 }
 
 export function writeAnthropicKey(key: string): { ok: boolean; detail?: string } {
-  const res = writeEnvValue(ANTHROPIC_KEY_VAR, key)
-  return res.ok ? { ok: true } : { ok: false, detail: res.detail }
+  // 🔒 ПРИЧИНА ОТКАЗА ОДНА И НАЗВАНА. Прежний писатель различал десяток бед
+  // файла слота; у склада машины отказ бывает ровно один — его нет или он
+  // недоступен на запись, а это всегда одно и то же: служба запущена не под
+  // root или машина не проходила рождение. Придумывать разнообразие причин
+  // там, где она одна, значит обещать диагностику, которой нет.
+  return writeMachineEnv(ANTHROPIC_KEY_VAR, key)
+    ? { ok: true }
+    : { ok: false, detail: "склад секретов машины недоступен на запись" }
 }
 
 export type AnthropicCheck = {
@@ -90,7 +100,7 @@ export type AnthropicCheck = {
  * ✗ У ключа OpenAI это уже оплачено днём отладки: плашка зеленела, бот молчал.
  */
 export async function checkAnthropicKey(): Promise<AnthropicCheck> {
-  const key = readEnvValue(ANTHROPIC_KEY_VAR) ?? ""
+  const key = machineEnv(ANTHROPIC_KEY_VAR)
   if (!key) return { valid: false, funded: null, reason: "ключ не задан" }
 
   const headers = {

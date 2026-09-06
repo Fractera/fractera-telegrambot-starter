@@ -4,11 +4,16 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { asc, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { getChatById, getMessageById, saveChat, saveMessages } from "@/lib/db/queries";
+import {
+  getChatById,
+  getMessageById,
+  saveChat,
+  saveMessages,
+} from "@/lib/db/queries";
 import { chat, user } from "@/lib/db/schema";
 import { pullChannelFile } from "./channel-files";
+import { machineEnv } from "./machine-env";
 import { notifyChat } from "./notify";
-import { slotEnv } from "./slot-env";
 
 // СООБЩЕНИЕ, ПРИШЕДШЕЕ ИЗ КАНАЛА, СТАНОВИТСЯ СООБЩЕНИЕМ ЧАТА (97-2).
 //
@@ -59,7 +64,7 @@ export type InboundMessage = {
  * секрете расходятся в тот день, когда его меняют.
  */
 export function hookSecret(): string {
-  return process.env.CHANNELS_HOOK_SECRET || slotEnv("CHANNELS_HOOK_SECRET");
+  return process.env.CHANNELS_HOOK_SECRET || machineEnv("CHANNELS_HOOK_SECRET");
 }
 
 /**
@@ -123,13 +128,16 @@ export async function ownerUserId(): Promise<string> {
   const client = postgres(process.env.POSTGRES_URL ?? "");
   const db = drizzle(client);
   try {
-    const wanted = process.env.CHANNELS_OWNER_EMAIL || slotEnv("CHANNELS_OWNER_EMAIL");
+    const wanted =
+      process.env.CHANNELS_OWNER_EMAIL || machineEnv("CHANNELS_OWNER_EMAIL");
     if (wanted) {
       const [row] = await db.select().from(user).where(eq(user.email, wanted));
       if (row) {
         return row.id;
       }
-      throw new Error(`CHANNELS_OWNER_EMAIL=${wanted}: такой учётной записи нет`);
+      throw new Error(
+        `CHANNELS_OWNER_EMAIL=${wanted}: такой учётной записи нет`
+      );
     }
     // 🛑 `demo@local` — НЕ ЧЕЛОВЕК, А ЗАПИСЬ РЕЖИМА БЕЗ ДОМЕНА, И БРАТЬ ЕЁ
     // ВЛАДЕЛЬЦЕМ НЕЛЬЗЯ. ✗ оплачено 2026-09-03 в тот же день: умолчание «первая
@@ -143,7 +151,9 @@ export async function ownerUserId(): Promise<string> {
     // следующем сервере, где адрес другой.
     const all = await db.select().from(user).orderBy(asc(user.createdAt));
     if (all.length === 0) {
-      throw new Error("В чате нет ни одной учётной записи — некому владеть разговором");
+      throw new Error(
+        "В чате нет ни одной учётной записи — некому владеть разговором"
+      );
     }
     const human = all.find((u) => u.email !== "demo@local");
     return (human ?? all[0]).id;
@@ -174,7 +184,9 @@ export function chatTitle(msg: {
 }): string {
   const head = msg.channel === "telegram" ? "Telegram" : msg.channel;
   const person = msg.who || msg.chatId;
-  return msg.botName ? `${head} · ${person} · @${msg.botName}` : `${head} · ${person}`;
+  return msg.botName
+    ? `${head} · ${person} · @${msg.botName}`
+    : `${head} · ${person}`;
 }
 
 /**
@@ -232,7 +244,11 @@ export async function channelOfChat(
     // без указания бота, та брала первого — а второй бот знает СВОИХ
     // собеседников, и первый этого номера не знает вовсе. На втором боте ответы
     // не работали бы, и отказ выглядел бы как «Telegram отверг сообщение».
-    return { bot: row.channelBot ?? null, channel: row.channel, chatId: row.channelChatId };
+    return {
+      bot: row.channelBot ?? null,
+      channel: row.channel,
+      chatId: row.channelChatId,
+    };
   } finally {
     await client.end();
   }
@@ -245,9 +261,12 @@ export async function channelOfChat(
  * вендоренная схема: своя вставка мимо них разошлась бы с шаблоном на первом же
  * обновлении сверху, и разошлась бы молча.
  */
-export async function receiveInbound(
-  msg: InboundMessage
-): Promise<{ chatId: string; messageId: string; created: boolean; duplicate: boolean }> {
+export async function receiveInbound(msg: InboundMessage): Promise<{
+  chatId: string;
+  messageId: string;
+  created: boolean;
+  duplicate: boolean;
+}> {
   const id = conversationId(msg.channel, msg.chatId);
   const existing = await getChatById({ id });
   // Хозяин нужен и для создания, и для уведомления: у существующего берём его,
@@ -281,13 +300,13 @@ export async function receiveInbound(
     // пришёл из чужого шаблона и знает ровно четыре поля; расширять его подпись
     // значит удорожать каждое обновление сверху. Наше — рядом и наше.
     await setChatChannel({
-        bot: msg.bot ?? null,
-        botName: msg.botName ?? null,
-        channel: msg.channel,
-        chatId: msg.chatId,
-        id,
-        who: msg.who ?? null,
-      });
+      bot: msg.bot ?? null,
+      botName: msg.botName ?? null,
+      channel: msg.channel,
+      chatId: msg.chatId,
+      id,
+      who: msg.who ?? null,
+    });
   }
 
   // 🔒 ИДЕНТИФИКАТОР СООБЩЕНИЯ ТОЖЕ ВЫЧИСЛЯЕТСЯ, КОГДА ЕСТЬ ИЗ ЧЕГО. Служба
@@ -295,7 +314,10 @@ export async function receiveInbound(
   // сообщение легло бы в базу дважды. Нет внешнего номера — обычный случайный.
   const messageId = msg.externalId
     ? conversationId(msg.channel, `msg:${msg.chatId}:${msg.externalId}`)
-    : conversationId(msg.channel, `msg:${msg.chatId}:${Date.now()}:${msg.text.slice(0, 64)}`);
+    : conversationId(
+        msg.channel,
+        `msg:${msg.chatId}:${Date.now()}:${msg.text.slice(0, 64)}`
+      );
 
   // 🛑 ПОВТОРНАЯ ДОСТАВКА — ЗАКОННЫЙ ИСХОД, А НЕ ОТКАЗ. ✗ найдено измерением
   // в тот же час: второй толчок с тем же номером падал на уникальном ключе, и
@@ -317,19 +339,31 @@ export async function receiveInbound(
   // Сообщение с непринятым файлом всё равно обязано попасть в ленту: текст
   // подписи, время и автор — уже ценность. ✗ в прототипе однажды снимок чека
   // пропал ВМЕСТЕ с сообщением.
-  const file = msg.fileId ? await pullChannelFile(msg.fileId, msg.bot ?? undefined) : null;
+  const file = msg.fileId
+    ? await pullChannelFile(msg.fileId, msg.bot ?? undefined)
+    : null;
 
   // 🔒 ФАЙЛ ЕДЕТ И ЧАСТЬЮ, И ВЛОЖЕНИЕМ, И ЭТО НЕ ДУБЛИРОВАНИЕ. Лента рисует
   // `parts` — оттуда картинка видна человеку; поле `attachments` читает модель и
   // прежний код шаблона. Одно без другого даёт либо невидимый файл, либо файл,
   // которого не видит модель.
-  const parts: { type: string; text?: string; url?: string; mediaType?: string; filename?: string }[] =
-    [];
+  const parts: {
+    type: string;
+    text?: string;
+    url?: string;
+    mediaType?: string;
+    filename?: string;
+  }[] = [];
   if (msg.text) {
     parts.push({ text: msg.text, type: "text" });
   }
   if (file) {
-    parts.push({ filename: file.name, mediaType: file.contentType, type: "file", url: file.url });
+    parts.push({
+      filename: file.name,
+      mediaType: file.contentType,
+      type: "file",
+      url: file.url,
+    });
   }
   // Ни текста, ни файла быть не может — дверь такое отклоняет; но если файл не
   // дался, а текста нет, кладём честную строку вместо пустого пузыря.

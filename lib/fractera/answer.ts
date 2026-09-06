@@ -3,11 +3,15 @@ import "server-only";
 import { generateText } from "ai";
 import { DEFAULT_CHAT_MODEL } from "@/lib/ai/models";
 import { getLanguageModel, hasOpenAiKey } from "@/lib/ai/providers";
-import { getChatById, getMessagesByChatId, saveMessages } from "@/lib/db/queries";
+import {
+  getChatById,
+  getMessagesByChatId,
+  saveMessages,
+} from "@/lib/db/queries";
 import { type Channel, channelOfChat } from "./channels";
+import { machineEnv } from "./machine-env";
 import { fetchMedia } from "./media";
 import { notifyChat } from "./notify";
-import { slotEnv } from "./slot-env";
 
 // 🪦 ЭТОТ ФАЙЛ БЫЛ ПАРКОВКОЙ С 2026-09-03 И ВКЛЮЧЁН В ТОТ ЖЕ ДЕНЬ.
 //
@@ -63,7 +67,9 @@ export function textOf(parts: unknown): string {
   }
   return parts
     .map((p) =>
-      p && typeof p === "object" && "text" in p ? String((p as { text: unknown }).text ?? "") : ""
+      p && typeof p === "object" && "text" in p
+        ? String((p as { text: unknown }).text ?? "")
+        : ""
     )
     .join(" ")
     .trim();
@@ -97,7 +103,9 @@ export async function sendToChannel(
       signal: AbortSignal.timeout(20_000),
     });
     const d = (await r.json().catch(() => ({}))) as { error?: string };
-    return r.ok ? { ok: true } : { error: d.error ?? `служба ответила ${r.status}`, ok: false };
+    return r.ok
+      ? { ok: true }
+      : { error: d.error ?? `служба ответила ${r.status}`, ok: false };
   } catch (e) {
     return { error: String((e as Error).message ?? e), ok: false };
   }
@@ -131,14 +139,18 @@ async function sendFileToChannel(
       signal: AbortSignal.timeout(60_000),
     });
     const d = (await r.json().catch(() => ({}))) as { error?: string };
-    return r.ok ? { ok: true } : { error: d.error ?? `служба ответила ${r.status}`, ok: false };
+    return r.ok
+      ? { ok: true }
+      : { error: d.error ?? `служба ответила ${r.status}`, ok: false };
   } catch (e) {
     return { error: String((e as Error).message ?? e), ok: false };
   }
 }
 
-function attachmentKind(mediaType: string | undefined): "image" | "audio" | "document" {
-  const top = (mediaType ?? "").split("/")[0];
+function attachmentKind(
+  mediaType: string | undefined
+): "image" | "audio" | "document" {
+  const [top] = (mediaType ?? "").split("/");
   if (top === "image") {
     return "image";
   }
@@ -180,13 +192,24 @@ export async function mirrorAttachments(
       continue;
     }
     const id = p.url.slice(prefix.length);
+    // Вложения тянутся ПО ОЧЕРЕДИ намеренно: параллельный `Promise.all` открыл бы
+    // столько запросов к слою данных, сколько файлов в сообщении, и первое же
+    // сообщение с десятком снимков ударило бы по нему залпом.
+    // biome-ignore lint/performance/noAwaitInLoops: см. выше — последовательность намеренная
     const res = await fetchMedia(id);
     if (!res) {
       continue;
     }
     const buf = Buffer.from(await res.arrayBuffer());
     const name = p.filename ?? p.name ?? "file";
-    await sendFileToChannel(channel, chatId, buf.toString("base64"), attachmentKind(p.mediaType), name, bot);
+    await sendFileToChannel(
+      channel,
+      chatId,
+      buf.toString("base64"),
+      attachmentKind(p.mediaType),
+      name,
+      bot
+    );
   }
 }
 
@@ -236,9 +259,12 @@ export async function answerInboundMessage(chatId: string): Promise<{
     const result = await generateText({
       messages: recent.map((m) => ({
         content: textOf(m.parts),
-        role: m.role === "assistant" ? ("assistant" as const) : ("user" as const),
+        role:
+          m.role === "assistant" ? ("assistant" as const) : ("user" as const),
       })),
-      model: getLanguageModel(slotEnv("OPENAI_TEXT_MODEL") || DEFAULT_CHAT_MODEL),
+      model: getLanguageModel(
+        machineEnv("OPENAI_TEXT_MODEL") || DEFAULT_CHAT_MODEL
+      ),
     });
     text = result.text.trim();
   } catch (e) {
@@ -275,7 +301,11 @@ export async function answerInboundMessage(chatId: string): Promise<{
         // найдено владельцем 2026-09-03 живым просмотром.
         parts: [
           {
-            data: { id: "model-answer", label: "Модель сформировала ответ", status: "done" },
+            data: {
+              id: "model-answer",
+              label: "Модель сформировала ответ",
+              status: "done",
+            },
             id: "model-answer",
             type: "data-parse-step",
           },
@@ -299,6 +329,11 @@ export async function answerInboundMessage(chatId: string): Promise<{
     return { delivered: false, saved: true };
   }
 
-  const sent = await sendToChannel(target.channel, target.chatId, text, target.bot);
+  const sent = await sendToChannel(
+    target.channel,
+    target.chatId,
+    text,
+    target.bot
+  );
   return { delivered: sent.ok, reason: sent.error, saved: true };
 }

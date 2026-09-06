@@ -1,7 +1,6 @@
-import { readFile } from "node:fs/promises";
 import { NextResponse } from "next/server";
+import { machineEnv } from "@/lib/fractera/machine-env";
 import { fracteraRoles } from "@/lib/fractera/session";
-import { slotEnv } from "@/lib/fractera/slot-env";
 
 // КЛЮЧ OpenAI — ОДИН НА ВЕСЬ СЕРВЕР, И ЧАТ ЕГО НЕ КОПИРУЕТ (шаг 96).
 //
@@ -26,28 +25,28 @@ import { slotEnv } from "@/lib/fractera/slot-env";
 // `cacheComponents`, и он несовместим ни с `runtime`, ни с `dynamic`. Дверь
 // читает файл — значит и так исполняется на узле; объявлять это нечем и незачем.
 
-function slotEnvPath(): string {
-  return process.env.FRACTERA_SLOT_ENV || "/opt/fractera/app/.env.local";
-}
-
 function maskOf(key: string): string {
   return key ? `${key.slice(0, 7)}…${key.slice(-4)}` : "";
 }
 
-async function readKey(): Promise<string> {
-  try {
-    const raw = await readFile(slotEnvPath(), "utf8");
-    return (raw.match(/^OPENAI_API_KEY=(.+)$/m) ?? [])[1]?.trim() ?? "";
-  } catch {
-    return process.env.OPENAI_API_KEY ?? "";
-  }
+// 🪦 ЧИТАЛСЯ ФАЙЛ СЛОТА 3000 — ОТМЕНЕНО 2026-09-06. Это была последняя нитка к
+// соседу: служба показывала маску ключа, взятую из `.env.local` чужого
+// приложения. Теперь источник — склад секретов машины, он же место записи.
+function readKey(): string {
+  return machineEnv("OPENAI_API_KEY") || process.env.OPENAI_API_KEY || "";
 }
 
 /** Адрес и секрет слоя данных — те же, что у медиатеки: одна связь, одно место. */
 function dataService(): { key: string; url: string } {
   return {
-    key: process.env.DATA_SECRET || slotEnv("DATA_SECRET") || slotEnv("DATA_API_KEY"),
-    url: process.env.REMOTE_DATA_URL || slotEnv("REMOTE_DATA_URL") || "http://localhost:3300",
+    key:
+      process.env.DATA_SECRET ||
+      machineEnv("DATA_SECRET") ||
+      machineEnv("DATA_API_KEY"),
+    url:
+      process.env.REMOTE_DATA_URL ||
+      machineEnv("REMOTE_DATA_URL") ||
+      "http://localhost:3300",
   };
 }
 
@@ -58,19 +57,27 @@ function dataService(): { key: string; url: string } {
  * заведённая тут «для надёжности», — это ровно тот третий список, расхождением
  * которых и был оплачен шаг 109.
  */
-async function writeKeyThroughDoor(key: string): Promise<{ ok: boolean; reason?: string }> {
+async function writeKeyThroughDoor(
+  key: string
+): Promise<{ ok: boolean; reason?: string }> {
   const { url, key: secret } = dataService();
-  if (!secret) return { ok: false, reason: "no-data-secret" };
+  if (!secret) {
+    return { ok: false, reason: "no-data-secret" };
+  }
   try {
     const r = await fetch(`${url}/platform/openai-key`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Data-Secret": secret },
       body: JSON.stringify({ key }),
       cache: "no-store",
+      headers: { "Content-Type": "application/json", "X-Data-Secret": secret },
+      method: "POST",
     });
-    if (!r.ok) return { ok: false, reason: `door-${r.status}` };
+    if (!r.ok) {
+      return { ok: false, reason: `door-${r.status}` };
+    }
     const d = (await r.json()) as { ok?: boolean; failed?: string[] };
-    return d.ok ? { ok: true } : { ok: false, reason: `failed:${(d.failed ?? []).join(",")}` };
+    return d.ok
+      ? { ok: true }
+      : { ok: false, reason: `failed:${(d.failed ?? []).join(",")}` };
   } catch {
     return { ok: false, reason: "door-unreachable" };
   }
@@ -82,7 +89,7 @@ export async function GET() {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
-  const key = await readKey();
+  const key = readKey();
   return NextResponse.json({ masked: maskOf(key), present: Boolean(key) });
 }
 
@@ -92,7 +99,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
-  const body = (await request.json().catch(() => null)) as { key?: string } | null;
+  const body = (await request.json().catch(() => null)) as {
+    key?: string;
+  } | null;
   const key = (body?.key ?? "").trim();
 
   // 🔒 ФОРМА ПРОВЕРЯЕТСЯ ДО ЗАПИСИ. Ключ, не похожий на ключ, — это опечатка, и
@@ -111,7 +120,10 @@ export async function POST(request: Request) {
   // о построчной правке не исчезла, она переехала туда вместе с писателем.
   const written = await writeKeyThroughDoor(key);
   if (!written.ok) {
-    return NextResponse.json({ error: "write-failed", reason: written.reason }, { status: 500 });
+    return NextResponse.json(
+      { error: "write-failed", reason: written.reason },
+      { status: 500 }
+    );
   }
 
   // 🛑 «СОХРАНЕНО» И «ПРИМЕНЕНО» — РАЗНЫЕ УТВЕРЖДЕНИЯ, И ЭТО СКАЗАНО ОТВЕТОМ.

@@ -1,4 +1,4 @@
-import { slotEnv } from "@/lib/fractera/slot-env";
+import { machineEnv } from "@/lib/fractera/machine-env";
 // One place that answers "where is the data layer, and what proves me to it".
 //
 // The same code runs in two places and must not care which:
@@ -27,7 +27,7 @@ export type DataService = { url: string; key: string };
 //
 // 🔒 ФОЛБЭК ВЗЯТ У РАБОЧЕГО КОДА ЭТОГО ЖЕ РЕПОЗИТОРИЯ, А НЕ ПРИДУМАН:
 // `app/api/fractera/openai-key/route.ts` и медиатека читают ровно так же, через
-// `slotEnv()`. Порядок важен: своё окружение сильнее, потому что на машине
+// `machineEnv()`. Порядок важен: своё окружение сильнее, потому что на машине
 // разработчика слота нет вовсе.
 //
 // 🔒 ВТОРОЙ КОПИИ СЕКРЕТА ПРИ ЭТОМ НЕ ЗАВОДИТСЯ — читается тот же файл, что и
@@ -36,13 +36,13 @@ export type DataService = { url: string; key: string };
 export function dataService(): DataService {
   const url =
     process.env.REMOTE_DATA_URL ||
-    slotEnv("REMOTE_DATA_URL") ||
+    machineEnv("REMOTE_DATA_URL") ||
     "http://localhost:3300";
   const key =
     process.env.DATA_API_KEY ||
     process.env.DATA_SECRET ||
-    slotEnv("DATA_SECRET") ||
-    slotEnv("DATA_API_KEY") ||
+    machineEnv("DATA_SECRET") ||
+    machineEnv("DATA_API_KEY") ||
     "";
   return { url, key };
 }

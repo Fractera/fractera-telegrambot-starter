@@ -7,17 +7,28 @@
 // 🔒 АДРЕС И КЛЮЧ СЛОЯ ДАННЫХ ЧИТАЮТСЯ ИЗ ФАЙЛА ПРОЕКТА, как и ключ модели.
 // Своей копии секрета у чата нет: второй путь секрета расходится с первым молча.
 
-import { slotEnv } from "./slot-env";
+import { machineEnv } from "./machine-env";
 
-type Stored = { contentType: string; name: string; pathname: string; url: string };
+type Stored = {
+  contentType: string;
+  name: string;
+  pathname: string;
+  url: string;
+};
 
 /** Запись медиатеки — та её часть, что нужна ленте сообщений. */
 type MediaItem = { id: string; mime_type?: string; name?: string };
 
 function dataService(): { key: string; url: string } {
   return {
-    key: process.env.DATA_SECRET || slotEnv("DATA_SECRET") || slotEnv("DATA_API_KEY"),
-    url: process.env.REMOTE_DATA_URL || slotEnv("REMOTE_DATA_URL") || "http://localhost:3300",
+    key:
+      process.env.DATA_SECRET ||
+      machineEnv("DATA_SECRET") ||
+      machineEnv("DATA_API_KEY"),
+    url:
+      process.env.REMOTE_DATA_URL ||
+      machineEnv("REMOTE_DATA_URL") ||
+      "http://localhost:3300",
   };
 }
 
@@ -43,9 +54,11 @@ export async function uploadToMedia(file: File): Promise<Stored> {
     method: "POST",
   });
 
-  const d = (await res.json().catch(() => null)) as
-    | { ok?: boolean; error?: string; item?: MediaItem }
-    | null;
+  const d = (await res.json().catch(() => null)) as {
+    ok?: boolean;
+    error?: string;
+    item?: MediaItem;
+  } | null;
 
   // 🔒 СКЛАД ОТВЕЧАЕТ КОНВЕРТОМ `{ ok, item }`, А НЕ САМОЙ ЗАПИСЬЮ — ИЗМЕРЕНО
   // ЖИВЬЁМ 2026-09-02 запросом к `:3300`, а не выведено по форме соседней двери.
@@ -57,7 +70,7 @@ export async function uploadToMedia(file: File): Promise<Stored> {
     throw new Error(d?.error ?? `Медиатека отказала: HTTP ${res.status}`);
   }
 
-  const item = d.item;
+  const { item } = d;
 
   // 🔒 ЧЕРЕЗ СВОЙ МАРШРУТ, А НЕ ПРЯМО В СЛОЙ ДАННЫХ: его адрес требует ключа,
   // и отдавать браузеру ссылку, которая без секрета не открывается, значит
@@ -124,7 +137,7 @@ export async function inlineAttachmentsForModel<
           }
 
           const id = p.url.slice("/api/fractera/media/".length);
-          const kind = (p.mediaType ?? "").split("/")[0];
+          const [kind] = (p.mediaType ?? "").split("/");
 
           if (kind !== "image") {
             return {
@@ -145,10 +158,10 @@ export async function inlineAttachmentsForModel<
             ...p,
             url: `data:${p.mediaType ?? "image/png"};base64,${buf.toString("base64")}`,
           };
-        }),
+        })
       );
 
       return { ...message, parts };
-    }),
+    })
   );
 }
