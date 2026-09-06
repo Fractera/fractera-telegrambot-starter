@@ -28,6 +28,13 @@ export type TelegramUi = {
   helpMore: string;
   helpLess: string;
   aboutSoonTitle: string;
+  /** Карточка «это ваш стартовый шаблон» (137-15). */
+  starter: {
+    title: string;
+    body: string;
+    openTitle: string;
+    open: string;
+  };
   aboutSoon: string;
   /** Заглушки двух рабочих разделов. */
   soonTitle: string;
@@ -469,6 +476,14 @@ const EN: TelegramUi = {
     what: "A person writes to your bot and talks to your project — no separate app, no login screen. The bot is yours: the token comes from @BotFather and belongs to you, so the conversation runs between your visitors and your server.",
     whatTitle: "A door into this project from a messenger.",
   },
+  starter: {
+    body:
+      "You can use it as it is — or reshape it by voice, with Claude Code: add a new menu, build dashboards, wire up integrations. Say what you want in your own words; the agent writes the code and commits it, so any change can be rolled back.",
+    open:
+      "The whole source code of this project is yours and fully open — nothing here hides behind a service you cannot read.",
+    openTitle: "Everything is open.",
+    title: "This is your starter template.",
+  },
   aboutSoon:
     "The section exists and its place is taken; the text and the picture that explain how the bot is arranged in this project are still being prepared. Nothing is broken here — there is simply nothing written yet.",
   aboutSoonTitle: "This description is being written.",
@@ -851,6 +866,14 @@ const RU: TelegramUi = {
     startTitle: "Как завести бота.",
     what: "Человек пишет вашему боту и разговаривает с вашим проектом — без отдельного приложения и без страницы входа. Бот ваш: токен вы получаете у @BotFather, и он принадлежит вам, поэтому разговор идёт между вашими посетителями и вашим сервером.",
     whatTitle: "Дверь в этот проект из мессенджера.",
+  },
+  starter: {
+    body:
+      "Его можно использовать сразу как есть — а можно переделать голосом, при помощи Claude Code: создать новое меню, добавить дашборды, построить интеграции. Скажите своими словами, чего хотите; агент напишет код и положит коммит, поэтому любую правку можно откатить.",
+    open:
+      "Весь исходный код этого проекта ваш и полностью вам доступен — здесь ничего не спрятано за службой, которую нельзя прочитать.",
+    openTitle: "Всё открыто.",
+    title: "Это ваш стартовый шаблон.",
   },
   aboutSoon:
     "Раздел существует, и место под него занято; текст и изображение, объясняющие, как устроен бот в этом проекте, ещё готовятся. Здесь ничего не сломано — здесь пока просто ничего не написано.",

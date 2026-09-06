@@ -12,6 +12,7 @@ import { AutoRefresh } from "./_components/auto-refresh.client";
 import { InProgress } from "./_components/in-progress";
 import { PassportBody } from "./_components/passport-body.client";
 import { SectionIntro } from "./_components/section-intro.client";
+import { StarterCard } from "./_components/starter-card";
 import { TaskParseSection } from "./_components/task-parse-section";
 import { TelegramAbout } from "./_components/telegram-about";
 import { TelegramSettings } from "./_components/telegram-settings";
@@ -280,6 +281,12 @@ async function BotSettingsGate({
                     </Small>
                   }
                 />
+                {/* 🔒 КАРТОЧКА ШАБЛОНА СТОИТ ПОД СПРАВКОЙ — место названо
+                    владельцем. Сперва человек читает, что это за бот, и только
+                    потом узнаёт, что бот — заготовка, которую он вправе
+                    переделать. Обратный порядок предлагал бы переделку раньше
+                    знакомства. */}
+                <StarterCard ui={ui} />
                 <TelegramAbout ui={ui} />
               </>
             )}
