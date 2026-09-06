@@ -8,8 +8,8 @@ import { Eyebrow, H1, Lead, Small } from "@/components/ui/typography";
 import { WorkspaceShell } from "@/components/workspace/workspace-shell";
 import { readChannels } from "@/lib/architect/channels";
 import { fracteraRoles } from "@/lib/fractera/session";
-import { AutomationsView } from "./_components/automations-view.client";
 import { AutoRefresh } from "./_components/auto-refresh.client";
+import { AutomationsView } from "./_components/automations-view";
 import { InProgress } from "./_components/in-progress";
 import { PassportBody } from "./_components/passport-body.client";
 import { SectionIntro } from "./_components/section-intro.client";
@@ -19,7 +19,7 @@ import { TelegramAbout } from "./_components/telegram-about";
 import { TelegramSettings } from "./_components/telegram-settings";
 import { architectLayerUi } from "./_i18n/architect-layer.i18n";
 import { telegramUi } from "./_i18n/telegram.i18n";
-import { listAutomations } from "./_lib/automations";
+import { queryAutomations, readAutomationQuery } from "./_lib/automations";
 import { passportOutline } from "./_lib/passport-outline";
 import {
   hrefOfTelegramLogView,
@@ -78,7 +78,7 @@ export function generateStaticParams() {
 // причине стоит в `app/terminal/page.tsx` — здесь он повторён, а не изобретён.
 export default function BotSettingsPage(props: {
   params: Promise<{ lang: string }>;
-  searchParams: Promise<{ section?: string; view?: string }>;
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
   return (
     <Suspense fallback={<div className="min-h-screen bg-background" />}>
@@ -92,7 +92,7 @@ async function BotSettingsGate({
   searchParams,
 }: {
   params: Promise<{ lang: string }>;
-  searchParams: Promise<{ section?: string; view?: string }>;
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const { lang } = await params;
   if (!(LANGS as readonly string[]).includes(lang)) {
@@ -107,7 +107,8 @@ async function BotSettingsGate({
     notFound();
   }
 
-  const { section: rawSection, view: rawView } = await searchParams;
+  const sp = await searchParams;
+  const { section: rawSection, view: rawView } = sp;
   const active = resolveTelegramSection(rawSection);
   const view = resolveTelegramLogView(rawView);
   const t = architectLayerUi(lang);
@@ -196,7 +197,11 @@ async function BotSettingsGate({
             return id === "logs"
               ? [
                   item,
-                  { href: `/${lang}/terminal`, label: ui.terminalLabel, newTab: true },
+                  {
+                    href: `/${lang}/terminal`,
+                    label: ui.terminalLabel,
+                    newTab: true,
+                  },
                 ]
               : [item];
           })}
@@ -376,8 +381,9 @@ async function BotSettingsGate({
             {active === "logs" &&
               (view === "automations" ? (
                 <AutomationsView
-                  items={listAutomations()}
                   lang={lang}
+                  page={queryAutomations(readAutomationQuery(sp))}
+                  query={readAutomationQuery(sp)}
                   words={ui.automations}
                 />
               ) : view === "parse" ? (

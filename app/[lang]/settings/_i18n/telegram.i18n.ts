@@ -14,13 +14,29 @@ export type TelegramUi = {
   title: string;
   /** Подпись группы в левом меню. */
   menuTitle: string;
-  /** Слова списка автоматизаций во вкладке «Логи». */
+  /** Слова таблицы автоматизаций во вкладке «Логи». */
   automations: {
     open: string
-    close: string
+    preview: string
+    previewClose: string
     steps: string
     empty: string
     demo: string
+    search: string
+    searchDo: string
+    sortNew: string
+    sortOld: string
+    status: { any: string; done: string; running: string }
+    calendar: { any: string; yes: string; no: string }
+    map: { any: string; yes: string; no: string }
+    perPage: string
+    shown: string
+    first: string
+    prev: string
+    next: string
+    last: string
+    page: string
+    reset: string
   };
   /**
    * Подпись пункта «Терминал» в левом меню.
@@ -656,10 +672,26 @@ const EN: TelegramUi = {
     title: "What the bot has heard",
   },
   automations: {
-    close: "Hide page",
+    calendar: { any: "Calendar: any", no: "No calendar", yes: "On a timer" },
     demo: "Demo records: real chains will come from the logs at the next step.",
-    empty: "No automations yet.",
-    open: "Show page",
+    empty: "Nothing matches this filter.",
+    first: "First page",
+    last: "Last page",
+    map: { any: "Map: any", no: "No map pins", yes: "Has map pins" },
+    next: "Forward",
+    open: "Open page in a new tab",
+    page: "Page {n} of {of}",
+    perPage: "Per page",
+    prev: "Back",
+    preview: "Preview here",
+    previewClose: "Hide preview",
+    reset: "Reset filters",
+    search: "Search by name or tag",
+    searchDo: "Search",
+    shown: "Showing {from}-{to} of {total}",
+    sortNew: "Newest first",
+    sortOld: "Oldest first",
+    status: { any: "Any state", done: "Done", running: "Running" },
     steps: "{n} messages",
   },
   menuTitle: "Telegram bot",
@@ -1052,10 +1084,26 @@ const RU: TelegramUi = {
     title: "Что бот услышал",
   },
   automations: {
-    close: "Скрыть страницу",
+    calendar: { any: "Календарь: всё равно", no: "Без календаря", yes: "По таймеру" },
     demo: "Выдуманные записи: настоящие цепочки придут из логов следующим шагом.",
-    empty: "Автоматизаций пока нет.",
-    open: "Показать страницу",
+    empty: "Под этот отбор ничего не попало.",
+    first: "Первая страница",
+    last: "Последняя страница",
+    map: { any: "Карта: всё равно", no: "Без меток", yes: "С метками на карте" },
+    next: "Вперёд",
+    open: "Открыть страницу в новой вкладке",
+    page: "Страница {n} из {of}",
+    perPage: "На странице",
+    prev: "Назад",
+    preview: "Показать здесь",
+    previewClose: "Скрыть предпросмотр",
+    reset: "Сбросить отбор",
+    search: "Поиск по названию или метке",
+    searchDo: "Найти",
+    shown: "Показано {from}-{to} из {total}",
+    sortNew: "Сначала новые",
+    sortOld: "Сначала старые",
+    status: { any: "Любое состояние", done: "Завершена", running: "В процессе" },
     steps: "сообщений: {n}",
   },
   menuTitle: "Telegram-бот",
