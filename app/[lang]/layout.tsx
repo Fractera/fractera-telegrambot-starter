@@ -3,6 +3,7 @@ import { type ReactNode, Suspense } from "react";
 import { DrawerMenu } from "@/components/menu/drawer/drawer-menu.server";
 import { FooterMenu } from "@/components/menu/footer/footer-menu.server";
 import { TopMenu } from "@/components/menu/top/top-menu.server";
+import { buildDesignCss } from "@/lib/design-css";
 import { DrawerProvider } from "@/providers/drawer-provider.client";
 
 // РАСКЛАДКА ЯЗЫКОВОГО СЕГМЕНТА СЛУЖБЫ БОТА (137-3, 2026-09-06).
@@ -53,8 +54,38 @@ export default async function BotLangLayout({
 }) {
   const { lang } = await params;
 
+  // ✗ ДИЗАЙН-СИСТЕМА НЕ БЫЛА ПОДКЛЮЧЕНА, И ЭТО НАШЁЛ ВЛАДЕЛЕЦ (137-7,
+  // 2026-09-06): «я смотрю, что ты не стал дизайн подключать к дизайн-системе?».
+  // ✗ В 137-1 я записал шкалу размеров в `globals.css` ЗНАЧЕНИЯМИ и объявил, что
+  // «слоя дизайна здесь нет». Это было неверно: слой дизайна живёт не в панели,
+  // а В САМОМ ПРОЕКТЕ на 3000 — `/{lang}/architect/design`, хранилище
+  // `DESIGN-CONFIG`, четвёртый конфиг слота (шаг 41). Значит подключается он тем
+  // же приёмом, что `APP-CONFIG` и `PLATFORM-CONFIG`: путём в окружении
+  // (`DESIGN_CONFIG_PATH`) — способность существовала, я её не изобретал.
+  //
+  // 🔒 ЧТО ЭТО ДАЁТ: шрифты, шкала текста, формы и обе палитры владельца
+  // приезжают сюда БЕЗ ПЕРЕСБОРКИ, ровно как на сайт. Правка на экране дизайна
+  // видна здесь на следующей загрузке.
+  //
+  // 🛑 ПУСТОЙ КОНФИГ — ЗАКОННЫЙ ИСХОД: `buildDesignCss()` возвращает пустую
+  // строку, `<style>` не печатается, и действуют значения из `globals.css`.
+  // Ровно это и происходит, если проект на 3000 удалён целиком.
+  const { css: designCss, fontLinks: designFontLinks } = buildDesignCss();
+
   return (
     <DrawerProvider>
+      {/* 🔒 СТИЛЬ ПЕЧАТАЕТСЯ ВНУТРИ СЕГМЕНТА, А НЕ В `<head>`. На 3000 это
+          корневая раскладка и место в голове документа; здесь корень чужой —
+          общий для чата, — и трогать его ради одной страницы значило бы менять
+          вид всей службы. Переменные каскадом действуют одинаково. */}
+      {designCss.length > 0 ? (
+        // biome-ignore lint/security/noDangerouslySetInnerHtml: тот же приём, что в раскладке стартера — CSS печатается строкой
+        <style dangerouslySetInnerHTML={{ __html: designCss }} />
+      ) : null}
+      {designFontLinks.map((href) => (
+        <link href={href} key={href} rel="stylesheet" />
+      ))}
+
       <div className="flex min-h-screen flex-col">
         <TopMenu lang={lang} />
         {children}
