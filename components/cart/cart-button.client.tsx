@@ -1,0 +1,170 @@
+"use client"
+
+// Значок корзины в шапке и окно заказа за ним.
+//
+// 🔒 СТОИТ СЛЕВА ОТ КНОПКИ АККАУНТА И ПОКАЗЫВАЕТСЯ ТОЛЬКО ВОШЕДШЕМУ. Корзина —
+// возможность зарегистрированного покупателя; гостю она обещала бы действие,
+// которого у него нет.
+//
+// 🔒 ОКНО ВЫСОТОЙ НЕ БОЛЬШЕ 85% ЭКРАНА (предел задаёт общее окно AppDialog). Список заказа растёт, а окно во весь
+// экран перестаёт быть окном: пропадает ощущение, что за ним осталась страница,
+// и некуда нажать, чтобы выйти. Прокручивается ВНУТРИ окна только список — итог
+// и кнопки остаются на виду, иначе за длинным заказом теряется главное число.
+
+import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
+import { ShoppingCart, Plus, Minus, X } from "lucide-react"
+import { toast } from "sonner"
+import { Button } from "@/components/ui/button"
+import { AppDialog } from "@/components/dialog/app-dialog.client"
+import type { AppDialogUi } from "@/components/dialog/app-dialog.i18n"
+import { Separator } from "@/components/ui/separator"
+import { adminBase } from "@/lib/runtime-urls"
+import { getCart, setQty, clearCart, cartTotal, cartCount, subscribeCart, type CartLine } from "./cart-store"
+import type { CartUi } from "./cart.i18n"
+
+export function CartButton(
+  { lang, currency, labels, dialogUi }:
+  {
+    lang: string
+    currency: string
+    labels: CartUi
+    /** Слова общего окна — резолвятся на сервере (`appDialogUi(lang)`). */
+    dialogUi: AppDialogUi
+  },
+) {
+  const router = useRouter()
+  const [open, setOpen] = useState(false)
+  const [lines, setLines] = useState<CartLine[]>([])
+
+  // Корзина живёт в браузере, поэтому читается ПОСЛЕ гидратации: прочитать её на
+  // сервере невозможно, а отрисовать пустую и молча заменить — это скачок числа
+  // на глазах у человека. Первый кадр честно пустой, дальше — настоящее.
+  useEffect(() => {
+    const sync = () => setLines(getCart())
+    sync()
+    return subscribeCart(sync)
+  }, [])
+
+  const money = new Intl.NumberFormat(lang, { style: "currency", currency })
+  const count = cartCount(lines)
+
+  function openProduct(id: string) {
+    // Окно закрывается ДО перехода: оставить его открытым поверх новой страницы
+    // значит показать человеку товар, загороженный списком, из которого он ушёл.
+    setOpen(false)
+    router.push(`/${lang}/products/${id}`)
+  }
+
+  function checkout() {
+    toast.success(labels.checkoutToast, {
+      description: (
+        <span className="block text-[11px] leading-relaxed">
+          {labels.checkoutNote}{" "}
+          <a
+            href={adminBase()}
+            target="_blank"
+            rel="noreferrer"
+            className="underline underline-offset-2 hover:text-foreground"
+          >
+            {labels.toAdminPanel}
+          </a>
+        </span>
+      ),
+    })
+  }
+
+  return (
+    <>
+      <Button variant="ghost" size="sm" onClick={() => setOpen(true)} aria-label={labels.open} title={labels.open}>
+        <span className="relative inline-flex">
+          <ShoppingCart />
+          {count > 0 && (
+            <span className="absolute -right-2 -top-1.5 min-w-4 rounded-full bg-foreground px-1 text-center text-[10px] font-medium leading-4 text-background">
+              {count}
+            </span>
+          )}
+        </span>
+        {/* 🔒 ПОДПИСЬ РЯДОМ СО ЗНАЧКОМ — НА ШИРОКОМ ЭКРАНЕ (владелец 2026-08-14).
+            Её здесь не было: корзина оставалась единственной кнопкой ряда без
+            слова, тогда как соседний «Личный кабинет» и ссылка на панель его
+            несут. Значок без подписи узнаётся по догадке, и догадка эта разная у
+            разных людей — а ряд, где часть кнопок подписана, а часть нет,
+            читается как недоделанный, а не как лаконичный.
+            `hidden sm:inline` — тот же приём, что у соседа: на телефоне слово
+            уходит, потому что там борьба за каждый пиксель ширины. */}
+        <span className="hidden sm:inline">{labels.open}</span>
+      </Button>
+
+      <AppDialog
+        open={open}
+        onOpenChange={setOpen}
+        ui={dialogUi}
+        title={labels.title}
+        description={lines.length === 0 ? labels.empty : undefined}
+        bodyClassName="p-0"
+        footerClassName="block p-0"
+        footer={lines.length > 0 ? (
+          /* Итог и действия — ВНЕ прокрутки: за длинным заказом теряется главное
+             число, а оно и есть причина открыть корзину. Подвал здесь не ряд
+             кнопок, а блок, поэтому его раскладка переопределена пропсом. */
+          <div className="px-5 py-4">
+            <div className="flex items-baseline justify-between">
+              <span className="text-xs uppercase tracking-wide text-muted-foreground">{labels.total}</span>
+              <span className="text-lg font-semibold tabular-nums text-foreground">
+                {money.format(cartTotal(lines))}
+              </span>
+            </div>
+
+            <Button className="mt-3 w-full" onClick={checkout}>{labels.checkout}</Button>
+
+            <Separator className="my-3" />
+
+            <button
+              type="button"
+              onClick={() => { if (confirm(labels.resetConfirm)) clearCart() }}
+              className="w-full text-center text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+            >
+              {labels.reset}
+            </button>
+          </div>
+        ) : undefined}
+      >
+        {lines.length > 0 && (
+          /* Прокручивается только список — прокрутку даёт тело окна. */
+          <ul className="px-5 py-3">
+            {lines.map(l => (
+              <li key={l.id} className="flex items-center gap-3 border-b border-border py-3 last:border-0">
+                <div className="min-w-0 flex-1">
+                  <button
+                    type="button"
+                    onClick={() => openProduct(l.id)}
+                    className="block truncate text-left text-sm font-medium text-foreground hover:underline"
+                  >
+                    {l.name}
+                  </button>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {money.format(l.price)} × {l.qty} = {money.format(l.price * l.qty)}
+                  </p>
+                </div>
+
+                <div className="flex shrink-0 items-center gap-1">
+                  <Button variant="ghost" size="sm" aria-label={labels.decrease} onClick={() => setQty(l.id, l.qty - 1)}>
+                    <Minus />
+                  </Button>
+                  <span className="w-6 text-center text-sm tabular-nums text-foreground">{l.qty}</span>
+                  <Button variant="ghost" size="sm" aria-label={labels.increase} onClick={() => setQty(l.id, l.qty + 1)}>
+                    <Plus />
+                  </Button>
+                  <Button variant="ghost" size="sm" aria-label={labels.remove} onClick={() => setQty(l.id, 0)}>
+                    <X />
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </AppDialog>
+    </>
+  )
+}

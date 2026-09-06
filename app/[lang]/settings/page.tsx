@@ -2,10 +2,12 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { Eyebrow, H1, Lead, Small } from "@/components/ui/typography";
 import { WorkspaceShell } from "@/components/workspace/workspace-shell";
+import { readChannels } from "@/lib/architect/channels";
 import { fracteraRoles } from "@/lib/fractera/session";
 import { InProgress } from "./_components/in-progress";
 import { SectionIntro } from "./_components/section-intro.client";
 import { TelegramAbout } from "./_components/telegram-about";
+import { TelegramSettings } from "./_components/telegram-settings";
 import { architectLayerUi } from "./_i18n/architect-layer.i18n";
 import { telegramUi } from "./_i18n/telegram.i18n";
 import {
@@ -96,6 +98,17 @@ async function BotSettingsGate({
   const t = architectLayerUi(lang);
   const ui = telegramUi(lang);
 
+  // 🔒 ОДИН ВОПРОС СЛУЖБЕ НА СТРАНИЦУ, А НЕ ПО ОДНОМУ НА РАЗДЕЛ — как в
+  // источнике. Служба ходит в Telegram за именем бота, то есть вызов не
+  // бесплатный; и разделы обязаны показывать ОДНО состояние, а не каждый своё,
+  // снятое в разные секунды.
+  //
+  // 🔒 ЭТО НЕ ЗАВИСИТ ОТ СЛОТА НА 3000, И В ЭТОМ ВЕСЬ СМЫСЛ ПЕРЕЕЗДА. Правда о
+  // боте живёт в службе каналов `:3500` — своём процессе на этой же машине.
+  // Удали кто-нибудь проект на 3000 целиком — настройки бота останутся живыми,
+  // потому что читают не его.
+  const channels = await readChannels();
+
   return (
     <main className="min-h-screen bg-background">
       <div className="px-6 py-[var(--page-py-work)]" data-app-column>
@@ -118,13 +131,25 @@ async function BotSettingsGate({
           title={ui.pages[active].title}
         >
           {/* 🔒 ПРИЗНАКИ СТОЯТ НА КОНТЕЙНЕРЕ РАЗДЕЛА, А НЕ ВНУТРИ ОСТРОВКА —
-              как в источнике: островок появляется позже, а правда о том, какой
-              раздел открыт, нужна разметке сразу. Признаков состояния службы
-              (`data-channels-available` и соседние) здесь пока нет: их даёт
-              `readChannels()`, и он приедет вместе с разделом «Настройки». */}
+              как в источнике: островок появляется позже, а правда о боте нужна
+              разметке сразу. Без JS отсюда видно главное: жива ли служба
+              каналов, сохранён ли токен, узнаёт ли его сам Telegram, привязан
+              ли чат.
+              🪦 Здесь стояло «признаков состояния службы пока нет — приедут с
+              разделом Настройки». Они приехали тем же подшагом 137-3, и строка
+              исправлена вместе с кодом: комментарий, переживший свой код, не
+              падает и не краснеет — он просто врёт. */}
           <div
             className="flex min-w-0 flex-1 flex-col gap-6"
+            data-channels-available={String(channels.available)}
+            data-telegram-configured={String(
+              Boolean(channels.telegram?.configured)
+            )}
+            data-telegram-linked={String(Boolean(channels.telegram?.chatId))}
             data-telegram-page
+            data-telegram-reachable={String(
+              Boolean(channels.telegram?.reachable)
+            )}
             data-telegram-section={active}
           >
             {/* 🔒 «ОПИСАНИЕ» БЕРЁТ ОБЩУЮ СВЁРНУТУЮ СПРАВКУ, А НЕ СВОЮ — тот же
@@ -189,7 +214,53 @@ async function BotSettingsGate({
                 ходил бы по кольцу.
                 🔒 Признак `data-in-progress` именует место: замер «заглушка на
                 месте» иначе не отличает три заглушки друг от друга. */}
-            {active !== "about" && (
+            {/* 🔒 «НАСТРОЙКИ» ПЕРЕНЕСЕНЫ ЦЕЛИКОМ (137-3): справка сверху,
+                состояние и форма ниже — тем же порядком и теми же файлами, что
+                на 3000. Четыре блока справки объясняют ровно то, что на этом
+                экране делают, и в источнике они лежали на той же странице. */}
+            {active === "settings" && (
+              <>
+                <SectionIntro
+                  key={active}
+                  lessLabel={ui.helpLess}
+                  moreLabel={ui.helpMore}
+                  name="telegram-settings"
+                  rest={
+                    <div className="flex flex-col gap-2">
+                      <Small>
+                        <strong className="text-foreground">
+                          {ui.settings.helpWhyTitle}
+                        </strong>{" "}
+                        {ui.settings.helpWhy}
+                      </Small>
+                      <Small>
+                        <strong className="text-foreground">
+                          {ui.settings.helpLinkTitle}
+                        </strong>{" "}
+                        {ui.settings.helpLink}
+                      </Small>
+                      <Small>
+                        <strong className="text-foreground">
+                          {ui.settings.helpOffTitle}
+                        </strong>{" "}
+                        {ui.settings.helpOff}
+                      </Small>
+                    </div>
+                  }
+                  summary={
+                    <Small>
+                      <strong className="text-foreground">
+                        {ui.settings.helpWhatTitle}
+                      </strong>{" "}
+                      {ui.settings.helpWhat}
+                    </Small>
+                  }
+                />
+                <TelegramSettings lang={lang} state={channels} ui={ui} />
+              </>
+            )}
+
+            {active !== "about" && active !== "settings" && (
               <InProgress
                 label={ui.pages[active].title}
                 lead={ui.skeleton.inProgress}

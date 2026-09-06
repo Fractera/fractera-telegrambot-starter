@@ -47,13 +47,24 @@ function DialogOverlay({
   )
 }
 
+// 🔒 `closeLabel` ДОБАВЛЕН НАМИ (137-3, 2026-09-06) — АДДИТИВНО, ПОВЕДЕНИЕ ПО
+// УМОЛЧАНИЮ НЕ ТРОНУТО. Компоненты, приехавшие из `fractera-next-starter`
+// (`components/dialog/app-dialog.client.tsx` и его потребители), передают сюда
+// подпись кнопки закрытия на языке страницы; тамошний примитив её принимает,
+// здешний — нет, и сборка падала на этом одном пропе.
+// Не задан — печатается прежнее «Close», байт в байт как было.
+// 🛑 ЭТО ПРАВКА ВЕНДОРЕННОГО ФАЙЛА, И ОНА ЖИВЁТ ДО СЛЕДУЮЩЕГО ОБНОВЛЕНИЯ
+// `vercel/ai-chatbot`. Найдя её потерянной, верните эти шесть строк, а не
+// правьте компоненты стартера: у них хозяин — соседний репозиторий.
 function DialogContent({
   className,
   children,
   showCloseButton = true,
+  closeLabel = "Close",
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
+  closeLabel?: string
 }) {
   return (
     <DialogPortal>
@@ -76,7 +87,7 @@ function DialogContent({
             >
               <XIcon
               />
-              <span className="sr-only">Close</span>
+              <span className="sr-only">{closeLabel}</span>
             </Button>
           </DialogPrimitive.Close>
         )}

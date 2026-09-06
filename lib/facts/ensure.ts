@@ -1,0 +1,196 @@
+import { dataFetch } from "@/lib/fractera/data-service"
+import { factTableName, factTableSql, factTableAlters, needsTable, FACT_TABLE_COLUMNS } from "./table"
+import type { Fact } from "./types"
+
+// ТАБЛИЦЫ ПРИЗНАКОВ ПОРОЖДАЮТСЯ ИЗ РЕЕСТРА (81-2).
+//
+// 🔒 ПОЧЕМУ ИХ НЕТ В СХЕМЕ ПРОЕКТА. Схема исполняется при старте и перечисляет
+// то, что известно заранее. Признак заводит ЧЕЛОВЕК в работающей системе — его
+// таблицы в схеме быть не может, потому что в момент сборки её никто не
+// придумал. Значит порождать: реестр говорит, что должно существовать, и
+// недостающее досоздаётся.
+//
+// 🔒 И ЭТО ЖЕ ОТВЕЧАЕТ НА ВОПРОС «А ЧТО НА НОВОМ СЕРВЕРЕ». Созданная в рантайме
+// таблица в схему не попадает, а записи реестра приедут вместе с базой. Без
+// порождения новый сервер получил бы описания признаков и ни одной таблицы под
+// них — состояние, которое выглядит как поломка и ею не является.
+//
+// ✗ ЭТОТ ПУТЬ ИЗМЕРЕН, А НЕ ПРЕДПОЛОЖЕН (2026-09-01): слой данных выполняет DDL
+// через `POST /db/migrate` — таблица создана, строка записана, прочитана,
+// таблица убрана, и всё это без единой пересборки. Прежнее утверждение агента
+// «своя таблица на признак означает деплой» было НЕВЕРНЫМ.
+
+/** Что сделал вызов: чего не хватало и что удалось создать. */
+export type EnsureReport = {
+  checked: number
+  created: string[]
+  /** Ключи, которым таблицу создать нельзя: имя не прошло белый список. */
+  rejected: string[]
+  /**
+   * Что дописано в уже существующие таблицы лестницей колонок (83-2).
+   *
+   * 🔒 ОТЧЁТ ОТДЕЛЬНЫЙ ОТ `created`, И ЭТО НЕ ПЕДАНТИЗМ. «Создал таблицу» и
+   * «дописал колонку в чужую таблицу с данными» — разные по последствиям вещи:
+   * первое ничем не рискует, второе трогает то, где уже лежат значения. Слив их
+   * в один счётчик, мы потеряли бы возможность увидеть, что именно произошло.
+   */
+  upgraded: string[]
+  failed: { table: string; error: string }[]
+}
+
+async function migrate(sql: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const r = await dataFetch("/db/migrate", { method: "POST", body: JSON.stringify({ sql }) })
+    if (!r.ok) return { ok: false, error: `http-${r.status}` }
+    const d = (await r.json()) as { ok?: boolean; error?: string }
+    return d.ok ? { ok: true } : { ok: false, error: d.error ?? "refused" }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.name : "failed" }
+  }
+}
+
+/** Какие таблицы признаков уже есть на этой машине. */
+export async function existingFactTables(): Promise<Set<string>> {
+  try {
+    const r = await dataFetch("/db/migrate", {
+      method: "POST",
+      body: JSON.stringify({
+        sql: "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'fact\\_%' ESCAPE '\\'",
+      }),
+    })
+    if (!r.ok) return new Set()
+    const d = (await r.json()) as { rows?: { name: string }[] }
+    return new Set((d.rows ?? []).map(x => x.name))
+  } catch {
+    return new Set()
+  }
+}
+
+/**
+ * Досоздать таблицы признаков по реестру.
+ *
+ * 🔒 ОТКАЗ ПО ИМЕНИ — НЕ ОШИБКА ВЫЗОВА, А ЗАКОННЫЙ ИСХОД. Ключ, не прошедший
+ * белый список, попадает в `rejected` и не доходит до SQL вовсе. Молча пропустить
+ * его значило бы завести признак, у которого никогда не будет хранилища, — и
+ * узнал бы об этом человек по пустоте через неделю.
+ */
+export async function ensureFactTables(facts: Fact[]): Promise<EnsureReport> {
+  const report: EnsureReport = { checked: 0, created: [], rejected: [], upgraded: [], failed: [] }
+  const have = await existingFactTables()
+
+  for (const fact of facts) {
+    if (!needsTable(fact)) continue
+    report.checked++
+    const table = factTableName(fact.key)
+    if (!table) {
+      report.rejected.push(fact.key)
+      continue
+    }
+    if (have.has(table)) {
+      // 🔒 СУЩЕСТВУЮЩАЯ ТАБЛИЦА ПРОХОДИТ ЛЕСТНИЦУ КОЛОНОК, А НЕ ПРОПУСКАЕТСЯ
+      // (83-2). `CREATE TABLE IF NOT EXISTS` ей не добавит ничего, и второй слой
+      // на всех уже созданных таблицах не появился бы НИКОГДА. ✗ этот класс
+      // оплачен в проекте дважды: 2026-08-17 и 2026-08-18.
+      report.upgraded.push(...(await addLateColumns(table)))
+      continue
+    }
+    const res = await migrate(factTableSql(table))
+    if (res.ok) report.created.push(table)
+    else report.failed.push({ table, error: res.error ?? "failed" })
+  }
+  return report
+}
+
+/**
+ * Дописать колонки второго слоя в уже существующую таблицу.
+ *
+ * 🔒 «КОЛОНКА УЖЕ ЕСТЬ» — НЕ ОШИБКА, А НОРМАЛЬНЫЙ ИСХОД ВТОРОГО ПРОГОНА. Лестница
+ * исполняется на каждом заведении признака, то есть постоянно; отказ `duplicate
+ * column` означает «сделано раньше» и в отчёт не идёт. Тот же приём, что у
+ * `safeAddColumn()` в схеме проекта.
+ *
+ * 🛑 ЛЮБОЙ ДРУГОЙ ОТКАЗ ЗАПИСЫВАЕТСЯ. Молча проглоченная неудача `ALTER` даёт
+ * таблицу без колонки, в которую потом молча не пишут, — и обнаруживается это
+ * пустотой через неделю.
+ */
+async function addLateColumns(table: string): Promise<string[]> {
+  const added: string[] = []
+  for (const sql of factTableAlters(table)) {
+    const res = await migrate(sql)
+    if (res.ok) added.push(`${table}: ${sql.split("ADD COLUMN ")[1]}`)
+    else if (!/duplicate column/i.test(res.error ?? "")) {
+      added.push(`${table}: ОТКАЗ ${res.error ?? "failed"}`)
+    }
+  }
+  return added
+}
+
+/**
+ * Имена колонок из определения таблицы.
+ *
+ * ✗ 🛑 НАИВНОЕ ДЕЛЕНИЕ ПО ЗАПЯТОЙ ЗДЕСЬ НЕ РАБОТАЕТ, И ЭТО ИЗМЕРЕНО, А НЕ
+ * ПРЕДУГАДАНО. У колонки `created_at` умолчание —
+ * `(strftime('%Y-%m-%dT%H:%M:%SZ','now'))`, и запятая ВНУТРИ него давала девятую
+ * колонку из воздуха: сверка объявляла нестандартными все исправные таблицы.
+ * Считаем запятые только верхнего уровня вложенности.
+ */
+function columnsOf(ddl: string): string[] {
+  const body = ddl.slice(ddl.indexOf("(") + 1, ddl.lastIndexOf(")"))
+  const parts: string[] = []
+  let depth = 0
+  let quote = ""
+  let cur = ""
+  for (const ch of body) {
+    if (quote) {
+      if (ch === quote) quote = ""
+      cur += ch
+      continue
+    }
+    if (ch === "'" || ch === '"') { quote = ch; cur += ch; continue }
+    if (ch === "(") depth++
+    if (ch === ")") depth--
+    if (ch === "," && depth === 0) { parts.push(cur); cur = ""; continue }
+    cur += ch
+  }
+  parts.push(cur)
+  return parts.map(s => s.trim().split(/\s+/)[0]).filter(Boolean)
+}
+
+/**
+ * Проверить, что таблица построена ПО ОБРАЗЦУ.
+ *
+ * 🔒 СТАНДАРТ, КОТОРЫЙ НЕЧЕМ ПРОВЕРИТЬ, ЖИВЁТ ДО ПЕРВОГО ОТКЛОНЕНИЯ. Таблица,
+ * созданная руками или прежней версией кода, выглядит рабочей и молча ведёт себя
+ * иначе; сверка колонок ловит это одним запросом.
+ *
+ * ✗ 🛑 ЗДЕСЬ СТОЯЛ `PRAGMA table_info`, И ОН МОЛЧА ДАВАЛ ЛОЖЬ (измерено
+ * 2026-09-01). Слой данных отвечает на `PRAGMA` ровно `{"ok":true}` — без строк:
+ * он не считает его запросом, возвращающим данные. Сверка получала пустой список
+ * колонок и объявляла НЕ СТАНДАРТНЫМИ все двадцать четыре исправные таблицы.
+ * **Измерение, дающее ноль, обязано быть проверено случаем, который заведомо
+ * даёт единицу** — иначе меряется прибор, а не предмет.
+ *
+ * 🔒 ЧИТАЕМ ОПРЕДЕЛЕНИЕ ИЗ `sqlite_master`: там лежит тот самый `CREATE TABLE`,
+ * которым таблица создана. Это работает через слой данных, потому что запрос
+ * обычный, и заодно ловит лишние колонки — их видно в тексте.
+ */
+export async function factTableMatchesStandard(table: string): Promise<boolean> {
+  try {
+    const r = await dataFetch("/db/migrate", {
+      method: "POST",
+      body: JSON.stringify({
+        sql: "SELECT sql FROM sqlite_master WHERE type='table' AND name = ?",
+        params: [table],
+      }),
+    })
+    if (!r.ok) return false
+    const d = (await r.json()) as { rows?: { sql?: string }[] }
+    const ddl = d.rows?.[0]?.sql
+    if (!ddl) return false
+
+    return columnsOf(ddl).length === FACT_TABLE_COLUMNS.length &&
+      FACT_TABLE_COLUMNS.every(c => columnsOf(ddl).includes(c))
+  } catch {
+    return false
+  }
+}

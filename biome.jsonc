@@ -33,18 +33,51 @@
       // 🛑 ЦЕНА НАЗВАНА ВСЛУХ: настоящий дефект, приехавший из источника, здесь
       // тоже не покраснеет. Поэтому список поимённый — не папка целиком, кроме
       // `components/workspace`, где зеркальны оба файла.
-      "!components/workspace",
       // 🛑 ПУТЬ ЗАПИСАН ЧЕРЕЗ `**`, А НЕ `[lang]`, И ЭТО НЕ КОСМЕТИКА: в glob
       // квадратная скобка — класс символов, а в JSON её экранирование `\[`
       // недопустимо вовсе. Три попытки записать буквальные скобки дали отказ
       // конфигурации, то есть линтер не запускался совсем.
-      "!app/**/settings/_components/section-intro.client.tsx",
-      "!app/**/settings/_components/in-progress.tsx",
-      "!app/**/settings/_components/auto-refresh.client.tsx",
-      "!app/**/settings/_components/telegram-about.tsx",
-      "!app/**/settings/_i18n/architect-layer.i18n.ts",
-      "!app/**/settings/_i18n/telegram.i18n.ts",
-      "!app/**/settings/_lib/passport-outline.ts"
+      //
+      // 🔒 СПИСОК СТАЛ ПАПОЧНЫМ ПОСЛЕ 137-3, И ЭТО ЧЕСТНЕЕ ПОИМЁННОГО. Шапка,
+      // подвал и раздел «Настройки» привезли 115 файлов из стартера; поимённый
+      // список такой длины никто не станет поддерживать, и первый же
+      // забытый файл сделает вердикт линтера случайным.
+      "!components/workspace",
+      "!components/menu",
+      "!components/cart",
+      "!components/dialog",
+      "!components/icons",
+      "!components/form",
+      "!components/language-switcher.client.tsx",
+      "!config",
+      "!providers",
+      "!lib/menu",
+      "!lib/architect",
+      "!lib/facts",
+      "!lib/products",
+      "!lib/task",
+      "!lib/socials",
+      "!lib/i18n",
+      "!lib/roles.ts",
+      "!lib/flows.ts",
+      "!lib/site-urls.ts",
+      "!lib/runtime-urls.ts",
+      "!lib/openai-key.ts",
+      "!_tools",
+      "!app/**/settings/_components",
+      "!app/**/settings/_i18n",
+      "!app/**/settings/_lib",
+      "!app/api/architect",
+      // 🛑 ЭТИ ЧЕТЫРЕ — ПОИМЁННО, ПОТОМУ ЧТО ПАПКА ОБЩАЯ. `lib/fractera` и
+      // `lib/auth` живут и своими файлами тоже: исключив папку целиком, я снял
+      // бы линтер с кода, который здесь и написан.
+      "!lib/fractera/data-service.ts",
+      "!lib/fractera/knowledge.ts",
+      "!lib/auth/auth-bypass.ts",
+      "!lib/auth/get-session.ts",
+      "!lib/auth/require-roles.ts",
+      // Словари меню аккаунта — приехали хвостом `lib/menu/account-links.ts`.
+      "!app/**/(protectedLayer)"
     ]
   },
   "linter": {
