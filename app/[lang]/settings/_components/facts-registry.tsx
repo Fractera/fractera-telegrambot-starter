@@ -50,7 +50,7 @@ const ORDER: FactLevel[] = ["material", "intent", "entity", "destination", "fiel
 
 export async function FactsRegistrySection({ lang, ui }: { lang: string; ui: TelegramUi }) {
   const w = ui.facts
-  const facts = await allFacts()
+  const facts = allFacts()
   const byLevel = new Map<FactLevel, Fact[]>()
   for (const f of facts) byLevel.set(f.level, [...(byLevel.get(f.level) ?? []), f])
 
