@@ -37,6 +37,18 @@ import { terminalUi } from "./_i18n/terminal.i18n"
 // 🛑 НАСТРОЕК СЕГМЕНТА ЗДЕСЬ НЕТ: у шаблона включён `cacheComponents`, и он
 // несовместим с `runtime`/`dynamic`.
 
+// 🔒 НАБОР ЯЗЫКОВ ОБЪЯВЛЕН, КАК У `settings`, И БЕЗ НЕГО СБОРКА НЕ ИДЁТ.
+// Пока набор значений динамического сегмента неизвестен, Next не может собрать
+// даже оболочку страницы и отвечает «Uncached data was accessed outside of
+// <Suspense>», показывая стеком корневую раскладку — то есть место, где дефекта
+// нет. ✗ Оплачено дважды подряд 2026-09-06: сначала страницей автоматизации,
+// потом этой; в первый раз я прочитал стек буквально и полез чинить провайдер.
+const LANGS = ["en", "ru"] as const
+
+export function generateStaticParams() {
+  return LANGS.map((lang) => ({ lang }))
+}
+
 export default async function TerminalPage({
   params,
 }: {
