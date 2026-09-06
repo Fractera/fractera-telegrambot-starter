@@ -14,6 +14,15 @@ export type TelegramUi = {
   title: string;
   /** Подпись группы в левом меню. */
   menuTitle: string;
+  /**
+   * Подпись пункта «Терминал» в левом меню.
+   *
+   * 🔒 ЛЕЖИТ ОТДЕЛЬНО ОТ `pages`, И ЭТО НЕ МЕЛОЧЬ. `pages` описывает РАЗДЕЛЫ —
+   * то, что открывается внутри этого экрана и имеет `?section=`. Терминал
+   * уводит на другую страницу, в соседнюю вкладку; положи его в `pages`, и
+   * маршрутизация начала бы искать раздел `terminal`, которого нет.
+   */
+  terminalLabel: string;
   subtitle: string;
   // 🪦 БЫЛО СЕМЬ РАЗДЕЛОВ, СТАЛО ЧЕТЫРЕ (111, 2026-09-04): «команды»,
   // «календарь» и «карта» убраны словом владельца вместе со своими словами.
@@ -354,9 +363,6 @@ export type TelegramUi = {
     unreachable: string;
     botAutomationTitle: string;
     botAutomationLead: string;
-    botDevTitle: string;
-    botDevLead: string;
-    botDevSoon: string;
     allowed: string;
     pending: string;
     bot: {
@@ -509,10 +515,6 @@ const EN: TelegramUi = {
     botAutomationLead:
       "The main bot of the project: you write to it from your phone and Claude Code answers. The token entered here goes to the very file the channel plugin reads — set it up here or in the terminal, it is the same bot either way.",
     botAutomationTitle: "Telegram bot — automation agent",
-    botDevLead:
-      "The second bot of the project, for driving development. Its place is reserved; it is not built yet.",
-    botDevSoon: "later",
-    botDevTitle: "Telegram bot — development agent",
     dialogDescription:
       "Sign in to the subscription, connect the bot and confirm the pairing code that arrives in Telegram.",
     dialogTitle: "Claude Code terminal",
@@ -646,6 +648,7 @@ const EN: TelegramUi = {
     title: "What the bot has heard",
   },
   menuTitle: "Telegram bot",
+  terminalLabel: "Terminal",
   openai: {
     badFormat: "That does not look like an OpenAI key — they start with sk-",
     balanceNote:
@@ -899,10 +902,6 @@ const RU: TelegramUi = {
     botAutomationLead:
       "Основной бот проекта: вы пишете ему с телефона, отвечает Claude Code. Токен, введённый здесь, попадает в тот же файл, который читает плагин каналов, — настроите отсюда или из терминала, бот получится один и тот же.",
     botAutomationTitle: "Telegram-бот — агент автоматизации",
-    botDevLead:
-      "Второй бот проекта, для управления разработкой. Место под него занято; сам он ещё не построен.",
-    botDevSoon: "позже",
-    botDevTitle: "Telegram-бот — агент разработки",
     dialogDescription:
       "Войдите в подписку, подключите бота и подтвердите код привязки, который придёт в Telegram.",
     dialogTitle: "Терминал Claude Code",
@@ -1037,6 +1036,7 @@ const RU: TelegramUi = {
     title: "Что бот услышал",
   },
   menuTitle: "Telegram-бот",
+  terminalLabel: "Терминал",
   openai: {
     badFormat: "Это не похоже на ключ OpenAI — они начинаются с sk-",
     balanceNote:

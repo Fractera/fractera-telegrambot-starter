@@ -178,11 +178,26 @@ async function BotSettingsGate({
         <WorkspaceShell
           id="telegram"
           lead={ui.pages[active].hint}
-          menu={TELEGRAM_SECTIONS.map((id) => ({
-            active: id === active,
-            href: hrefOfTelegramSection(lang, id),
-            label: ui.pages[id].title,
-          }))}
+          // 🔒 ТЕРМИНАЛ СТОИТ В МЕНЮ, НО РАЗДЕЛОМ НЕ ЯВЛЯЕТСЯ (2026-09-06, слово
+          // владельца: «ниже чем кнопка логи добавь кнопку терминал, при нажатии
+          // открывается терминал в соседней вкладке»). Он уводит на отдельную
+          // страницу `/terminal` вне этого экрана, поэтому его нет в
+          // `TELEGRAM_SECTIONS`: тот массив — единственный источник и меню, И
+          // маршрутизации, и запись в нём означала бы раздел, которого нет.
+          // Место названо владельцем — сразу под «Логами».
+          menu={TELEGRAM_SECTIONS.flatMap((id) => {
+            const item = {
+              active: id === active,
+              href: hrefOfTelegramSection(lang, id),
+              label: ui.pages[id].title,
+            };
+            return id === "logs"
+              ? [
+                  item,
+                  { href: "/terminal", label: ui.terminalLabel, newTab: true },
+                ]
+              : [item];
+          })}
           menuTitle={ui.menuTitle}
           menuWord={t.menuTitle}
           tabs={

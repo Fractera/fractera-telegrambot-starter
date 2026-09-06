@@ -23,7 +23,17 @@ import { H3, H4, P, Small } from '@/components/ui/typography'
 // работает при выключенном JavaScript. Островки приходят снаружи, в `children`, и
 // клиентскими становятся сами по себе — раскладке для этого меняться не нужно.
 
-export type WorkspaceShellItem = { label: string; href?: string; active?: boolean }
+// 🔒 `newTab` — ЭТО СВОЙСТВО ПУНКТА, А НЕ ВТОРОЙ ВИД МЕНЮ (2026-09-06, слово
+// владельца: «при нажатии открывается терминал в соседней вкладке»). Завести
+// рядом «меню внешних ссылок» значило бы получить две раскладки, которые
+// разъедутся: правят ту, которой пользуются чаще.
+export type WorkspaceShellItem = {
+  label: string
+  href?: string
+  active?: boolean
+  /** Открыть в соседней вкладке. Для того, что уводит со страницы насовсем. */
+  newTab?: boolean
+}
 export type WorkspaceShellNote = {
   tone: 'recommended' | 'advice' | 'warning'
   title: string
@@ -80,7 +90,16 @@ function Item({
   const body = content ?? item.label
   if (item.href) {
     return (
-      <a href={item.href} aria-current={item.active ? 'page' : undefined} className={cls}>
+      // biome-ignore lint/a11y/useAnchorContent: подпись приходит пропсом `body`
+      <a
+        aria-current={item.active ? 'page' : undefined}
+        className={cls}
+        href={item.href}
+        // 🔒 `noopener` ОБЯЗАТЕЛЕН ПРИ `_blank`: без него открытая страница
+        // получает `window.opener` и может увести исходную вкладку куда угодно.
+        rel={item.newTab ? 'noopener noreferrer' : undefined}
+        target={item.newTab ? '_blank' : undefined}
+      >
         {body}
       </a>
     )

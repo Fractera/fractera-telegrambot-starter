@@ -4,7 +4,6 @@ import { appDialogUi } from "@/components/dialog/app-dialog.i18n"
 import { readAgentChannel } from "@/lib/architect/agent-channel"
 import { AgentBotForm } from "./agent-bot.client"
 import { ClaudeTerminal } from "./claude-terminal.client"
-import { InProgress } from "./in-progress"
 import { SettingsCard } from "./settings-card"
 import type { TelegramUi } from "../_i18n/telegram.i18n"
 
@@ -136,18 +135,16 @@ export async function AgentChannelSection({ lang, ui }: { lang: string; ui: Tele
         </Small>
       </SettingsCard>
 
-      {/* ── 3. Бот №2 — агент разработки, место под будущее ─────────────── */}
-      <SettingsCard
-        mark={{ "data-agent-bot-card": "development" }}
-        icon={<Bot className="size-4 text-muted-foreground" />}
-        title={w.botDevTitle}
-        status={
-          <span className="text-[length:var(--fs-small)] text-muted-foreground">{w.botDevSoon}</span>
-        }
-        bodyClassName="p-3"
-      >
-        <InProgress where="agent-bot-development" label={w.botDevTitle} lead={w.botDevLead} />
-      </SettingsCard>
+      {/* 🪦 ЗДЕСЬ БЫЛА КАРТОЧКА «Telegram-бот — агент разработки» С ПОМЕТКОЙ
+          «позже» — УДАЛЕНА 2026-09-06 прямым словом владельца. Она показывала
+          заглушку «в процессе разработки» и не делала ничего.
+          🔒 УДАЛЕНА ЦЕЛИКОМ, А НЕ СПРЯТАНА: вместе с ней ушли её слова
+          `botDevTitle`, `botDevLead`, `botDevSoon` из словаря. Пустая карточка,
+          оставленная «чтобы место не пропало», читается как обещание срока,
+          которого никто не давал. Восстанавливается из git.
+          🔒 САМ ФАКТ ДВУХ БОТОВ ЭТИМ НЕ ОТМЕНЁН — он записан законом в
+          федеральном `CLAUDE.md` и в комментарии выше; исчезла поверхность, а
+          не решение. */}
     </>
   )
 }
