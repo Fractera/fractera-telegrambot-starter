@@ -8,7 +8,6 @@
     "start": "node server.mjs",
     "check": "ultracite check",
     "fix": "ultracite fix",
-    "prepare": "husky",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "npx tsx lib/db/migrate.ts",
     "db:studio": "drizzle-kit studio",
@@ -16,7 +15,6 @@
     "db:pull": "drizzle-kit pull",
     "db:check": "drizzle-kit check",
     "db:up": "drizzle-kit up",
-    "test": "export PLAYWRIGHT=True && pnpm exec playwright test",
     "start:next": "next start",
     "check:registry": "node scripts/check-registry.mjs"
   },
@@ -117,9 +115,6 @@
     "tsx": "^4.23.0",
     "typescript": "^5.6.3",
     "ultracite": "^7.8.4"
-  },
-  "lint-staged": {
-    "*": "corepack pnpm run fix --"
   },
   "packageManager": "pnpm@10.32.1",
   "pnpm": {
