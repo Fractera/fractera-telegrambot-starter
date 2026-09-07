@@ -226,3 +226,110 @@ export async function closeAutomation(
 ): Promise<{ written: boolean; state: AutomationState }> {
   return setState(automationId, kind === "step" ? "step-closed" : "closed", { closingKind: kind, reason })
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ПОЛЯ, ПО КОТОРЫМ ОТБИРАЮТ И СОРТИРУЮТ (144-1).
+
+/**
+ * Вердикт человека — ТРИ состояния, а не два.
+ *
+ * 🔒 «НЕ СПРАШИВАЛИ» ОТЛИЧАЕТСЯ ОТ «НЕ ПОНРАВИЛОСЬ», И ЭТО РЕШАЕТ СУДЬБУ ПАМЯТИ
+ * РЕШЕНИЙ. Отзыв оставляют редко; приравняв молчание к одобрению, мы наполним
+ * рекомендации тем, чего человек не говорил, — и первая же такая подорвёт доверие
+ * ко всем остальным.
+ */
+export const VERDICTS = ["yes", "no"] as const
+export type Verdict = (typeof VERDICTS)[number]
+
+export type AutomationFields = {
+  summary?: string | null
+  /** Ключи реестра через `|`. Свободных слов здесь не бывает. */
+  tags?: string[] | null
+  scopeKey?: string | null
+  liked?: Verdict | null
+  needsWork?: Verdict | null
+  reusable?: boolean | null
+  publicContract?: string | null
+}
+
+const COLUMN_OF: Record<keyof AutomationFields, string> = {
+  summary: "summary",
+  tags: "tags",
+  scopeKey: "scope_key",
+  liked: "verdict_liked",
+  needsWork: "verdict_needs_work",
+  reusable: "reusable",
+  publicContract: "public_contract",
+}
+
+function toCell(field: keyof AutomationFields, value: unknown): string | null {
+  if (value === null || value === undefined) return null
+  if (field === "tags") return Array.isArray(value) ? value.join("|") : null
+  if (field === "reusable") return value ? "1" : "0"
+  return String(value)
+}
+
+/**
+ * Записать поля — ТОЛЬКО названные, по одной колонке на поле.
+ *
+ * 🔒 ЗАПЛАТА, А НЕ СНИМОК: писателей у строки несколько — закрытие пишет саммари
+ * и теги, отзыв пишет вердикты, публикация пишет договор. Снимок целиком затирал
+ * бы чужое при каждой правке.
+ * 🔒 КОЛОНКИ НАЗЫВАЮТСЯ ПОИМЁННО И БЕРУТСЯ ИЗ КАРТЫ, а не склеиваются из
+ * пришедшего имени: имя поля приходит из кода, но карта — единственное место, где
+ * оно превращается в колонку.
+ */
+export async function setAutomationFields(id: number, fields: AutomationFields): Promise<boolean> {
+  const names: string[] = []
+  const values: unknown[] = []
+  for (const key of Object.keys(fields) as (keyof AutomationFields)[]) {
+    const column = COLUMN_OF[key]
+    if (!column) continue
+    names.push(`${column} = ?`)
+    values.push(toCell(key, fields[key]))
+  }
+  if (names.length === 0) return false
+  const res = await sql(`UPDATE ${AUTOMATIONS_TABLE} SET ${names.join(", ")} WHERE id = ?`, [...values, id])
+  return Boolean(res.ok)
+}
+
+export type AutomationRow = Automation & {
+  summary: string | null
+  tags: string[]
+  scopeKey: string | null
+  liked: Verdict | null
+  needsWork: Verdict | null
+  reusable: boolean | null
+  publicContract: string | null
+}
+
+const verdict = (v: unknown): Verdict | null =>
+  v === "yes" || v === "no" ? v : null
+
+/** Полная строка автоматизации — все колонки поимённо, `SELECT *` запрещён. */
+export async function readAutomationRow(id: number): Promise<AutomationRow | null> {
+  const res = await sql(
+    `SELECT ${AUTOMATIONS_TABLE_COLUMNS.join(", ")} FROM ${AUTOMATIONS_TABLE} WHERE id = ?`,
+    [id],
+  )
+  const row = res.rows?.[0]
+  if (!row) return null
+  const state = row.confirm_state
+  const tags = typeof row.tags === "string" && row.tags ? row.tags.split("|").filter(Boolean) : []
+  return {
+    id: Number(row.id),
+    confirmState: isAutomationConfirmState(state) ? state : "draft",
+    firstMessageId: typeof row.first_message_id === "string" ? row.first_message_id : null,
+    createdAt: String(row.created_at ?? ""),
+    summary: typeof row.summary === "string" ? row.summary : null,
+    tags,
+    scopeKey: typeof row.scope_key === "string" ? row.scope_key : null,
+    liked: verdict(row.verdict_liked),
+    needsWork: verdict(row.verdict_needs_work),
+    // 🔒 ПУСТО ЗНАЧИТ «НЕИЗВЕСТНО», А НЕ «НЕЛЬЗЯ»: до вывода договора (§3л)
+    // ответа нет, и подставлять `false` значило бы решить за механизм, которого
+    // ещё нет.
+    reusable: row.reusable === null || row.reusable === undefined ? null : row.reusable === "1",
+    publicContract: typeof row.public_contract === "string" ? row.public_contract : null,
+  }
+}
