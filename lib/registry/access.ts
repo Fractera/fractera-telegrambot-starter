@@ -301,32 +301,79 @@ export async function recall(
       hint: "признака с таким ключом в реестре нет; ключи берут из `find`",
     }
   }
-  const table = factTableName(wanted)
+  // ── ГДЕ У ЭТОГО ПРИЗНАКА ЖИВУТ ЗНАЧЕНИЯ ─────────────────────────────────
+  //
+  // ✗ ОПЛАЧЕНО ЖИВЫМ ЗАМЕРОМ 2026-09-07, И ЭТО БЫЛ САМЫЙ ДОРОГОЙ ИЗ ДЕФЕКТОВ
+  // ЭТОГО ШАГА. Первая версия спрашивала таблицу `fact_<ключ>` у любого признака.
+  // Измерено: таких таблиц в базе НЕТ НИ ОДНОЙ, все 35 признаков встроенные, и
+  // `storedIn` у них указывает на колонку чужой таблицы либо прямо говорит «в
+  // базе не хранится». То есть примитив отвечал «слой данных не ответил» там, где
+  // ответ должен был быть «этот признак значений не хранит» — уверенная ложь
+  // вместо честного «нечего вспоминать».
+  //
+  // 🔒 ИМЕНА ТАБЛИЦ И КОЛОНОК ПРОВЕРЯЮТСЯ БЕЛЫМ СПИСКОМ. `storedIn` пишет агент
+  // в конфиг; попав в запрос без проверки, оно перестало бы быть адресом и стало
+  // бы SQL — тот же закон, что у имени таблицы признака (81-2).
+  const stored = String(fact.storedIn ?? "").trim()
+  const NAME = /^[a-z][a-z0-9_]*$/
+  const own = factTableName(wanted)
+  let table = ""
+  let column = ""
+  if (own && stored === own) {
+    table = own
+  } else {
+    const dot = stored.split(".")
+    if (dot.length === 2 && NAME.test(dot[0]) && NAME.test(dot[1])) {
+      table = dot[0]
+      column = dot[1]
+    }
+  }
   if (!table) {
     return {
       found: false,
       corpus: "facts",
       key: wanted,
-      error: "bad-key",
       searched: [wanted],
-      hint: "из ключа не собирается имя таблицы — значений у признака быть не может",
+      // 🔒 «НЕ ХРАНИТСЯ» — ЗАКОННЫЙ ОТВЕТ, А НЕ ОТКАЗ. Признак бывает ветвью
+      // разбора: он влияет на поведение и значения после себя не оставляет.
+      hint: stored
+        ? `значений у признака нет по устройству: ${stored}`
+        : "у признака не назван адрес хранения — вспоминать нечего",
     }
   }
   const limit = cap(opts.limit)
   const where: string[] = []
   const params: unknown[] = []
-  if (opts.subject) {
-    where.push("subject_key = ?")
-    params.push(opts.subject)
-  }
-  if (opts.scope) {
-    where.push("scope_key = ?")
-    params.push(opts.scope)
+  if (column) {
+    // Значение лежит колонкой чужой таблицы: сужать по субъекту и охвату нечем —
+    // этих колонок там нет. Молчаливое игнорирование сужения было бы ответом «по
+    // всем данным», который человек примет за ответ по своим.
+    if (opts.subject || opts.scope) {
+      return {
+        found: false,
+        corpus: "facts",
+        key: wanted,
+        searched: [wanted, opts.subject ?? "", opts.scope ?? ""].filter(Boolean),
+        hint: `значения лежат колонкой ${stored} — сужение по субъекту и охвату там невозможно`,
+      }
+    }
+    where.push(`${column} IS NOT NULL`)
+  } else {
+    if (opts.subject) {
+      where.push("subject_key = ?")
+      params.push(opts.subject)
+    }
+    if (opts.scope) {
+      where.push("scope_key = ?")
+      params.push(opts.scope)
+    }
   }
   const clause = where.length > 0 ? ` WHERE ${where.join(" AND ")}` : ""
-  const sql =
-    `SELECT id, value_text, value_num, subject_key, scope_key, status, created_at ` +
-    `FROM ${table}${clause} ORDER BY id DESC LIMIT ${limit + 1}`
+  const sql = column
+    ? `SELECT id, ${column} AS value_text, created_at FROM ${table}${clause} ` +
+      `ORDER BY id DESC LIMIT ${limit + 1}`
+    : `SELECT id, value_text, value_num, subject_key, scope_key, status, created_at ` +
+      `FROM ${table}${clause} ORDER BY id DESC LIMIT ${limit + 1}`
   let rows: Record<string, unknown>[] = []
   try {
     const r = await dataFetch("/db/migrate", {
