@@ -269,6 +269,7 @@ wss.on("connection", (ws) => {
       return;
     }
 
+    process.stderr.write("[pty] start: до spawn" + String.fromCharCode(10));
     const bin = claudeBin();
     const shell = shellPath();
     try {
@@ -300,6 +301,7 @@ wss.on("connection", (ws) => {
       return;
     }
 
+    process.stderr.write("[pty] start: spawn прошёл" + String.fromCharCode(10));
     sessions += 1;
     started = true;
     clearTimeout(deadline);
@@ -321,6 +323,7 @@ wss.on("connection", (ws) => {
     // ровно за этим вкладка и существует. Не смогли спросить — говорим правду
     // о незнании, а не подставляем удобный ответ.
     let command = MODES[mode](bin);
+    process.stderr.write("[pty] start: проверяю подписку" + String.fromCharCode(10));
     if (mode === "claude-check") {
       const state = claudeAuthState().loggedIn;
       if (state === true) {
@@ -349,6 +352,7 @@ wss.on("connection", (ws) => {
         }
       }, 800);
     }
+    process.stderr.write("[pty] start: готово, режим " + mode + String.fromCharCode(10));
   }
 
   ws.on("message", (raw) => {
