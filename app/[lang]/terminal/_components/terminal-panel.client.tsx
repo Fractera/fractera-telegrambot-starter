@@ -150,6 +150,18 @@ export function TerminalPanel({ lang }: { lang: string }) {
       wsRef.current = ws;
 
       ws.onopen = () => {
+        // 🛑 `init` УХОДИТ ПЕРВЫМ ДЕЙСТВИЕМ, ДО ВСЕГО ОСТАЛЬНОГО (157-3).
+        // ✗ ОПЛАЧЕНО ВЕЧЕРОМ 2026-09-07: до этой правки перед ним стояли три
+        // вызова — состояние, фильтр мыши, запись в xterm. Любой из них,
+        // бросив исключение, съедал `init` целиком: мост принимал соединение,
+        // ничего не получал и закрывал его, а человек видел чёрный экран и
+        // «соединение закрыто». Журнал моста показал это прямо: «соединение
+        // открыто» без единой строки «входящее».
+        //
+        // 🔒 ПРАВИЛО ШИРЕ СЛУЧАЯ: то, без чего соединение бессмысленно, идёт
+        // первым. Всё, что можно сделать после, делается после.
+        ws.send(JSON.stringify({ mode: next, ticket, type: "init" }));
+        ws.send(JSON.stringify({ type: "resize", ...sizeRef.current }));
         setStatus("connected");
         // 🔒 ФИЛЬТР РОЖДАЕТСЯ ЗАНОВО ВМЕСТЕ С СОЕДИНЕНИЕМ, а уже включённое
         // слежение гасится строкой: фильтр не даёт включить мышь ВПЕРЁД, а
@@ -157,8 +169,6 @@ export function TerminalPanel({ lang }: { lang: string }) {
         // сессии агента, которая живёт на сервере с прошлой версии страницы.
         mouseRef.current = createMouseFilter();
         termRef.current?.write(MOUSE_OFF);
-        ws.send(JSON.stringify({ mode: next, ticket, type: "init" }));
-        ws.send(JSON.stringify({ type: "resize", ...sizeRef.current }));
         termRef.current?.focus();
       };
 
