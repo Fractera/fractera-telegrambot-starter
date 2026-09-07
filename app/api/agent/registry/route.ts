@@ -1,7 +1,7 @@
 // @api единый вход в реестры: четыре примитива за одной дверью
 import { NextResponse } from "next/server"
 import { ACCESS_FUNCTIONS, validateArgs } from "@/lib/registry/access-decl.mjs"
-import { describe, find, isCorpus, list, recall } from "@/lib/registry/access"
+import { describe, find, isCorpus, list, recall, rememberMiss } from "@/lib/registry/access"
 import { machineEnv } from "@/lib/fractera/machine-env"
 
 // ДВЕРЬ ЕДИНОГО ВХОДА (157-5, паспорт §3о).
@@ -82,6 +82,18 @@ export async function POST(request: Request) {
     const answer = find(args.corpus as "facts" | "tools", String(args.query ?? ""), {
       limit: args.limit as number | undefined,
     })
+    // 🔒 ПЕТЛЯ ОБУЧЕНИЯ ЗАМЫКАЕТСЯ ЗДЕСЬ, И ЗАПИСЬ ДОЖИДАЕТСЯ. ✗ оплачено
+    // измерением 2026-09-07: запись, пущенная из чистой функции через `void`,
+    // не доехала НИ РАЗУ — обещание умирает вместе с ответом, а в ответе при
+    // этом честно печаталось «промах записан». Обещание в тексте и строка в
+    // таблице — разные утверждения.
+    if (answer.found === false && answer.searched.length > 0) {
+      await rememberMiss(
+        args.corpus as "facts" | "tools",
+        String(args.query ?? ""),
+        answer.searched
+      )
+    }
     return NextResponse.json({ ok: true, fn: "find", answer })
   }
   if (decl.fn === "describe") {

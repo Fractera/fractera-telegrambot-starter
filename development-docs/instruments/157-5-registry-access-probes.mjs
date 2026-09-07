@@ -43,6 +43,26 @@ async function call(body, withKey = true) {
   return { status: r.status, json };
 }
 
+
+/**
+ * Сколько строк в журнале промахов.
+ *
+ * 🔒 ПЕТЛЯ ПРОВЕРЯЕТСЯ СЧЁТОМ СТРОК, А НЕ ТЕКСТОМ ОТВЕТА. ✗ оплачено в тот же
+ * час: первая версия этого случая читала фразу «промах записан» из подсказки и
+ * была ЗЕЛЁНОЙ, пока таблица оставалась пустой. Обещание в ответе и строка в
+ * таблице — разные утверждения, и проверять надо второе.
+ */
+async function misses() {
+  const r = await fetch(process.env.DATA_URL || 'http://localhost:3300/db/migrate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Data-Secret': KEY },
+    body: JSON.stringify({ sql: 'SELECT COUNT(*) AS n FROM registry_search_misses' }),
+  });
+  if (!r.ok) return -1;
+  const j = await r.json();
+  return Number(j?.rows?.[0]?.n ?? -1);
+}
+
 /** Случай: что шлём, чего ждём, и почему это важно. */
 const CASES = [
   {
@@ -128,22 +148,41 @@ const CASES = [
     ok: (r) => r.json?.answer?.found === false
       && /сужение/.test(String(r.json.answer.hint)),
   },
-  {
-    name: "петля обучения: промах записан в registry_search_misses",
-    body: { fn: "find", args: { corpus: "facts", query: "квазиморфный блямс проверка петли" } },
-    ok: (r) => r.json?.answer?.found === false
-      && /registry_search_misses/.test(String(r.json.answer.hint)),
-  },
 ];
 
+
+// ── ПЕТЛЯ ОБУЧЕНИЯ ПРОВЕРЯЕТСЯ ОТДЕЛЬНО: у неё есть ДО и ПОСЛЕ ──────────────
+const beforeMisses = await misses();
+const uniquePhrase = `квазиморфный блямс ${Date.now()}`;
+await call({ fn: "find", args: { corpus: "facts", query: uniquePhrase } });
+const afterMisses = await misses();
+CASES.push({
+  name: "петля обучения: строка ПОЯВИЛАСЬ в registry_search_misses",
+  skipCall: true,
+  ok: () => beforeMisses >= 0 && afterMisses === beforeMisses + 1,
+  note: () => ` — было ${beforeMisses}, стало ${afterMisses}`,
+});
+CASES.push({
+  name: "петля обучения: записана ИМЕННО промахнувшаяся фраза",
+  skipCall: true,
+  ok: async () => {
+    const r = await fetch(process.env.DATA_URL || "http://localhost:3300/db/migrate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Data-Secret": KEY },
+      body: JSON.stringify({ sql: "SELECT query FROM registry_search_misses ORDER BY id DESC LIMIT 1" }),
+    });
+    const j = await r.json();
+    return j?.rows?.[0]?.query === uniquePhrase;
+  },
+});
 let bad = 0;
 for (const c of CASES) {
   let verdict = false;
   let note = "";
   try {
-    const r = await call(c.body, !c.noKey);
-    verdict = c.ok(r);
-    if (!verdict) note = ` — получено: ${JSON.stringify(r.json ?? r.status).slice(0, 160)}`;
+    const r = c.skipCall ? null : await call(c.body, !c.noKey);
+    verdict = await c.ok(r);
+    if (!verdict) note = c.note ? c.note() : ` — получено: ${JSON.stringify(r?.json ?? r?.status).slice(0, 160)}`;
   } catch (e) {
     note = ` — прибор упал: ${e.message}`;
   }

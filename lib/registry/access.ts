@@ -213,7 +213,11 @@ export function find(
     scored.push({ hit: { ...bare(p), why }, score: hitStrong.size * 2 + hitWeak.size })
   }
   if (scored.length === 0) {
-    // 🔒 ПРОМАХ ЗАПИСЫВАЕТСЯ, ИНАЧЕ ПЕТЛЯ ОБУЧЕНИЯ — ПОЖЕЛАНИЕ, А НЕ МЕХАНИЗМ.
+    // 🔒 ПРОМАХ ЗАПИСЫВАЕТ ДВЕРЬ, А НЕ ЭТА ФУНКЦИЯ, И ЭТО НЕ МЕЛОЧЬ РАЗМЕЩЕНИЯ.
+    // ✗ ОПЛАЧЕНО ИЗМЕРЕНИЕМ 2026-09-07: первая версия звала запись отсюда через
+    // `void` — обещание в ответе печаталось, а строк в таблице не появлялось
+    // НИ ОДНОЙ: незавершённое обещание умирает вместе с ответом. `list`, `find`
+    // и `describe` — чистые функции над указателем, и ввод-вывод им не место.
     // Паспорт §3о объявляет порядок «поиск → промах → модель → фраза уезжает в
     // `triggers`». Без записи промаха последний шаг делать некому: фраза
     // исчезает вместе с разговором, и через месяц «без модели» значит «модель
@@ -221,7 +225,6 @@ export function find(
     // 🛑 ЗАПИСЬ НЕ ПРАВИТ РЕЕСТР САМА. Дописать триггер — работа автора записи по
     // навыку `create-registry-entry`; система, правящая собственную поисковую
     // поверхность, перестала бы быть проверяемой.
-    void rememberMiss(corpus, query, asked)
     return {
       found: false,
       corpus,
@@ -253,7 +256,7 @@ export function find(
  * 🔒 ТАБЛИЦА СОЗДАЁТСЯ ПРИ ПЕРВОЙ ЗАПИСИ — так же, как таблицы признаков: ни
  * миграций, ни отдельного шага развёртывания.
  */
-async function rememberMiss(corpus: Corpus, query: string, asked: string[]): Promise<void> {
+export async function rememberMiss(corpus: Corpus, query: string, asked: string[]): Promise<void> {
   const text = String(query ?? "").slice(0, 500)
   if (text.trim() === "") return
   try {
