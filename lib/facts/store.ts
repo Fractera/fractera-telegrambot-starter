@@ -82,6 +82,7 @@ type FileFact = {
   lifecycle?: unknown
   schedules?: unknown
   model?: unknown
+  scope?: unknown
 }
 
 const str = (v: unknown): string => (typeof v === "string" ? v : "")
@@ -139,6 +140,15 @@ function fromFile(r: FileFact): Fact | null {
       r.lifecycle && typeof r.lifecycle === "object" ? (r.lifecycle as FactLifecycle) : undefined,
     schedules: fromList<FactSchedules>(r.schedules, FACT_SCHEDULES),
     model: fromList<FactModel>(r.model, FACT_MODEL),
+    // ── Третий слой (141-1): от чего зависит истинность факта.
+    //
+    // 🔒 ЧУЖОЕ В СПИСКЕ НЕ ЖИВЁТ, И ПРОВЕРЯЕМ МЫ. Ключи приезжают из файла,
+    // который правит агент; нестроковое значение молча превратилось бы в
+    // условие поиска и не совпало бы ни с чем — «данных нет» вместо опечатки.
+    // Существование самого ключа стережёт `check:registry` на сборке.
+    scope: Array.isArray(r.scope)
+      ? (r.scope.filter(v => typeof v === "string" && v) as string[])
+      : undefined,
   }
 }
 
