@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+
 import { useEffect, useState } from "react"
 import { LogIn, LogOut, User } from "lucide-react"
 import { Button, buttonVariants } from "@/components/ui/button"
@@ -114,27 +115,38 @@ export function HeaderAuth({ lang, settingsLabel }: { lang: string; settingsLabe
                 </div>
 
                 <div className="mt-auto border-border border-t p-3">
-                  <Link
+                  {/* 🛑 ОБЫЧНАЯ ССЫЛКА, А НЕ <Link>, И ЭТО НЕ СТИЛЬ — ЭТО
+                      ЕДИНСТВЕННЫЙ СПОСОБ ВЫЙТИ. ✗ Оплачено 2026-09-07: выход не
+                      работал вовсе. `<Link>` делает КЛИЕНТСКИЙ запрос, цепочка
+                      уводит на `auth.aifa.dev` — другой источник, — и браузер не
+                      применяет `Set-Cookie` из такого ответа. Служба чистила
+                      куку исправно (измерено: `session-token=; Max-Age=0`), а до
+                      браузера это не доезжало: человек нажимал «Выйти» и
+                      оставался внутри.
+                      🔒 `<a>` даёт НАСТОЯЩУЮ навигацию: браузер идёт по всей
+                      цепочке 307 → 307 → 200 и применяет все заголовки по пути.
+                      Это же снимает нужду в `prefetch={false}`: обычная ссылка
+                      ничего не предзагружает. */}
+                  <a
                     className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "w-full justify-start")}
                     href={`/logout?lang=${lang}`}
-                    prefetch={false}
                   >
                     <LogOut />
                     Выйти
-                  </Link>
+                  </a>
                 </div>
               </SheetContent>
             </Sheet>
           </>
         ) : (
-          <Link
-            className={buttonVariants({ variant: "ghost", size: "sm" })}
-            href={`/login?lang=${lang}`}
-            prefetch={false}
-          >
+          /* 🔒 ВХОД — ТОЖЕ ОБЫЧНАЯ ССЫЛКА, ПО ТОЙ ЖЕ ПРИЧИНЕ. Он уводит на тот
+             же чужой источник, и кука сессии ставится ИМ. Клиентский переход
+             сломал бы вход ровно так же, как ломал выход, — просто это
+             обнаружилось бы позже. */
+          <a className={buttonVariants({ variant: "ghost", size: "sm" })} href={`/login?lang=${lang}`}>
             <LogIn />
             Войти
-          </Link>
+          </a>
         )}
       </div>
     </>
