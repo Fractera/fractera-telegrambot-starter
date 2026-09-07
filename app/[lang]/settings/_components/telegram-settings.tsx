@@ -6,6 +6,7 @@ import { AnthropicKeySection } from "./anthropic-key"
 import { AgentChannelSection } from "./agent-channel"
 import { FactsRegistrySection } from "./facts-registry"
 import { ToolsRegistry } from "./tools-registry"
+import { SoulEditor } from "./soul-editor.client"
 import { InProgress } from "./in-progress"
 import { SettingsCard } from "./settings-card"
 import type { ChannelsState, TelegramState } from "@/lib/architect/channels"
@@ -159,11 +160,7 @@ function TelegramTail({
           </span>
         </div>
         <div className="p-3">
-          <InProgress
-            where="instruction"
-            label={ui.skeleton.inProgress}
-            lead={ui.skeleton.instructionLead}
-          />
+          <SoulEditor words={ui.soulWords} />
         </div>
       </div>
     </>

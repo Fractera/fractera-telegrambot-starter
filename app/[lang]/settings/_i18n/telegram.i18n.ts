@@ -66,6 +66,17 @@ export type TelegramUi = {
   // добавляли. Теперь источник один.
   pages: Record<TelegramSection, { title: string; hint: string }>;
   /** Слова раздела «Что я знаю о вас» (158-5). */
+  /** Слова редактора SOUL.md — характер агента (158-5в). */
+  soulWords: {
+    lead: string;
+    saved: string;
+    save: string;
+    saving: string;
+    failed: string;
+    loading: string;
+    size: string;
+    restart: string;
+  };
   knownWords: {
     lead: string;
     empty: string;
@@ -761,6 +772,16 @@ const EN: TelegramUi = {
     title: "OpenAI key",
     valid: "The key is valid",
   },
+  soulWords: {
+    lead: "Who you are as an assistant: name, tone, length of answers, your subject area, what never to do. Written in your own words and added to the bot's own rules — it does not replace them.",
+    saved: "Saved",
+    save: "Save",
+    saving: "Saving…",
+    failed: "Could not save.",
+    loading: "Reading…",
+    size: "Size:",
+    restart: "Saved to the file. The agent reads it at the next session start — the current conversation still runs on the old text.",
+  },
   knownWords: {
     lead: "Every line below is what the bot remembers about you. Correct it or clear it — the next answer uses the new value.",
     empty: "Not said yet — the bot will ask when it needs this.",
@@ -1205,6 +1226,16 @@ const RU: TelegramUi = {
     saving: "Сохраняю…",
     title: "Ключ OpenAI",
     valid: "Ключ верный",
+  },
+  soulWords: {
+    lead: "Кто ты как помощник: имя, тон, длина ответов, предметная область, чего не делать никогда. Пишется своими словами и добавляется к собственным правилам бота, а не заменяет их.",
+    saved: "Сохранено",
+    save: "Сохранить",
+    saving: "Сохраняю…",
+    failed: "Сохранить не удалось.",
+    loading: "Читаю…",
+    size: "Размер:",
+    restart: "Сохранено в файл. Агент прочитает его при следующем запуске сессии — текущий разговор идёт по старому тексту.",
   },
   knownWords: {
     lead: "Каждая строка ниже — то, что бот о вас помнит. Поправьте или снимите: следующий ответ пойдёт по новому значению.",
