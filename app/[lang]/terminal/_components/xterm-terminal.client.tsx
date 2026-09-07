@@ -89,6 +89,19 @@ export function XtermTerminal({ onData, onResize, ref }: Props) {
       term.open(host);
       termRef.current = term;
 
+      // 🛑 `fit()` МЕНЯЕТ РАЗМЕР ХОЗЯИНА — ЗНАЧИТ НАБЛЮДАТЕЛЬ, ЗОВУЩИЙ ЕГО
+      // НАПРЯМУЮ, БУДИТ САМ СЕБЯ. ✗ ОПЛАЧЕНО ДНЁМ ОТЛАДКИ 2026-09-07: вкладка
+      // вставала намертво, JavaScript в ней не исполнялся вовсе, и снаружи это
+      // выглядело как «терминал не подключается» — сокет не открывался просто
+      // потому, что до этой строки поток уже не доходил.
+      //
+      // 🔒 ДВЕ ЗАЩИТЫ, И ОБЕ НУЖНЫ: размер сравнивается с прошлым (шум в доли
+      // пикселя игнорируется), и подгонка уезжает в кадр отрисовки — внутри
+      // самого обратного вызова наблюдателя её делать нельзя.
+      let lastW = -1;
+      let lastH = -1;
+      let scheduled = false;
+
       const push = () => {
         try {
           fit.fit();
@@ -102,7 +115,24 @@ export function XtermTerminal({ onData, onResize, ref }: Props) {
       term.focus();
       term.onData((d) => onDataRef.current(d));
 
-      observer = new ResizeObserver(push);
+      observer = new ResizeObserver(() => {
+        const box = host.getBoundingClientRect();
+        if (Math.abs(box.width - lastW) < 1 && Math.abs(box.height - lastH) < 1) {
+          return;
+        }
+        lastW = box.width;
+        lastH = box.height;
+        if (scheduled) {
+          return;
+        }
+        scheduled = true;
+        requestAnimationFrame(() => {
+          scheduled = false;
+          if (!disposed) {
+            push();
+          }
+        });
+      });
       observer.observe(host);
     })();
 
