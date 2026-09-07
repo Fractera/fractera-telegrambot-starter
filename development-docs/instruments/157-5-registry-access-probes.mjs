@@ -148,6 +148,21 @@ const CASES = [
     ok: (r) => r.json?.answer?.found === false
       && /сужение/.test(String(r.json.answer.hint)),
   },
+  {
+    name: "НК: массив тегов не того типа — отказ, а не ВЕСЬ корпус",
+    body: { fn: "list", args: { corpus: "facts", tags: [1, 2] } },
+    ok: (r) => r.json?.ok === false || r.json?.answer?.found === false,
+  },
+  {
+    name: "НК: огромный запрос не раздувает ответ",
+    body: { fn: "find", args: { corpus: "facts", query: ("слово ").repeat(3000) } },
+    ok: (r) => {
+      const a = r.json?.answer;
+      if (!a) return false;
+      const searched = a.searched || [];
+      return searched.length <= 50;
+    },
+  },
 ];
 
 
