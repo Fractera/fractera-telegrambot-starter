@@ -413,7 +413,27 @@ export async function recall(
       hint: "признак описан, но значений у него ещё нет",
     }
   }
+  // 🔒 `total` ЗНАЧИТ ОДНО И ТО ЖЕ У ВСЕХ ПРИМИТИВОВ: сколько подошло ВСЕГО, а не
+  // сколько показано. ✗ первая версия возвращала здесь длину показанного, и
+  // «всего 20» при тысяче строк было бы уверенной ложью — та же форма ответа,
+  // другое значение поля. Цена честности — один счётный запрос.
   const truncated = rows.length > limit
+  let total = rows.length
+  if (truncated) {
+    try {
+      const cr = await dataFetch("/db/migrate", {
+        method: "POST",
+        body: JSON.stringify({ sql: `SELECT COUNT(*) AS n FROM ${table}${clause}`, params }),
+      })
+      if (cr.ok) {
+        const cb = (await cr.json()) as { rows?: { n?: number }[] }
+        total = Number(cb.rows?.[0]?.n ?? rows.length)
+      }
+    } catch {
+      // Счёт не добыт — оставляем известное и честно говорим об обрезании.
+      total = rows.length
+    }
+  }
   const items: Value[] = rows.slice(0, limit).map(r => ({
     id: Number(r.id ?? 0),
     value: (r.value_text as string | null) ?? (r.value_num as number | null) ?? null,
@@ -422,5 +442,5 @@ export async function recall(
     status: (r.status as string | null) ?? null,
     at: (r.created_at as string | null) ?? null,
   }))
-  return { found: true, key: wanted, table, total: items.length, truncated, items }
+  return { found: true, key: wanted, table, total, truncated, items }
 }
