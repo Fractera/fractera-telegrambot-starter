@@ -1,5 +1,7 @@
 import { AccountButton } from "./_components/account-button.client"
 
+const LANGS = ["ru", "en"] as const
+
 // ГЛАВНАЯ СТРАНИЦА СЛУЖБЫ — ПУБЛИЧНАЯ (156-1).
 //
 // 🎯 РЕШЕНИЕ ВЛАДЕЛЬЦА 2026-09-07, ДОСЛОВНО: «создай главную страницу пока без
@@ -21,6 +23,15 @@ import { AccountButton } from "./_components/account-button.client"
 // 🛑 ДИЗАЙНА ЗДЕСЬ НЕТ НАМЕРЕННО — прямое слово владельца «пока без какого-либо
 // дизайна». Страница обязана работать и говорить правду; вид придёт отдельным
 // решением.
+
+// 🔒 НАБОР ЯЗЫКОВ ОБЪЯВЛЯЕТСЯ, И БЕЗ ЭТОГО СБОРКА ПАДАЕТ — УРОК УЖЕ ОПЛАЧЕН
+// 2026-09-06. Пока значения динамического сегмента неизвестны, Next не собирает
+// даже оболочку и пишет «Uncached data was accessed outside of <Suspense>» —
+// текст, который на причину не указывает вовсе. Соседние страницы слоя
+// объявляют то же самое; я не посмотрел на них и повторил ту же ошибку.
+export function generateStaticParams() {
+  return LANGS.map(lang => ({ lang }))
+}
 
 export default async function Home({ params }: { params: Promise<{ lang: string }> }) {
   const { lang } = await params
