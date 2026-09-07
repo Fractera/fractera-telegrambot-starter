@@ -96,7 +96,7 @@ export async function FactsRegistrySection({ lang, ui }: { lang: string; ui: Tel
               <Small className="font-medium text-foreground">{w.levels[level]}</Small>
               <ul className="flex flex-col gap-2">
                 {rows.map(f => (
-                  <FactRow fact={f} key={f.key} lang={lang} w={w} />
+                  <FactRow all={facts} fact={f} key={f.key} lang={lang} w={w} />
                 ))}
               </ul>
             </section>
@@ -115,7 +115,7 @@ export async function FactsRegistrySection({ lang, ui }: { lang: string; ui: Tel
  * 🔒 «ГДЕ ЖИВЁТ» НАЗЫВАЕТСЯ ВСЛУХ: у признака это его таблица, у связи — прямая
  * оговорка, что таблицы нет и почему.
  */
-function FactRow({ fact, lang, w }: { fact: Fact; lang: string; w: TelegramUi["facts"] }) {
+function FactRow({ all, fact, lang, w }: { all: Fact[]; fact: Fact; lang: string; w: TelegramUi["facts"] }) {
   return (
     <li
       data-facts-row={fact.key}
@@ -166,13 +166,13 @@ function FactRow({ fact, lang, w }: { fact: Fact; lang: string; w: TelegramUi["f
         {needsTable(fact) ? fact.storedIn : w.noTable}
       </Small>
 
-      <FactDetails fact={fact} w={w} />
+      <FactDetails all={all} fact={fact} w={w} />
     </li>
   )
 }
 
 /**
- * РАСКРЫТИЕ КАРТОЧКИ — ПЯТЬ СТРОК (81-9).
+ * РАСКРЫТИЕ КАРТОЧКИ — ШЕСТЬ СТРОК (81-9, шестая — 141-1).
  *
  * 🔒 ЗАКАЗ ВЛАДЕЛЬЦА 2026-09-02 И ЕГО ПРИЧИНА ДОСЛОВНО: «если честно я не понимаю
  * насколько много мы извлекли из этого с тобой понимание». Реестр показывает
@@ -187,8 +187,8 @@ function FactRow({ fact, lang, w }: { fact: Fact; lang: string; w: TelegramUi["f
  * НАМЕРЕННО. Четыре заказанные рассказывают, что признак умеет, и молчат о том,
  * что он умеет и ВЫБРАСЫВАЕТ; а вопрос был именно про честный объём понимания.
  */
-function FactDetails({ fact, w }: { fact: Fact; w: TelegramUi["facts"] }) {
-  const d = factDetail(fact)
+function FactDetails({ all, fact, w }: { all: Fact[]; fact: Fact; w: TelegramUi["facts"] }) {
+  const d = factDetail(fact, all)
 
   return (
     <details data-facts-details={fact.key} className="mt-1">
@@ -205,6 +205,10 @@ function FactDetails({ fact, w }: { fact: Fact; w: TelegramUi["facts"] }) {
         <Detail label={w.detailTools} lines={d.tools} empty={w.detailNotDescribed} />
         <Detail label={w.detailFunctions} lines={d.functions} empty={w.detailNotDescribed} />
         <Detail label={w.detailLost} lines={d.lost ? [d.lost] : []} empty={w.detailNothingLost} />
+        {/* 🔒 ШЕСТАЯ СТРОКА — ТРЕТИЙ СЛОЙ РЕЕСТРА (141-1). Пустая говорит
+            «зависимость не описана», а НЕ «верен везде»: молчание здесь и есть
+            тот дефект, ради которого слой заведён. */}
+        <Detail label={w.detailScope} lines={d.scope} empty={w.detailScopeNone} />
       </div>
     </details>
   )

@@ -251,6 +251,8 @@ export type TelegramUi = {
     detailTools: string;
     detailFunctions: string;
     detailLost: string;
+    detailScope: string;
+    detailScopeNone: string;
     /** Рукописного нет — так и говорим. Выдуманный пример хуже пустоты. */
     detailNotDescribed: string;
     /** Терять нечего — это тоже ответ, и он отличается от «не описано». */
@@ -575,6 +577,8 @@ const EN: TelegramUi = {
     detailExtracts: "What is extracted, and where it lands",
     detailFunctions: "The code behind it",
     detailLost: "What is extracted and NOT kept",
+    detailScope: "What its truth depends on",
+    detailScopeNone: "no dependency described — where this fact holds is unknown",
     detailNotDescribed: "not described",
     detailNothingLost: "nothing is lost — everything extracted is stored",
     detailsMore: "More about this fact",
@@ -989,6 +993,8 @@ const RU: TelegramUi = {
     detailExtracts: "Что извлекается и куда ложится",
     detailFunctions: "Какой код за этим стоит",
     detailLost: "Что извлекается и НЕ сохраняется",
+    detailScope: "От чего зависит истинность",
+    detailScopeNone: "зависимость не описана — где этот факт верен, неизвестно",
     detailNotDescribed: "не описано",
     detailNothingLost: "не теряется ничего — всё извлечённое сохраняется",
     detailsMore: "Подробнее об этом признаке",
