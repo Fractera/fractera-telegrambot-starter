@@ -875,7 +875,7 @@ const EN: TelegramUi = {
   soonTitle: "This section is not built yet",
   soonWhere: "Where this works today:",
   subtitle:
-    "The architect's own tool: it builds automations of any shape, using Claude Code and the special memory of Fractera.",
+    "The architect's own tool: it builds automations of any shape, using Claude Code and the special memory of Fractera — to work and live more effectively.",
   title: "Telegram bot",
 };
 
@@ -1290,7 +1290,7 @@ const RU: TelegramUi = {
   soonTitle: "Этот раздел ещё не построен",
   soonWhere: "Где это работает сегодня:",
   subtitle:
-    "Личный инструмент архитектора: позволяет создавать самые разные автоматизации при помощи Claude Code и специальной памяти Fractera.",
+    "Личный инструмент архитектора: позволяет создавать самые разные автоматизации при помощи Claude Code и специальной памяти Fractera — чтобы повышать эффективность в своей работе и жизни.",
   title: "Telegram-бот",
 };
 
