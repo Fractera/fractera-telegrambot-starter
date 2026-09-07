@@ -169,7 +169,9 @@ export async function proxy(request: NextRequest) {
   // вместо «войдите заново».
   // 🛑 ИМЕНЕМ, А НЕ ПРЕФИКСОМ `/api/fractera/*`: префикс открыл бы заодно ключ
   // OpenAI, медиатеку и настройку бота, которые живут рядом.
-  if (pathname === "/api/fractera/known") {
+  // 🔒 ТОТ ЖЕ ДОВОД У РЕДАКТОРА `SOUL.md` (158-5в): он проверяет сессию и роль
+  // сам, и перехват отдал бы островку HTML вместо JSON.
+  if (pathname === "/api/fractera/known" || pathname === "/api/fractera/soul") {
     return NextResponse.next();
   }
 
