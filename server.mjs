@@ -343,6 +343,11 @@ wss.on("connection", (ws) => {
   }
 
   ws.on("message", (raw) => {
+    // 🔒 ВХОДЯЩЕЕ НАЗЫВАЕТСЯ В ЖУРНАЛЕ (157-2). Без этого нельзя отличить
+    // «клиент не прислал» от «прислал, а мы не поняли» — а это разные починки,
+    // и путал их я целый вечер.
+    process.stderr.write(`[pty] входящее ${raw.length} байт
+`);
     let msg = null;
     try {
       msg = JSON.parse(raw.toString());
