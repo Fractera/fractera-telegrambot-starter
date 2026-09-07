@@ -67,6 +67,12 @@ export type Miss = {
 
 export type Answer<T> = Found<T> | Miss
 
+// 🔒 ПОТОЛКИ ЗАПРОСА — ЗАЩИТА ОКНА МОДЕЛИ, А НЕ СЕРВЕРА (158-2).
+/** Сколько символов запроса вообще разбирается. */
+const QUERY_CAP = 2000
+/** Сколько основ берётся в работу после разбора. */
+const STEMS_CAP = 40
+
 const DEFAULT_LIMIT = 20
 const MAX_LIMIT = 50
 
@@ -137,7 +143,21 @@ export function list(
   opts: { tags?: string[]; limit?: number } = {}
 ): Answer<Pointer> {
   const limit = cap(opts.limit)
-  const want = (opts.tags ?? []).filter(t => typeof t === "string" && t !== "")
+  const asked = opts.tags ?? []
+  const want = asked.filter(t => typeof t === "string" && t !== "")
+  // 🛑 ОТБРОШЕННЫЙ ТЕГ — ОТКАЗ, А НЕ МОЛЧАЛИВОЕ РАСШИРЕНИЕ ВЫДАЧИ.
+  // ✗ НАЙДЕНО МЕТОДИКОЙ `stress-test-capability`, класс 6 (2026-09-07): `tags: [1, 2]`
+  // отфильтровывалось в пустой список, сужение молча исчезало, и человек получал
+  // ВЕСЬ корпус вместо отказа — то есть уверенный ответ «все 35 записей помечены
+  // этими тегами». Просили сузить — обязаны либо сузить, либо объяснить, почему нет.
+  if (asked.length > 0 && want.length === 0) {
+    return {
+      found: false,
+      corpus,
+      searched: asked.map(t => String(t)),
+      hint: "теги обязаны быть строками из словаря lib/registry/tags.ts — сужение не применено",
+    }
+  }
   const all = pointers(corpus)
   const matched = want.length === 0 ? all : all.filter(p => want.some(t => p.tags.includes(t)))
   if (matched.length === 0) {
@@ -168,7 +188,15 @@ export function find(
   opts: { limit?: number } = {}
 ): Answer<Hit> {
   const limit = cap(opts.limit)
-  const asked = stems(query)
+  // 🛑 У ЗАПРОСА ЕСТЬ ПОТОЛОК, И ОН ЗАЩИЩАЕТ НЕ СЕРВЕР, А ОКНО МОДЕЛИ.
+  // ✗ НАЙДЕНО МЕТОДИКОЙ `stress-test-capability`, класс 7 (2026-09-07): запрос в
+  // 187 КБ отрабатывал за 0,167 с и возвращал в `searched` СЕМНАДЦАТЬ ТЫСЯЧ основ.
+  // Сервер выстоял; ответ съел бы контекст агента целиком — то есть отказ выглядел
+  // бы успехом и стоил дороже отказа.
+  // 🔒 ОБРЕЗАЕТСЯ И ВХОД, И ОТЧЁТ О НЁМ: длинный запрос разбирается по первым
+  // словам, а `searched` называет не больше `STEMS_CAP` — этого хватает, чтобы
+  // дописать триггер, и не хватает, чтобы залить окно.
+  const asked = stems(String(query ?? "").slice(0, QUERY_CAP)).slice(0, STEMS_CAP)
   if (asked.length === 0) {
     return {
       found: false,
@@ -228,7 +256,7 @@ export function find(
     return {
       found: false,
       corpus,
-      searched: asked,
+      searched: asked.slice(0, STEMS_CAP),
       hint:
         "механический поиск промахнулся. Дальше — модель, а промахнувшуюся фразу " +
         "дописать в `triggers` нужной записи (навык create-registry-entry). " +
