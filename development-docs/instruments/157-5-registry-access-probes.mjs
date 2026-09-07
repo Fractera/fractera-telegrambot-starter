@@ -165,7 +165,10 @@ const CASES = [
   },
   {
     name: "recall: незаполненный признак — «значений не было», а не отказ слоя",
-    body: { fn: "recall", args: { key: "person.name" } },
+    // 🔒 КЛЮЧ ВЫБРАН ТОТ, КОТОРЫЙ ОСТАНЕТСЯ ПУСТЫМ. ✗ первый вариант брал
+    // person.name — и покраснел в тот час, когда имя записали. Случай, чей
+    // исход зависит от живых данных, проверяет данные, а не способность.
+    body: { fn: "recall", args: { key: "person.projects" } },
     ok: (r) => r.json?.answer?.found === false
       && !/не ответил|недоступен/.test(String(r.json.answer.hint))
       && /не было|ещё нет/.test(String(r.json.answer.hint)),
