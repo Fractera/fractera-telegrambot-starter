@@ -12,6 +12,7 @@ import { AutoRefresh } from "./_components/auto-refresh.client";
 import { AutomationsView } from "./_components/automations-view";
 import { InProgress } from "./_components/in-progress";
 import { PassportBody } from "./_components/passport-body.client";
+import { KnownAboutMe } from "./_components/known-about-me.client";
 import { SectionIntro } from "./_components/section-intro.client";
 import { StarterCard } from "./_components/starter-card";
 import { TaskParseSection } from "./_components/task-parse-section";
@@ -385,6 +386,10 @@ async function BotSettingsGate({
                 честно называют себя. */}
             {/* 🔒 ПЕРЕЧЕНЬ ЦЕПОЧЕК ПЕРЕЕХАЛ В СВОЙ РАЗДЕЛ (147-2/147-3). Здесь
                 остаётся лента ТЕКУЩЕЙ работы — «Логи Realtime». */}
+            {active === "known" && (
+              <KnownAboutMe words={ui.knownWords} />
+            )}
+
             {active === "automations" && (
               <AutomationsView
                 lang={lang}

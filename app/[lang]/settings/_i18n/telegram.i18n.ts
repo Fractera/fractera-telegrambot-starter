@@ -1,3 +1,5 @@
+import type { TelegramSection } from "../_lib/telegram-sections";
+
 // СЛОВА ВХОДА «TELEGRAM-БОТ» (77-1, 2026-08-31).
 //
 // 🔒 СЛОВАРЬ СЕРВЕРНЫЙ. Ни один файл с `"use client"` не имеет права импортировать
@@ -56,10 +58,25 @@ export type TelegramUi = {
   // 🪦 И СТАЛО ЧЕТЫРЕ ИЗ ПЯТИ (ревизия, шаг 116, 2026-09-05): «Стратегия
   // автоматизации» убрана — выбор между конвейером на OpenAI и агентом Anthropic
   // перестал существовать вместе со стратегией, которая его породила.
-  pages: Record<
-    "about" | "logs" | "automations" | "settings" | "passport",
-    { title: string; hint: string }
-  >;
+  // 🔒 КЛЮЧИ ВЫВОДЯТСЯ ИЗ МАССИВА-ИСТОЧНИКА, А НЕ ПЕРЕЧИСЛЯЮТСЯ ЗАНОВО (158-5).
+  // ✗ ЗДЕСЬ СТОЯЛ ВТОРОЙ СПИСОК РАЗДЕЛОВ, НАПИСАННЫЙ РУКАМИ, и он разошёлся с
+  // `TELEGRAM_SECTIONS` на первом же новом разделе: массив знал про шестой,
+  // тип — нет. Тот же класс, что число в тексте против списка в коде, только
+  // здесь его поймали типы, а не глаза, — и поймали лишь потому, что раздел
+  // добавляли. Теперь источник один.
+  pages: Record<TelegramSection, { title: string; hint: string }>;
+  /** Слова раздела «Что я знаю о вас» (158-5). */
+  knownWords: {
+    lead: string;
+    empty: string;
+    down: string;
+    since: string;
+    save: string;
+    clear: string;
+    saving: string;
+    failed: string;
+    loading: string;
+  };
   /** Свёрнутая справка раздела «Описание». */
   helpMore: string;
   helpLess: string;
@@ -739,6 +756,17 @@ const EN: TelegramUi = {
     title: "OpenAI key",
     valid: "The key is valid",
   },
+  knownWords: {
+    lead: "Every line below is what the bot remembers about you. Correct it or clear it — the next answer uses the new value.",
+    empty: "Not said yet — the bot will ask when it needs this.",
+    down: "Could not read: the data layer did not answer. This is a failure, not an empty value.",
+    since: "Remembered",
+    save: "Save",
+    clear: "Clear",
+    saving: "Saving…",
+    failed: "Could not save.",
+    loading: "Reading…",
+  },
   pages: {
     about: {
       hint: "What the bot is for in this project and how it is arranged.",
@@ -747,6 +775,10 @@ const EN: TelegramUi = {
     automations: {
       hint: "Every chain the bot has already run: filter, sort, open one and read its records.",
       title: "Automation history",
+    },
+    known: {
+      hint: "Everything the bot has remembered about you: name, how to address you, tone, time zone, limits. Correct or clear any line — the next answer uses the new value.",
+      title: "What I know about you",
     },
     logs: {
       hint: "The bot picks one of two modes. Fast and cheap, on the fact registry, for most simple tasks. Complex and recursively evolving, on an agent that grows skills, MCP, external APIs and AI browsers for research.",
@@ -1163,6 +1195,17 @@ const RU: TelegramUi = {
     title: "Ключ OpenAI",
     valid: "Ключ верный",
   },
+  knownWords: {
+    lead: "Каждая строка ниже — то, что бот о вас помнит. Поправьте или снимите: следующий ответ пойдёт по новому значению.",
+    empty: "Пока не говорили — бот спросит, когда это понадобится.",
+    down: "Прочитать не удалось: слой данных не ответил. Это отказ, а не пустое значение.",
+    since: "Запомнено",
+    save: "Сохранить",
+    clear: "Снять",
+    saving: "Сохраняю…",
+    failed: "Сохранить не удалось.",
+    loading: "Читаю…",
+  },
   pages: {
     about: {
       hint: "Зачем боту существовать в этом проекте и как он устроен.",
@@ -1171,6 +1214,10 @@ const RU: TelegramUi = {
     automations: {
       hint: "Каждая цепочка, которую бот уже отработал: отобрать, отсортировать, открыть одну и прочитать её записи.",
       title: "История автоматизаций",
+    },
+    known: {
+      hint: "Всё, что бот запомнил о вас: имя, обращение, тон, часовой пояс, запреты. Любую строку можно поправить или снять — следующий ответ пойдёт по новому значению.",
+      title: "Что я знаю о вас",
     },
     logs: {
       hint: "Бот выбирает один из двух режимов. Быстрый и дешёвый — на реестре признаков, для большинства простых задач. Сложный, рекурсивно эволюционирующий — на агенте, наращивающем навыки, MCP, внешние API и ИИ-браузеры для исследований.",
