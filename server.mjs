@@ -425,6 +425,7 @@ wss.on("connection", (ws) => {
   });
 });
 
+process.stderr.write("[pty] слушателей upgrade: " + server.listenerCount("upgrade") + String.fromCharCode(10));
 server.listen(port, hostname, () => {
   process.stdout.write(
     `чат слушает http://${hostname}:${port} · терминал ws://${hostname}:${port}/pty` +
