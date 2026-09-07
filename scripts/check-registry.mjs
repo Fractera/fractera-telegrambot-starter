@@ -179,6 +179,78 @@ if (dup.length) {
   );
 }
 
+// ── РАЗМЕТКА ЗАПИСИ: `tags`, `triggers`, `answers` (157-4, паспорт §3о) ──────
+//
+// 🔒 ЗАЧЕМ ОНА ПРОВЕРЯЕТСЯ СБОРКОЙ. По этим трём полям запись находит МАШИНА,
+// без вызова модели. Пустое поле не ломает ничего сегодня и делает запись
+// ненаходимой навсегда: её отыщет только тот, кто помнит ключ наизусть. Отказ
+// на сборке дешевле, чем «система не знает» через месяц.
+//
+// 🔒 ТРИ ВЕРДИКТА, А НЕ ДВА (закон шага 64). Правило пришло 2026-09-07 в живой
+// реестр, где 35 записей заведены без него. Объявить их нарушителями значило бы
+// уронить сборку в день введения правила; простить исключением — купить зелёный
+// цвет. Поэтому они ДОЛГ: печатаются при каждом прогоне, с датой, и закрывает
+// их владелец. Всё, что заведено ПОСЛЕ, обязано быть законным сразу.
+const BASELINE = new Set([
+  "destination.media", "destination.rag", "destination.vector",
+  "entity.idea", "entity.memo", "entity.note", "entity.place",
+  "entity.receipt", "entity.task",
+  "field.facets", "field.forwarded", "field.geo", "field.happened",
+  "field.money", "field.relation",
+  "initiator.chat-user", "initiator.schedule", "initiator.telegram-user",
+  "intent.capture", "intent.command", "intent.confirm", "intent.correct",
+  "intent.meta", "intent.question", "intent.schedule", "intent.where",
+  "material.calendar-date", "material.contact", "material.document",
+  "material.link", "material.location", "material.photo", "material.text",
+  "material.video", "material.voice",
+]);
+
+// Словарь тегов берётся из кода тем же приёмом, что и остальные списки: он
+// `as const`, из него порождаются типы, и опечатка ловится проверкой типов.
+const TAGS = new Set(listFrom("lib/registry/tags.ts", "REGISTRY_TAGS"));
+
+const nonEmptyStrings = (v) =>
+  Array.isArray(v) && v.length > 0 && v.every((x) => typeof x === "string" && x.trim().length > 0);
+
+let unmarked = 0;
+for (const f of cfg.facts ?? []) {
+  const problems = [];
+  if (!nonEmptyStrings(f.tags)) {
+    problems.push("нет `tags` (1–3 из закрытого словаря)");
+  } else {
+    const alien = f.tags.filter((t) => !TAGS.has(t));
+    if (alien.length) {
+      // 🛑 ЧУЖОЙ ТЕГ — ВСЕГДА ОТКАЗ, ДАЖЕ У СТАРОЙ ЗАПИСИ. Отсутствие тега это
+      // долг; выдуманный тег — уже расхождение со словарём, то есть фильтр,
+      // который молча ничего не находит.
+      bad += 1;
+      console.error(`✗ ${f.key}: тег вне словаря — ${alien.join(", ")}`);
+      console.error(`  Лечение: взять из lib/registry/tags.ts (${[...TAGS].join(" · ")}).`);
+    }
+  }
+  if (!nonEmptyStrings(f.triggers)) {
+    problems.push("нет `triggers` (слова, которыми это называет человек)");
+  }
+  if (!nonEmptyStrings(f.answers)) {
+    problems.push("нет `answers` (на какой вопрос отвечает)");
+  }
+  if (problems.length === 0) {
+    continue;
+  }
+  if (BASELINE.has(f.key)) {
+    unmarked += 1;
+    continue;
+  }
+  bad += 1;
+  console.error(`✗ ${f.key}: запись заведена без разметки — ${problems.join("; ")}`);
+  console.error("  Лечение: навык `create-registry-entry`, раздел 2.");
+}
+if (unmarked) {
+  DEBTS.push(
+    `разметка (tags/triggers/answers) отсутствует у ${unmarked} из ${BASELINE.size} записей, заведённых до 2026-09-07 — механическим поиском они не находятся`
+  );
+}
+
 console.log(`\nисключения (${EXCEPTIONS.length}):`);
 for (const e of EXCEPTIONS) {
   console.log(`  · ${e}`);
