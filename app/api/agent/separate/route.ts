@@ -1,7 +1,15 @@
 // @api первичная сепарация: агент называет род сообщения, служба его записывает
 import { NextResponse } from "next/server"
-import { createAutomation, ensureAutomationsTable, listAutomationRows, setState } from "@/lib/automations/store"
+import {
+  createAutomation,
+  ensureAutomationsTable,
+  listAutomationRows,
+  setAutomationFields,
+  setState,
+} from "@/lib/automations/store"
 import { machineEnv } from "@/lib/fractera/machine-env"
+import { scopeKey } from "@/lib/facts/scope"
+import { planSchedule } from "@/lib/schedule/store"
 import { categoryLine, isMessageKind, opensAutomation } from "@/lib/task/separation"
 
 // ДВЕРЬ ПЕРВИЧНОЙ СЕПАРАЦИИ (155-2, 155-3).
@@ -95,7 +103,51 @@ export async function POST(request: Request) {
   // читается как «о ней ещё никто ничего не решил», а решение уже принято.
   await setState(id, "open", { reason: `сепарация: ${kind}` })
 
-  return NextResponse.json({ ok: true, kind, line, automationId: id })
+  // ── ОХВАТ РАЗГОВОРА (155-4) ──────────────────────────────────────────────
+  //
+  // 🔒 СЧИТАЕТСЯ ОДИН РАЗ НА СООБЩЕНИЕ И КЛАДЁТСЯ В ЗАПИСЬ. Пары приходят от
+  // агента: он уже прочитал сообщение и знает, назвал ли человек место. Второй
+  // разбор ради того же ответа стоил бы второго вызова модели.
+  // 🔒 НЕПРИГОДНОЕ ЗНАЧЕНИЕ ДАЁТ ПУСТОЙ КЛЮЧ, А НЕ ПОЛОВИНЧАТЫЙ — закон 141-2:
+  // охват шире объявленного лжив.
+  const scopePairs = isRecord(body.scope) ? body.scope : {}
+  const key = Object.keys(scopePairs).length > 0 ? scopeKey(scopePairs) : ""
+  const scopeRefused = Object.keys(scopePairs).length > 0 && key === ""
+  if (key) await setAutomationFields(id, { scopeKey: key })
+
+  // ── ОТЛОЖЕННОЕ ДЕЙСТВИЕ (155-5) ──────────────────────────────────────────
+  //
+  // 🔒 БЕЗ ЗОНЫ СРОК НЕ СОЗДАЁТСЯ, И ПРИЧИНА ВОЗВРАЩАЕТСЯ АГЕНТУ. Поставить
+  // «завтра вечером» по Гринвичу значит поставить не тогда — человек заметит это
+  // ровно один раз, проспав встречу.
+  let scheduleId: number | null = null
+  let scheduleRefused: string | null = null
+  const remind = isRecord(body.remind) ? body.remind : null
+  if (remind) {
+    const planned = await planSchedule({
+      automationId: id,
+      kind: "human",
+      payload: String(remind.text ?? ""),
+      dueAt: String(remind.due_at ?? ""),
+      tz: String(remind.tz ?? ""),
+      scopeKey: key || null,
+    })
+    scheduleId = planned.id
+    scheduleRefused = planned.refused ?? null
+  }
+
+  return NextResponse.json({
+    ok: true,
+    kind,
+    line,
+    automationId: id,
+    scopeKey: key || null,
+    // 🔒 НЕДОСТАЮЩЕЕ НАЗЫВАЕТСЯ, А НЕ МОЛЧИТ: это вход для прямого вопроса
+    // человеку (141-7), и без него агент не узнает, чего спросить.
+    scopeRefused,
+    scheduleId,
+    scheduleRefused,
+  })
 }
 
 /** Уже заводили автоматизацию по этому сообщению? Номер или `null`. */
@@ -111,3 +163,8 @@ export async function GET() {
   return NextResponse.json({ ok: false, error: "post-only" }, { status: 405 })
 }
 
+
+/** Объект, а не что попало: тело приходит снаружи и проверяем его мы. */
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v)
+}
