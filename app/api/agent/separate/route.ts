@@ -22,8 +22,13 @@ import { categoryLine, isMessageKind, opensAutomation } from "@/lib/task/separat
 // двери, надо кому-то выдавать, где-то хранить и когда-то менять; третье звено
 // («учётные данные кем-то выдаются») тут же стало бы тупиком.
 
-export const runtime = "nodejs"
-export const dynamic = "force-dynamic"
+// 🛑 `runtime` И `dynamic` ЗДЕСЬ НЕ ОБЪЯВЛЯЮТСЯ, И ЭТО НЕ ЗАБЫВЧИВОСТЬ.
+// В проекте включён `cacheComponents`, и сборка отвергает эти сегменты словами
+// «Route segment config runtime is not compatible». Ни одна соседняя дверь их не
+// объявляет — я скопировал привычную форму, не посмотрев на соседей, и получил
+// упавшую сборку при зелёном `tsc`.
+// 🔒 ОТСЮДА УРОК: `npx tsc --noEmit` НЕ ЗАМЕНЯЕТ СБОРКУ. Конфигурация сегментов
+// маршрута — не типы, и проверка типов о ней не знает вовсе.
 
 function secret(): string {
   return process.env.DATA_SECRET || machineEnv("DATA_SECRET") || ""
