@@ -333,3 +333,45 @@ export async function readAutomationRow(id: number): Promise<AutomationRow | nul
     publicContract: typeof row.public_contract === "string" ? row.public_contract : null,
   }
 }
+
+/**
+ * Все автоматизации — для раздела «История автоматизаций» (147-2).
+ *
+ * 🔒 ПУСТОЙ СПИСОК И ОТКАЗ СЛОЯ ДАННЫХ — РАЗНЫЕ ИСХОДЫ, И ЭКРАН ОБЯЗАН ИХ
+ * РАЗЛИЧАТЬ. «Автоматизаций пока нет» и «до базы не достучались» выглядят
+ * одинаково пустым списком, а значат прямо противоположное: первое — норма,
+ * второе — поломка. Слив их, мы показали бы человеку норму вместо аварии.
+ */
+export async function listAutomationRows(limit = 500): Promise<{ ok: boolean; rows: AutomationRow[] }> {
+  const res = await sql(
+    `SELECT ${AUTOMATIONS_TABLE_COLUMNS.join(", ")} FROM ${AUTOMATIONS_TABLE} ORDER BY id DESC LIMIT ?`,
+    [limit],
+  )
+  if (res.ok === false) return { ok: false, rows: [] }
+  const rows: AutomationRow[] = []
+  for (const raw of res.rows ?? []) {
+    const one = await Promise.resolve(rowToAutomation(raw))
+    if (one) rows.push(one)
+  }
+  return { ok: true, rows }
+}
+
+/** Одна строка базы — в автоматизацию. Вынесено, чтобы читать список без запроса на строку. */
+function rowToAutomation(row: Record<string, unknown>): AutomationRow | null {
+  if (row.id === undefined || row.id === null) return null
+  const state = row.confirm_state
+  const tags = typeof row.tags === "string" && row.tags ? row.tags.split("|").filter(Boolean) : []
+  return {
+    id: Number(row.id),
+    confirmState: isAutomationConfirmState(state) ? state : "draft",
+    firstMessageId: typeof row.first_message_id === "string" ? row.first_message_id : null,
+    createdAt: String(row.created_at ?? ""),
+    summary: typeof row.summary === "string" ? row.summary : null,
+    tags,
+    scopeKey: typeof row.scope_key === "string" ? row.scope_key : null,
+    liked: verdict(row.verdict_liked),
+    needsWork: verdict(row.verdict_needs_work),
+    reusable: row.reusable === null || row.reusable === undefined ? null : row.reusable === "1",
+    publicContract: typeof row.public_contract === "string" ? row.public_contract : null,
+  }
+}

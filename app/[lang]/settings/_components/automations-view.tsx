@@ -44,6 +44,9 @@ type Words = {
   steps: string
   empty: string
   demo: string
+  sourceDb: string
+  sourceEmpty: string
+  sourceDown: string
   search: string
   searchDo: string
   sortNew: string
@@ -185,11 +188,14 @@ export function AutomationsView({
   lang,
   page,
   query,
+  source,
   words,
 }: {
   lang: string
   page: AutomationPage
   query: AutomationQuery
+  /** Откуда записи: настоящая таблица, пустая таблица или недоступная база. */
+  source: "db" | "empty" | "down"
   words: Words
 }) {
   const jump = (n: number) => hrefWith(lang, query, { page: n })
@@ -202,7 +208,17 @@ export function AutomationsView({
 
   return (
     <div className="flex flex-col gap-4" data-automations={page.total}>
-      <Small className="text-muted-foreground">{words.demo}</Small>
+      {/* 🔒 ИСТОЧНИК НАЗЫВАЕТСЯ СЛОВАМИ, И ТРИ ЕГО СОСТОЯНИЯ РАЗЛИЧАЮТСЯ (147-2).
+          Пустая таблица — норма и объясняется причиной; недоступная база —
+          поломка и объявляется поломкой; выдуманные записи называют себя
+          выдуманными. Одинаково пустой экран на всё это был бы ложью дважды. */}
+      <Small className="text-muted-foreground" data-automations-source={source}>
+        {source === "db"
+          ? words.sourceDb
+          : source === "down"
+            ? words.sourceDown
+            : words.sourceEmpty}
+      </Small>
 
       {/* ── ПАНЕЛЬ УПРАВЛЕНИЯ ТАБЛИЦЕЙ ─────────────────────────────────────── */}
       <div className="flex flex-col gap-3 rounded-md border border-border p-3">

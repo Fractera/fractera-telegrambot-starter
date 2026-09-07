@@ -22,6 +22,9 @@ export type TelegramUi = {
     steps: string
     empty: string
     demo: string
+    sourceDb: string
+    sourceEmpty: string
+    sourceDown: string
     search: string
     searchDo: string
     sortNew: string
@@ -54,7 +57,7 @@ export type TelegramUi = {
   // автоматизации» убрана — выбор между конвейером на OpenAI и агентом Anthropic
   // перестал существовать вместе со стратегией, которая его породила.
   pages: Record<
-    "about" | "logs" | "settings" | "passport",
+    "about" | "logs" | "automations" | "settings" | "passport",
     { title: string; hint: string }
   >;
   /** Свёрнутая справка раздела «Описание». */
@@ -682,6 +685,9 @@ const EN: TelegramUi = {
   automations: {
     calendar: { any: "Calendar: any", no: "No calendar", yes: "On a timer" },
     demo: "Demo records: real chains will come from the logs at the next step.",
+    sourceDb: "Real records from the project database.",
+    sourceEmpty: "No automations yet — message parsing is not built, so there are no numbers to assign. The rows below are a demo of how it will look.",
+    sourceDown: "The data layer did not answer: this is a fault, not an empty list.",
     empty: "Nothing matches this filter.",
     first: "First page",
     last: "Last page",
@@ -738,9 +744,13 @@ const EN: TelegramUi = {
       hint: "What the bot is for in this project and how it is arranged.",
       title: "About",
     },
+    automations: {
+      hint: "Every chain the bot has already run: filter, sort, open one and read its records.",
+      title: "Automation history",
+    },
     logs: {
       hint: "The bot picks one of two modes. Fast and cheap, on the fact registry, for most simple tasks. Complex and recursively evolving, on an agent that grows skills, MCP, external APIs and AI browsers for research.",
-      title: "Logs",
+      title: "Live logs",
     },
     passport: {
       hint: "What we are building, why, and how it works today. A living document.",
@@ -1099,6 +1109,9 @@ const RU: TelegramUi = {
   automations: {
     calendar: { any: "Календарь: всё равно", no: "Без календаря", yes: "По таймеру" },
     demo: "Выдуманные записи: настоящие цепочки придут из логов следующим шагом.",
+    sourceDb: "Настоящие записи из базы проекта.",
+    sourceEmpty: "Автоматизаций пока нет: разбор сообщений не построен, номера присваивать нечему. Записи ниже — образец того, как это будет выглядеть.",
+    sourceDown: "Слой данных не ответил: это поломка, а не пустой список.",
     empty: "Под этот отбор ничего не попало.",
     first: "Первая страница",
     last: "Последняя страница",
@@ -1155,9 +1168,13 @@ const RU: TelegramUi = {
       hint: "Зачем боту существовать в этом проекте и как он устроен.",
       title: "Описание",
     },
+    automations: {
+      hint: "Каждая цепочка, которую бот уже отработал: отобрать, отсортировать, открыть одну и прочитать её записи.",
+      title: "История автоматизаций",
+    },
     logs: {
       hint: "Бот выбирает один из двух режимов. Быстрый и дешёвый — на реестре признаков, для большинства простых задач. Сложный, рекурсивно эволюционирующий — на агенте, наращивающем навыки, MCP, внешние API и ИИ-браузеры для исследований.",
-      title: "Логи",
+      title: "Логи Realtime",
     },
     passport: {
       hint: "Что мы строим, зачем и как это устроено сегодня. Живой документ: правится по мере того, как решения принимаются.",

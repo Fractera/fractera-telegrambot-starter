@@ -1,3 +1,5 @@
+import { listAutomationRows, type AutomationRow } from "@/lib/automations/store"
+
 // АВТОМАТИЗАЦИЯ — ОДНА СВЯЗАННАЯ ЦЕПОЧКА ЗАПРОСОВ, И У НЕЁ ЕСТЬ СВОЯ СТРАНИЦА.
 //
 // 🎯 СЛОВА ВЛАДЕЛЬЦА 2026-09-06: «для каждой самостоятельной автоматизации —
@@ -174,10 +176,52 @@ const matchTri = (flag: boolean, want: Tri) => want === "any" || (want === "yes"
  * от каждого сужения фильтра: человек был на пятой, отфильтровал — и записей
  * осталось на две. Пустой экран он прочитает как «ничего не нашлось».
  */
-export function queryAutomations(query: AutomationQuery): AutomationPage {
+/**
+ * Страница перечня — из НАСТОЯЩЕЙ таблицы, если в ней что-то есть (147-2).
+ *
+ * 🔒 ТРИ ИСХОДА, А НЕ ДВА, И ЭКРАН РАЗЛИЧАЕТ ИХ СЛОВАМИ:
+ *   `db`     — записи есть, показываем их;
+ *   `empty`  — база отвечает, записей ноль: разбор сообщений не построен (§1),
+ *              номера присваивать нечему. Это НОРМА, и она объясняется;
+ *   `down`   — до слоя данных не достучались. Это ПОЛОМКА.
+ * Пустой список и недоступная база выглядят одинаково и значат противоположное;
+ * слив их, мы показали бы человеку норму вместо аварии.
+ *
+ * 🛑 ВЫДУМАННЫЕ ЗАПИСИ ОСТАЮТСЯ ТОЛЬКО ПРИ `empty` И ТОЛЬКО НАЗВАННЫМИ. Экран
+ * говорит, что это образец: заглушка, не объявившая себя заглушкой, есть ложь о
+ * работе системы.
+ */
+export async function queryAutomationsLive(query: AutomationQuery): Promise<AutomationPage & { source: "db" | "empty" | "down" }> {
+  const { ok, rows } = await listAutomationRows()
+  if (!ok) return { ...queryAutomations(query, []), source: "down" }
+  if (rows.length === 0) return { ...queryAutomations(query), source: "empty" }
+  return { ...queryAutomations(query, rows.map(fromRow)), source: "db" }
+}
+
+/** Строка базы — в запись перечня. Имя берётся из саммари, а его пока нет. */
+function fromRow(r: AutomationRow): Automation {
+  const at = r.createdAt.replace("T", " ").replace("Z", "")
+  return {
+    file: `№${r.id}`,
+    // 🔒 БЕЗ САММАРИ ИМЕНЕМ СЛУЖИТ НОМЕР, А НЕ ВЫДУМАННОЕ НАЗВАНИЕ: номер —
+    // это то, что человек произносит вслух, и он всегда верен.
+    name: r.summary ?? `Автоматизация № ${r.id}`,
+    at,
+    atUnix: Date.parse(r.createdAt) || 0,
+    id: String(r.id),
+    steps: 0,
+    status: r.confirmState === "confirmed" ? "done" : "running",
+    calendar: false,
+    map: Boolean(r.scopeKey),
+    tags: r.tags,
+    demo: false,
+  }
+}
+
+export function queryAutomations(query: AutomationQuery, source?: Automation[]): AutomationPage {
   const needle = query.q.toLowerCase()
 
-  const found = listAutomations()
+  const found = (source ?? listAutomations())
     .filter((a) => {
       if (query.status !== "any" && a.status !== query.status) {
         return false
