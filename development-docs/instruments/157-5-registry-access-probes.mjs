@@ -169,10 +169,10 @@ CASES.push({
     const r = await fetch(process.env.DATA_URL || "http://localhost:3300/db/migrate", {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Data-Secret": KEY },
-      body: JSON.stringify({ sql: "SELECT query FROM registry_search_misses ORDER BY id DESC LIMIT 1" }),
+      body: JSON.stringify({ sql: "SELECT COUNT(*) AS n FROM registry_search_misses WHERE query = ?", params: [uniquePhrase] }),
     });
     const j = await r.json();
-    return j?.rows?.[0]?.query === uniquePhrase;
+    return Number(j?.rows?.[0]?.n ?? 0) === 1;
   },
 });
 let bad = 0;
@@ -182,7 +182,7 @@ for (const c of CASES) {
   try {
     const r = c.skipCall ? null : await call(c.body, !c.noKey);
     verdict = await c.ok(r);
-    if (!verdict) note = c.note ? c.note() : ` — получено: ${JSON.stringify(r?.json ?? r?.status).slice(0, 160)}`;
+    if (!verdict) note = c.note ? c.note() : ` — получено: ${String(JSON.stringify(r?.json ?? r?.status ?? "нет ответа")).slice(0, 160)}`;
   } catch (e) {
     note = ` — прибор упал: ${e.message}`;
   }
