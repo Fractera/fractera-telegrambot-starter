@@ -11,6 +11,7 @@ import {
 } from "@/lib/automations/store"
 import { machineEnv } from "@/lib/fractera/machine-env"
 import { scopeKey } from "@/lib/facts/scope"
+import { writeFact } from "@/lib/facts/write"
 import { planSchedule } from "@/lib/schedule/store"
 import { categoryLine, isMessageKind, opensAutomation } from "@/lib/task/separation"
 
@@ -175,6 +176,11 @@ export async function POST(request: Request) {
   // ровно один раз, проспав встречу.
   let scheduleId: number | null = null
   let scheduleRefused: string | null = null
+  // 🔒 ИСХОД ЗАПОМИНАНИЯ НАЗЫВАЕТСЯ В ОТВЕТЕ, А НЕ МОЛЧИТ (158-5): агент обязан
+  // знать, запомнилась зона или нет, — иначе он пообещает человеку память,
+  // которой нет. `null` значит «зону не называли», и это третий исход.
+  let timezoneRemembered: boolean | null = null
+  let timezoneWhy: string | null = null
   const remind = isRecord(body.remind) ? body.remind : null
   if (remind) {
     const planned = await planSchedule({
@@ -187,6 +193,35 @@ export async function POST(request: Request) {
     })
     scheduleId = planned.id
     scheduleRefused = planned.refused ?? null
+
+    // ── ЗОНА ЧЕЛОВЕКА ЗАПОМИНАЕТСЯ КАК ФАКТ О НЁМ (158-5) ──────────────────
+    //
+    // ✗ ОПЛАЧЕНО ЖИВЬЁМ 2026-09-07: бот дважды за день спросил у владельца
+    // часовой пояс. Его слова: «неужели я буду каждый раз отвечать на вопрос,
+    // где я нахожусь?» Зона лежала ВНУТРИ каждого срока (`schedule_entries.tz`)
+    // и фактом о человеке не становилась — то есть система её знала и не помнила.
+    //
+    // 🔒 ЗАПИСЫВАЕТСЯ ТОЛЬКО ПРИНЯТАЯ ЗОНА. Отказ `no-tz` означает, что человек
+    // её не назвал; записать «то, что он мог иметь в виду» — значит завести
+    // память о том, чего не было.
+    // 🔒 ОТКАЗ ЗАПИСИ НЕ ЛОМАЕТ СЕПАРАЦИЮ. Номер присвоен, срок заведён; память
+    // о человеке — улучшение, а не условие работы.
+    const tz = String(remind.tz ?? "").trim()
+    if (tz && !scheduleRefused) {
+      const remembered = await writeFact({
+        key: "person.timezone",
+        value: tz,
+        subject: "self",
+        source: `сепарация: ${kind}`,
+        messageId,
+      })
+      if (!remembered.ok) {
+        timezoneRemembered = false
+        timezoneWhy = remembered.hint
+      } else {
+        timezoneRemembered = true
+      }
+    }
   }
 
   return NextResponse.json({
@@ -203,6 +238,11 @@ export async function POST(request: Request) {
     scopeRefused,
     scheduleId,
     scheduleRefused,
+    // 🔒 ТРИ ИСХОДА ЗАПОМИНАНИЯ ЗОНЫ, И ОНИ РАЗЛИЧИМЫ (158-5): `null` — зону не
+    // называли · `true` — запомнили · `false` плюс причина — не смогли. Слить
+    // второе с третьим значило бы обещать человеку память, которой нет.
+    timezoneRemembered,
+    timezoneWhy,
   })
 }
 

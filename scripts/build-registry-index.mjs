@@ -40,6 +40,7 @@ const CORPORA = [
     listKey: "facts",
     idField: "key",
     nameField: "title",
+    levelField: "level",
     whatField: "description",
   },
   {
@@ -49,6 +50,7 @@ const CORPORA = [
     listKey: "tools",
     idField: "id",
     nameField: "name",
+    levelField: "where",
     whatField: "what",
   },
 ];
@@ -58,6 +60,11 @@ function buildOne(spec) {
   const entries = (cfg[spec.listKey] ?? []).map((rec) => ({
     key: rec[spec.idField],
     name: rec[spec.nameField] ?? "",
+    // 🔒 УРОВЕНЬ РАЗЛИЧАЕТ РОД СООБЩЕНИЯ И ФАКТ О ЧЕЛОВЕКЕ. ✗ найдено самопроверкой
+    // 158-5: `intent.where` и `person.timezone` находятся с РАВНЫМ счётом и
+    // одинаковыми тегами — агент не мог понять, что первое про намерение
+    // сообщения, а второе про самого человека.
+    level: String(rec[spec.levelField] ?? ""),
     what: firstSentence(rec[spec.whatField]),
     tags: rec.tags ?? [],
     answers: rec.answers ?? [],

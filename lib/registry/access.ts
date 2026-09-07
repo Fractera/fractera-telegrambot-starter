@@ -35,6 +35,8 @@ export function isCorpus(v: unknown): v is Corpus {
 export type Pointer = {
   key: string
   name: string
+  /** Уровень записи: различает род сообщения и факт о человеке. */
+  level: string
   what: string
   tags: string[]
   answers: string[]
@@ -91,6 +93,7 @@ function cap(limit: number | undefined): number {
 type IndexEntry = {
   key: string
   name: string
+  level: string
   what: string
   tags: string[]
   answers: string[]
@@ -125,6 +128,7 @@ function bare(p: Pointer & { triggers: string[] }): Pointer {
   return {
     key: p.key,
     name: p.name,
+    level: p.level,
     what: p.what,
     tags: p.tags,
     answers: p.answers,
