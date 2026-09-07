@@ -2,6 +2,7 @@ import factsIndex from "../../REGISTRY-CONFIG/index.json"
 import toolsIndex from "../../TOOLS-CONFIG/index.json"
 import { dataFetch } from "@/lib/fractera/data-service"
 import { allFacts } from "@/lib/facts/registry"
+import { existingFactTables } from "@/lib/facts/ensure"
 import { factTableName } from "@/lib/facts/table"
 import { allTools } from "@/lib/tools/store"
 import { stems } from "./text.mjs"
@@ -418,6 +419,25 @@ export async function recall(
       hint: stored
         ? `значений у признака нет по устройству: ${stored}`
         : "у признака не назван адрес хранения — вспоминать нечего",
+    }
+  }
+  // 🛑 ТАБЛИЦЫ ЕЩЁ НЕТ — ЭТО «ЗНАЧЕНИЙ НЕ БЫЛО», А НЕ ОТКАЗ СЛОЯ ДАННЫХ.
+  // ✗ НАЙДЕНО ЖИВЬЁМ 2026-09-07 на первом же незаполненном признаке личности:
+  // `recall(person.name)` отвечал `http-500` и подсказкой «слой данных не
+  // ответил». Для тринадцати пустых ячеек это был бы ЕДИНСТВЕННЫЙ ответ —
+  // то есть человек видел бы поломку там, где просто ещё ничего не говорил.
+  // 🔒 ПРОВЕРЯЕТСЯ СПИСКОМ ТАБЛИЦ, А НЕ ТЕКСТОМ ОШИБКИ: разбирать сообщение
+  // чужой службы значит привязаться к её формулировке, которая изменится молча.
+  if (!column) {
+    const have = await existingFactTables()
+    if (!have.has(table)) {
+      return {
+        found: false,
+        corpus: "facts",
+        key: wanted,
+        searched: [wanted],
+        hint: "признак описан, но значений у него ещё не было — таблица появится с первой записью",
+      }
     }
   }
   const limit = cap(opts.limit)

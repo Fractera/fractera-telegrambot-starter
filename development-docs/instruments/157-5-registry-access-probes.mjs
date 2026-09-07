@@ -159,7 +159,14 @@ const CASES = [
     ok: (r) => {
       const a = r.json?.answer;
       if (!a) return false;
-      const searched = a.searched || [];
+      const searched = a.searched || [  {
+    name: "recall: незаполненный признак — «значений не было», а не отказ слоя",
+    body: { fn: "recall", args: { key: "person.name" } },
+    ok: (r) => r.json?.answer?.found === false
+      && !/не ответил|недоступен/.test(String(r.json.answer.hint))
+      && /не было|ещё нет/.test(String(r.json.answer.hint)),
+  },
+];
       return searched.length <= 50;
     },
   },
