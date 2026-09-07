@@ -85,7 +85,7 @@ export async function proxy(request: NextRequest) {
   // 🛑 ПРЕФИКСОМ ЭТО НЕ ПИШЕТСЯ. `/api/agent/*` открыл бы заодно всё, что
   // появится здесь завтра, и открыл бы молча — ровно та ошибка, от которой
   // защищает соседнее исключение выше.
-  if (pathname === "/api/agent/separate") {
+  if (pathname === "/api/agent/separate" || pathname === "/api/agent/close") {
     return NextResponse.next();
   }
 
