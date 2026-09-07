@@ -75,6 +75,8 @@ export type Answer<T> = Found<T> | Miss
 const QUERY_CAP = 2000
 /** Сколько основ берётся в работу после разбора. */
 const STEMS_CAP = 40
+/** Сколько промахов держим: журнал — рабочий список, а не архив. */
+const MISSES_CAP = 200
 
 const DEFAULT_LIMIT = 20
 const MAX_LIMIT = 50
@@ -299,16 +301,63 @@ export async function rememberMiss(corpus: Corpus, query: string, asked: string[
         sql:
           "CREATE TABLE IF NOT EXISTS registry_search_misses (" +
           "id INTEGER PRIMARY KEY AUTOINCREMENT, corpus TEXT, query TEXT, stems TEXT, " +
+          "times INTEGER DEFAULT 1, last_at TEXT, " +
           "created_at TEXT DEFAULT CURRENT_TIMESTAMP)",
       }),
     })
-    await dataFetch("/db/migrate", {
+    // 🔒 ОДНА ФРАЗА — ОДНА СТРОКА, А ПОВТОР СЧИТАЕТСЯ ЧИСЛОМ. ✗ долг, названный в
+    // 157-5: журнал рос без границы, и десять одинаковых промахов выглядели
+    // десятью разными задачами. Повтор — это не новый промах, а **вес** старого:
+    // фраза, промахнувшаяся десять раз, важнее десяти разных, промахнувшихся по разу.
+    // 🛑 КОЛОНКА — НЕ ТАБЛИЦА (закон проекта, оплаченный дважды). У журнала,
+    // созданного 157-5, колонок счёта нет, и `CREATE TABLE IF NOT EXISTS` их не
+    // добавит НИКОГДА. Лестница исполняется всегда; «колонка уже есть» —
+    // нормальный исход второго прогона, а не отказ.
+    for (const col of ["times INTEGER DEFAULT 1", "last_at TEXT"]) {
+      await dataFetch("/db/migrate", {
+        method: "POST",
+        body: JSON.stringify({
+          sql: `ALTER TABLE registry_search_misses ADD COLUMN ${col}`,
+        }),
+      })
+    }
+
+    const bump = await dataFetch("/db/migrate", {
       method: "POST",
       body: JSON.stringify({
-        sql: "INSERT INTO registry_search_misses (corpus, query, stems) VALUES (?, ?, ?)",
-        params: [corpus, text, asked.join(" ")],
+        sql:
+          "UPDATE registry_search_misses SET times = COALESCE(times, 1) + 1, " +
+          "last_at = CURRENT_TIMESTAMP WHERE corpus = ? AND query = ?",
+        params: [corpus, text],
       }),
     })
+    const changed = bump.ok
+      ? ((await bump.json()) as { changes?: number }).changes ?? 0
+      : 0
+    if (changed === 0) {
+      await dataFetch("/db/migrate", {
+        method: "POST",
+        body: JSON.stringify({
+          sql:
+            "INSERT INTO registry_search_misses (corpus, query, stems, times, last_at) " +
+            "VALUES (?, ?, ?, 1, CURRENT_TIMESTAMP)",
+          params: [corpus, text, asked.join(" ")],
+        }),
+      })
+      // 🛑 ГРАНИЦА РОСТА НАЗВАНА В КОДЕ, А НЕ В НАМЕРЕНИИ. Журнал — рабочий
+      // список того, что стоит дописать в триггеры, а не архив: разросшийся до
+      // тысяч строк, он перестаёт читаться и потому перестаёт работать.
+      // Уходят самые редкие и самые старые — у них меньше всего шансов
+      // превратиться в триггер.
+      await dataFetch("/db/migrate", {
+        method: "POST",
+        body: JSON.stringify({
+          sql:
+            "DELETE FROM registry_search_misses WHERE id NOT IN " +
+            `(SELECT id FROM registry_search_misses ORDER BY COALESCE(times, 1) DESC, id DESC LIMIT ${MISSES_CAP})`,
+        }),
+      })
+    }
   } catch {
     /* наблюдение не записалось — поиск от этого не страдает */
   }
