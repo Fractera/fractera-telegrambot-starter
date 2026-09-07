@@ -85,7 +85,15 @@ export function factTableSql(table: string): string {
   return `
     CREATE TABLE IF NOT EXISTS ${table} (
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
-      message_id INTEGER NOT NULL,
+      -- 🔒 СООБЩЕНИЕ НЕОБЯЗАТЕЛЬНО, И ЭТО ИСПРАВЛЕНИЕ ОБРАЗЦА (158-5б).
+      -- ✗ ОПЛАЧЕНО ЖИВЫМ ЗАМЕРОМ 2026-09-08: `NOT NULL constraint failed:
+      -- fact_person_name.message_id`. Образец предполагал, что КАЖДЫЙ факт
+      -- добыт из сообщения. Факт о человеке рождается ещё двумя путями: агент
+      -- запомнил сказанное в разговоре (`registry_remember`) и человек поправил
+      -- значение руками на экране. У обоих сообщения нет и быть не может.
+      -- 🛑 ПОДСТАВИТЬ СЮДА ПУСТУЮ СТРОКУ РАДИ `NOT NULL` БЫЛО БЫ ХУЖЕ ОТКАЗА:
+      -- это выдуманный адрес сообщения, по которому потом пойдут искать.
+      message_id INTEGER,
       value_text TEXT,
       value_num  REAL,
       value_json TEXT,
