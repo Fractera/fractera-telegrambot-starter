@@ -15,9 +15,15 @@ import { useRouter } from "next/navigation"
 // раскрытые окна и стоит полной загрузки страницы; `refresh` перерисовывает
 // серверную часть на месте — то есть ровно строки таблицы.
 
+// 🔒 ПЕРИОД — ОДНА КОНСТАНТА, И ОН ЖЕ НАЗЫВАЕТСЯ СЛОВАМИ (147-5, добито 158-6).
+// ✗ ДО ЭТОГО ПЕРИОД ЗНАЛА ТОЛЬКО ПОЛОСА. Полоса отвечает «когда обновится» тому,
+// кто её видит и понял; человеку, который её не заметил или отключил анимацию,
+// экран не говорил ничего. 🛑 И главное: **потока событий у нас нет**, а «живая
+// лента» без объяснения читается как реальное время — обещание, которое человек
+// проверит в свой худший день.
 const CYCLE_MS = 5000
 
-export function AutoRefresh() {
+export function AutoRefresh({ everyLabel }: { everyLabel?: string }) {
   const router = useRouter()
 
   useEffect(() => {
@@ -26,11 +32,16 @@ export function AutoRefresh() {
   }, [router])
 
   return (
-    <div
-      data-auto-refresh
-      aria-hidden
-      className="mb-4 h-1 w-full overflow-hidden rounded-full bg-muted"
-    >
+    <div className="mb-4 flex flex-col gap-1" data-auto-refresh>
+      {everyLabel ? (
+        <span className="text-muted-foreground text-xs" data-auto-refresh-every={CYCLE_MS}>
+          {everyLabel.replace("{n}", String(Math.round(CYCLE_MS / 1000)))}
+        </span>
+      ) : null}
+      <div
+        aria-hidden
+        className="h-1 w-full overflow-hidden rounded-full bg-muted"
+      >
       <div className="task-refresh-bar h-full w-1/3 rounded-full bg-primary" />
       {/* Движение справа налево, ровно один цикл на обновление. Разметка стилей
           лежит рядом с полосой: это её собственное поведение, а не тема сайта. */}
@@ -46,6 +57,7 @@ export function AutoRefresh() {
           .task-refresh-bar { animation: none; width: 100%; opacity: 0.3; }
         }
       `}</style>
+      </div>
     </div>
   )
 }

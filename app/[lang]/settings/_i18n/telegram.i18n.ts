@@ -67,6 +67,12 @@ export type TelegramUi = {
   pages: Record<TelegramSection, { title: string; hint: string }>;
   /** Слова раздела «Что я знаю о вас» (158-5). */
   /** Слова редактора SOUL.md — характер агента (158-5в). */
+  /** Чья лента и как часто обновляется (147-5, 147-6). */
+  liveWords: {
+    every: string;
+    liveSubjectLatest: string;
+    liveSubjectNone: string;
+  };
   soulWords: {
     lead: string;
     saved: string;
@@ -772,6 +778,11 @@ const EN: TelegramUi = {
     title: "OpenAI key",
     valid: "The key is valid",
   },
+  liveWords: {
+    every: "Refreshes every {n} seconds — there is no event stream, the page asks on a timer.",
+    liveSubjectLatest: "Showing the LATEST automation #{n}. Not «the current one»: message parsing into this feed does not exist yet.",
+    liveSubjectNone: "No automation has been started yet — there is nothing for the feed to be about.",
+  },
   soulWords: {
     lead: "Who you are as an assistant: name, tone, length of answers, your subject area, what never to do. Written in your own words and added to the bot's own rules — it does not replace them.",
     saved: "Saved",
@@ -1226,6 +1237,11 @@ const RU: TelegramUi = {
     saving: "Сохраняю…",
     title: "Ключ OpenAI",
     valid: "Ключ верный",
+  },
+  liveWords: {
+    every: "Обновляется каждые {n} секунд — потока событий нет, страница спрашивает по таймеру.",
+    liveSubjectLatest: "Показана ПОСЛЕДНЯЯ автоматизация № {n}. Не «текущая»: разбора сообщений в эту ленту пока нет.",
+    liveSubjectNone: "Ни одной автоматизации ещё не заведено — ленте не о чем быть.",
   },
   soulWords: {
     lead: "Кто ты как помощник: имя, тон, длина ответов, предметная область, чего не делать никогда. Пишется своими словами и добавляется к собственным правилам бота, а не заменяет их.",

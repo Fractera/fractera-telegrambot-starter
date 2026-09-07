@@ -3,6 +3,7 @@ import { TaskTime } from "./task-time.client"
 import { TaskCell } from "./task-cell.client"
 import { TaskTool } from "./task-tool.client"
 import type { AppDialogUi } from "@/components/dialog/app-dialog.i18n"
+import { listAutomationRows } from "@/lib/automations/store"
 import { readTask } from "@/lib/task/store"
 import type { RequestChannel, TaskRow } from "@/lib/task/types"
 import type { TelegramUi } from "../_i18n/telegram.i18n"
@@ -151,6 +152,20 @@ export async function TaskParseSection({
   const task = await readTask()
   const empty = emptyReason(state, ui)
 
+  // ── ЧЬЯ ЭТА ЛЕНТА (147-6, построено 158-6) ────────────────────────────────
+  //
+  // 🛑 «ТЕКУЩАЯ АВТОМАТИЗАЦИЯ» СЕГОДНЯ НЕОПРЕДЕЛИМА, И ЭТО СКАЗАНО, А НЕ
+  // ПОДСТАВЛЕНО МОЛЧА. Разбор сообщений в ленту ещё не заведён; честный
+  // заменитель — **последняя по времени**, и слово «последняя» стоит на экране.
+  // Назови её «текущей» — человек решит, что лента следит за работой, которая
+  // идёт прямо сейчас, и будет ждать от неё того, чего она не делает.
+  //
+  // 🔒 ПУСТАЯ ТАБЛИЦА НЕ ДАЁТ НИ НОМЕРА, НИ НУЛЯ. Выдуманный номер хуже
+  // отсутствия: по нему пойдут искать. Признак `data-live-subject="none"` и
+  // названная причина — это и есть негативный контроль подшага.
+  const { rows: automationRows } = await listAutomationRows(50)
+  const latest = automationRows.length > 0 ? automationRows[automationRows.length - 1] : null
+
   // 🔒 ПОРЯДОК ПРЯМОЙ: СТАРОЕ СВЕРХУ, НОВОЕ ВНИЗУ — правка владельца 2026-09-02.
   // Таблица читается как ход разбора: строка называет следующее действие, и оно
   // стоит ПОД ней. Обратный порядок разрывал эту сцепку — «следующее» оказывалось
@@ -158,7 +173,17 @@ export async function TaskParseSection({
   const rows: TaskRow[] = task ? task.rows : []
 
   return (
-    <section data-task-parse className="flex flex-col gap-6">
+    <section data-task-parse
+      data-live-subject={latest ? String(latest.id) : "none"} className="flex flex-col gap-6">
+      {/* 🔒 ЧЬЯ ЛЕНТА — ПЕРВОЙ СТРОКОЙ, ДО СПРАВКИ И ТАБЛИЦЫ (147-6).
+          Человек, читающий записи, обязан знать, о какой работе они, —
+          иначе он отнесёт их к той, о которой думает сам. */}
+      <p className="text-muted-foreground text-xs">
+        {latest
+          ? ui.liveWords.liveSubjectLatest.replace("{n}", String(latest.id))
+          : ui.liveWords.liveSubjectNone}
+      </p>
+
       <SectionIntro
         name="task-parse"
         summary={ui.parse.summary}
