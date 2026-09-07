@@ -213,13 +213,23 @@ export function find(
     scored.push({ hit: { ...bare(p), why }, score: hitStrong.size * 2 + hitWeak.size })
   }
   if (scored.length === 0) {
+    // 🔒 ПРОМАХ ЗАПИСЫВАЕТСЯ, ИНАЧЕ ПЕТЛЯ ОБУЧЕНИЯ — ПОЖЕЛАНИЕ, А НЕ МЕХАНИЗМ.
+    // Паспорт §3о объявляет порядок «поиск → промах → модель → фраза уезжает в
+    // `triggers`». Без записи промаха последний шаг делать некому: фраза
+    // исчезает вместе с разговором, и через месяц «без модели» значит «модель
+    // зовётся всегда, просто позже».
+    // 🛑 ЗАПИСЬ НЕ ПРАВИТ РЕЕСТР САМА. Дописать триггер — работа автора записи по
+    // навыку `create-registry-entry`; система, правящая собственную поисковую
+    // поверхность, перестала бы быть проверяемой.
+    void rememberMiss(corpus, query, asked)
     return {
       found: false,
       corpus,
       searched: asked,
       hint:
         "механический поиск промахнулся. Дальше — модель, а промахнувшуюся фразу " +
-        "дописать в `triggers` нужной записи (навык create-registry-entry).",
+        "дописать в `triggers` нужной записи (навык create-registry-entry). " +
+        "Промах записан в registry_search_misses.",
     }
   }
   // Больше совпавших основ — выше; при равенстве порядок ключа, чтобы выдача
@@ -231,6 +241,40 @@ export function find(
     total: scored.length,
     truncated: scored.length > limit,
     items: scored.slice(0, limit).map(s => s.hit),
+  }
+}
+
+/**
+ * Записать промах поиска, чтобы фразе было куда попасть.
+ *
+ * 🔒 ОТКАЗ ЗАПИСИ НЕ ЛОМАЕТ ПОИСК. Промах уже случился, ответ человеку от этого
+ * не зависит; уронить `find` из-за того, что не удалось записать наблюдение,
+ * значило бы обменять способность на дневник.
+ * 🔒 ТАБЛИЦА СОЗДАЁТСЯ ПРИ ПЕРВОЙ ЗАПИСИ — так же, как таблицы признаков: ни
+ * миграций, ни отдельного шага развёртывания.
+ */
+async function rememberMiss(corpus: Corpus, query: string, asked: string[]): Promise<void> {
+  const text = String(query ?? "").slice(0, 500)
+  if (text.trim() === "") return
+  try {
+    await dataFetch("/db/migrate", {
+      method: "POST",
+      body: JSON.stringify({
+        sql:
+          "CREATE TABLE IF NOT EXISTS registry_search_misses (" +
+          "id INTEGER PRIMARY KEY AUTOINCREMENT, corpus TEXT, query TEXT, stems TEXT, " +
+          "created_at TEXT DEFAULT CURRENT_TIMESTAMP)",
+      }),
+    })
+    await dataFetch("/db/migrate", {
+      method: "POST",
+      body: JSON.stringify({
+        sql: "INSERT INTO registry_search_misses (corpus, query, stems) VALUES (?, ?, ?)",
+        params: [corpus, text, asked.join(" ")],
+      }),
+    })
+  } catch {
+    /* наблюдение не записалось — поиск от этого не страдает */
   }
 }
 

@@ -128,6 +128,12 @@ const CASES = [
     ok: (r) => r.json?.answer?.found === false
       && /сужение/.test(String(r.json.answer.hint)),
   },
+  {
+    name: "петля обучения: промах записан в registry_search_misses",
+    body: { fn: "find", args: { corpus: "facts", query: "квазиморфный блямс проверка петли" } },
+    ok: (r) => r.json?.answer?.found === false
+      && /registry_search_misses/.test(String(r.json.answer.hint)),
+  },
 ];
 
 let bad = 0;
