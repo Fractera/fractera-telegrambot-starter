@@ -1,7 +1,10 @@
+import factsIndex from "../../REGISTRY-CONFIG/index.json"
+import toolsIndex from "../../TOOLS-CONFIG/index.json"
 import { dataFetch } from "@/lib/fractera/data-service"
 import { allFacts } from "@/lib/facts/registry"
 import { factTableName } from "@/lib/facts/table"
 import { allTools } from "@/lib/tools/store"
+import { stems } from "./text.mjs"
 
 // ЕДИНЫЙ ВХОД В ОБА РЕЕСТРА — ЧЕТЫРЕ ПРИМИТИВА (157-5, паспорт §3о).
 //
@@ -79,28 +82,37 @@ function cap(limit: number | undefined): number {
   return Math.min(Math.floor(limit), MAX_LIMIT)
 }
 
-/** Все записи корпуса, приведённые к одной форме. */
-function pointers(corpus: Corpus): (Pointer & { triggers: string[] })[] {
-  if (corpus === "facts") {
-    return allFacts().map(f => ({
-      key: f.key,
-      name: f.title,
-      what: f.description,
-      tags: f.tags ?? [],
-      answers: f.answers ?? [],
-      triggers: f.triggers ?? [],
-      where: `${SOURCE.facts}#${f.key}`,
-    }))
-  }
-  return allTools().map(t => ({
-    key: t.id,
-    name: t.name,
-    what: t.what,
-    tags: (t as { tags?: string[] }).tags ?? [],
-    answers: (t as { answers?: string[] }).answers ?? [],
-    triggers: (t as { triggers?: string[] }).triggers ?? [],
-    where: `${SOURCE.tools}#${t.id}`,
-  }))
+type IndexEntry = {
+  key: string
+  name: string
+  what: string
+  tags: string[]
+  answers: string[]
+  triggers: string[]
+}
+
+const INDEX: Record<Corpus, IndexEntry[]> = {
+  facts: (factsIndex as { entries: IndexEntry[] }).entries,
+  tools: (toolsIndex as { entries: IndexEntry[] }).entries,
+}
+
+/**
+ * Все записи корпуса — ИЗ ПОРОЖДЁННОГО УКАЗАТЕЛЯ, а не из конфига.
+ *
+ * ✗ ОПЛАЧЕНО ЖИВЫМ ЗАМЕРОМ 2026-09-07: первая версия примитивов читала конфиги
+ * напрямую, и указатель, ради которого всё затевалось, не читал НИКТО. Внешне
+ * работало — и именно поэтому дефект прожил бы долго.
+ *
+ * 🔒 УКАЗАТЕЛЬ — ЕДИНСТВЕННЫЙ ИСТОЧНИК ФОРМЫ ДЛЯ `list` И `find`. Он порождён,
+ * его свежесть стережёт сборка, и он уже свёл разные имена полей двух реестров
+ * к одной форме. Тела записей живут в конфигах, и за ними ходит `describe`.
+ */
+function pointers(corpus: Corpus): IndexEntry[] {
+  return INDEX[corpus] ?? []
+}
+
+function withWhere(corpus: Corpus, e: IndexEntry): Pointer & { triggers: string[] } {
+  return { ...e, where: `${SOURCE[corpus]}#${e.key}` }
 }
 
 function bare(p: Pointer & { triggers: string[] }): Pointer {
@@ -114,30 +126,9 @@ function bare(p: Pointer & { triggers: string[] }): Pointer {
   }
 }
 
-// ── СРАВНЕНИЕ СЛОВ ─────────────────────────────────────────────────────────
-//
-// 🔒 СРАВНЕНИЕ ПО ОСНОВЕ, А НЕ ТОЧНОЕ, И ЭТО ОПЛАЧЕНО. Русские падежи уже
-// разводили одного человека на двоих (83): «Мише» и «Миша» дают разные ключи.
-// Приём грубый НАМЕРЕННО — правило «Миша = Михаил» пишется легко и ошибается
-// необратимо; здесь общее начало слова, а решает совпадение человек.
-//
-// 🔒 `ё` СВОДИТСЯ К `е`: человек пишет и так и так, а это одно слово.
-
-const STEM_LEN = 5
-const MIN_WORD = 3
-
-function words(text: string): string[] {
-  return text
-    .toLowerCase()
-    .replace(/ё/g, "е")
-    .replace(/[^0-9a-zа-я-]+/g, " ")
-    .split(/\s+/)
-    .filter(w => w.length >= MIN_WORD)
-}
-
-function stems(text: string): string[] {
-  return words(text).map(w => w.slice(0, STEM_LEN))
-}
+// Сравнение слов живёт в `./text.mjs` — общем с сборщиком указателя: две
+// реализации нормализации разошлись бы, и указатель искался бы иначе, чем
+// строился.
 
 // ── ПРИМИТИВ 1: `list` — что вообще существует ─────────────────────────────
 
@@ -165,7 +156,7 @@ export function list(
     corpus,
     total: matched.length,
     truncated: matched.length > limit,
-    items: matched.slice(0, limit).map(bare),
+    items: matched.slice(0, limit).map(e => bare(withWhere(corpus, e))),
   }
 }
 
@@ -187,28 +178,39 @@ export function find(
     }
   }
   const scored: { hit: Hit; score: number }[] = []
-  for (const p of pointers(corpus)) {
-    // Совпадение ищется в СЛОВАХ ЧЕЛОВЕКА в первую очередь: триггеры и вопросы
-    // писались как поисковая поверхность, имя и описание — как объяснение.
-    const surfaces: string[] = [...p.triggers, ...p.answers, p.name, p.what]
+  for (const e of pointers(corpus)) {
+    const p = withWhere(corpus, e)
+    // 🔒 ДВЕ ПОВЕРХНОСТИ, А НЕ ОДНА, И ВЕС У НИХ РАЗНЫЙ. Триггеры и вопросы
+    // ПИСАЛИСЬ как поисковая мишень; имя и описание — как объяснение человеку.
+    // ✗ измерено 2026-09-07: без разделения запрос «напомни через две минуты»
+    // цеплял признак «когда это случилось» словом «минуту» из чужого описания.
+    const strong = [...e.triggers, ...e.answers]
+    const weak = [e.name, e.what]
     const why: string[] = []
-    const seen = new Set<string>()
-    for (const s of surfaces) {
+    const hitStrong = new Set<string>()
+    const hitWeak = new Set<string>()
+    for (const s of strong) {
       const hay = new Set(stems(s))
       const common = asked.filter(a => hay.has(a))
-      if (common.length === 0) {
-        continue
-      }
-      if (why.length < 5) {
-        why.push(s)
-      }
-      for (const c of common) {
-        seen.add(c)
-      }
+      if (common.length === 0) continue
+      if (why.length < 5) why.push(s)
+      for (const c of common) hitStrong.add(c)
     }
-    if (seen.size > 0) {
-      scored.push({ hit: { ...bare(p), why }, score: seen.size })
+    for (const s of weak) {
+      const hay = new Set(stems(s))
+      const common = asked.filter(a => hay.has(a))
+      if (common.length === 0) continue
+      for (const c of common) hitWeak.add(c)
     }
+    // 🛑 ПОРОГ: либо совпало по словам человека, либо по объяснению — но не
+    // одним словом. Одно случайное слово в описании — это шум, и выглядит он
+    // как работающий поиск, что хуже пустой выдачи.
+    const passes = hitStrong.size > 0 || hitWeak.size >= 2
+    if (!passes) continue
+    if (why.length === 0) {
+      why.push(...weak.filter(w => w).slice(0, 1))
+    }
+    scored.push({ hit: { ...bare(p), why }, score: hitStrong.size * 2 + hitWeak.size })
   }
   if (scored.length === 0) {
     return {

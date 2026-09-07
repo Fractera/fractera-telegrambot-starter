@@ -32,11 +32,29 @@ export type Tool = {
   real: boolean;
   /** Где в разборе он стоит. */
   where: string;
+  // ── РАЗМЕТКА ДЛЯ МЕХАНИЧЕСКОГО ПОИСКА (157-5, паспорт §3о) ────────────────
+  //
+  // ✗ ОПЛАЧЕНО ЖИВЫМ ЗАМЕРОМ В ТОТ ЖЕ ЧАС: разметка была написана в конфиг,
+  // сторож её принял, а этот разбор её ВЫБРАСЫВАЛ — и поиск по корпусу
+  // инструментов молча работал по имени и описанию, то есть хуже, чем задумано.
+  // Форма записи и её разбор — два места об одном, и расходятся они беззвучно.
+  /** Теги из закрытого словаря `lib/registry/tags.ts`. */
+  tags: string[];
+  /** Слова человека: как он просит эту способность. */
+  triggers: string[];
+  /** Какую задачу инструмент закрывает, словами человека. */
+  answers: string[];
 };
 
 type FileTool = Partial<Record<keyof Tool, unknown>>;
 
 const str = (v: unknown): string => (typeof v === "string" ? v : "");
+
+/** Список строк из файла: без пустых и без нестрокового. Наличие стережёт сборка. */
+const strings = (v: unknown): string[] =>
+  Array.isArray(v)
+    ? (v.filter((x) => typeof x === "string" && x.trim() !== "") as string[])
+    : [];
 
 /**
  * Все инструменты в порядке файла.
@@ -59,10 +77,13 @@ export function allTools(): Tool[] {
     }
     seen.add(id);
     out.push({
+      answers: strings(r.answers),
       id,
       name: str(r.name),
       ownInstruction: str(r.ownInstruction),
       real: r.real === true,
+      tags: strings(r.tags),
+      triggers: strings(r.triggers),
       what: str(r.what),
       where: str(r.where),
     });

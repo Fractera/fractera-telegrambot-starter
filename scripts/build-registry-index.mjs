@@ -19,6 +19,7 @@
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { firstSentence } from "../lib/registry/text.mjs";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -51,17 +52,6 @@ const CORPORA = [
     whatField: "what",
   },
 ];
-
-/** Одна фраза «что это»: указатель не носит тел. */
-function firstSentence(text) {
-  const s = String(text ?? "").trim().replace(/\s+/g, " ");
-  if (s === "") {
-    return "";
-  }
-  const dot = s.search(/[.!?](\s|$)/);
-  const cut = dot > 0 ? s.slice(0, dot + 1) : s;
-  return cut.length > 80 ? `${cut.slice(0, 77)}…` : cut;
-}
 
 function buildOne(spec) {
   const cfg = JSON.parse(read(spec.source));
