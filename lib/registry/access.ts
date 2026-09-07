@@ -1,0 +1,377 @@
+import { dataFetch } from "@/lib/fractera/data-service"
+import { allFacts } from "@/lib/facts/registry"
+import { factTableName } from "@/lib/facts/table"
+import { allTools } from "@/lib/tools/store"
+
+// ЕДИНЫЙ ВХОД В ОБА РЕЕСТРА — ЧЕТЫРЕ ПРИМИТИВА (157-5, паспорт §3о).
+//
+// 🔒 ИХ ЧЕТЫРЕ, А НЕ ПЯТЬ, И КОРПУС У НИХ ПАРАМЕТР. Отдельная дверь «есть ли
+// инструмент под задачу» — это `find` по другому корпусу; заведи её отдельно, и
+// через месяц у двух дверей разошлась бы форма ответа.
+//
+// 🔒 ФОРМА ОТВЕТА ОДНА НА ОБА КОРПУСА. У признаков поля зовутся `key`/`title`/
+// `description`, у инструментов — `id`/`name`/`what`. Сводится это здесь, а не у
+// потребителя: иначе «единый вход» существует только на словах.
+//
+// 🔒 ПРОМАХ — ИСХОД, А НЕ ПУСТОТА (закон ядра 3). `found: false` называет, по
+// каким словам искали. Пустой результат и сломанный поиск обязаны выглядеть
+// по-разному — тот же закон, что у лент (`db` · `empty` · `down`).
+//
+// 🔒 У КАЖДОГО ОТВЕТА ПОТОЛОК (закон ядра 4): плохой запрос стоит ограниченно,
+// а не всё окно. `total` при этом называется всегда — обрезанный ответ, молчащий
+// о том, что он обрезан, лжёт.
+
+export const CORPORA = ["facts", "tools"] as const
+export type Corpus = (typeof CORPORA)[number]
+
+export function isCorpus(v: unknown): v is Corpus {
+  return typeof v === "string" && (CORPORA as readonly string[]).includes(v)
+}
+
+/** Строка указателя: то, что возвращают `list` и `find`. Тел не носит. */
+export type Pointer = {
+  key: string
+  name: string
+  what: string
+  tags: string[]
+  answers: string[]
+  /** Происхождение: файл и ключ. Закон ядра 2 — ответ обязан быть проверяемым. */
+  where: string
+}
+
+export type Hit = Pointer & {
+  /** Чем именно совпало — строки триггеров и вопросов, а не «релевантность». */
+  why: string[]
+}
+
+export type Found<T> = {
+  found: true
+  corpus: Corpus
+  /** Сколько подошло всего, до потолка. */
+  total: number
+  /** Обрезан ли ответ потолком. */
+  truncated: boolean
+  items: T[]
+}
+
+export type Miss = {
+  found: false
+  corpus: Corpus
+  /** По каким словам искали — вход для дописывания триггера. */
+  searched: string[]
+  hint: string
+}
+
+export type Answer<T> = Found<T> | Miss
+
+const DEFAULT_LIMIT = 20
+const MAX_LIMIT = 50
+
+const SOURCE: Record<Corpus, string> = {
+  facts: "REGISTRY-CONFIG/registry-config.json",
+  tools: "TOOLS-CONFIG/tools-config.json",
+}
+
+function cap(limit: number | undefined): number {
+  if (typeof limit !== "number" || !Number.isFinite(limit) || limit <= 0) {
+    return DEFAULT_LIMIT
+  }
+  return Math.min(Math.floor(limit), MAX_LIMIT)
+}
+
+/** Все записи корпуса, приведённые к одной форме. */
+function pointers(corpus: Corpus): (Pointer & { triggers: string[] })[] {
+  if (corpus === "facts") {
+    return allFacts().map(f => ({
+      key: f.key,
+      name: f.title,
+      what: f.description,
+      tags: f.tags ?? [],
+      answers: f.answers ?? [],
+      triggers: f.triggers ?? [],
+      where: `${SOURCE.facts}#${f.key}`,
+    }))
+  }
+  return allTools().map(t => ({
+    key: t.id,
+    name: t.name,
+    what: t.what,
+    tags: (t as { tags?: string[] }).tags ?? [],
+    answers: (t as { answers?: string[] }).answers ?? [],
+    triggers: (t as { triggers?: string[] }).triggers ?? [],
+    where: `${SOURCE.tools}#${t.id}`,
+  }))
+}
+
+function bare(p: Pointer & { triggers: string[] }): Pointer {
+  return {
+    key: p.key,
+    name: p.name,
+    what: p.what,
+    tags: p.tags,
+    answers: p.answers,
+    where: p.where,
+  }
+}
+
+// ── СРАВНЕНИЕ СЛОВ ─────────────────────────────────────────────────────────
+//
+// 🔒 СРАВНЕНИЕ ПО ОСНОВЕ, А НЕ ТОЧНОЕ, И ЭТО ОПЛАЧЕНО. Русские падежи уже
+// разводили одного человека на двоих (83): «Мише» и «Миша» дают разные ключи.
+// Приём грубый НАМЕРЕННО — правило «Миша = Михаил» пишется легко и ошибается
+// необратимо; здесь общее начало слова, а решает совпадение человек.
+//
+// 🔒 `ё` СВОДИТСЯ К `е`: человек пишет и так и так, а это одно слово.
+
+const STEM_LEN = 5
+const MIN_WORD = 3
+
+function words(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/ё/g, "е")
+    .replace(/[^0-9a-zа-я-]+/g, " ")
+    .split(/\s+/)
+    .filter(w => w.length >= MIN_WORD)
+}
+
+function stems(text: string): string[] {
+  return words(text).map(w => w.slice(0, STEM_LEN))
+}
+
+// ── ПРИМИТИВ 1: `list` — что вообще существует ─────────────────────────────
+
+export function list(
+  corpus: Corpus,
+  opts: { tags?: string[]; limit?: number } = {}
+): Answer<Pointer> {
+  const limit = cap(opts.limit)
+  const want = (opts.tags ?? []).filter(t => typeof t === "string" && t !== "")
+  const all = pointers(corpus)
+  const matched = want.length === 0 ? all : all.filter(p => want.some(t => p.tags.includes(t)))
+  if (matched.length === 0) {
+    return {
+      found: false,
+      corpus,
+      searched: want,
+      hint:
+        want.length === 0
+          ? "корпус пуст"
+          : `ни одна запись не помечена этими тегами; словарь тегов — lib/registry/tags.ts`,
+    }
+  }
+  return {
+    found: true,
+    corpus,
+    total: matched.length,
+    truncated: matched.length > limit,
+    items: matched.slice(0, limit).map(bare),
+  }
+}
+
+// ── ПРИМИТИВ 2: `find` — какие ключи отвечают этим словам ──────────────────
+
+export function find(
+  corpus: Corpus,
+  query: string,
+  opts: { limit?: number } = {}
+): Answer<Hit> {
+  const limit = cap(opts.limit)
+  const asked = stems(query)
+  if (asked.length === 0) {
+    return {
+      found: false,
+      corpus,
+      searched: [],
+      hint: "в запросе нет слов длиннее двух букв — искать нечем",
+    }
+  }
+  const scored: { hit: Hit; score: number }[] = []
+  for (const p of pointers(corpus)) {
+    // Совпадение ищется в СЛОВАХ ЧЕЛОВЕКА в первую очередь: триггеры и вопросы
+    // писались как поисковая поверхность, имя и описание — как объяснение.
+    const surfaces: string[] = [...p.triggers, ...p.answers, p.name, p.what]
+    const why: string[] = []
+    const seen = new Set<string>()
+    for (const s of surfaces) {
+      const hay = new Set(stems(s))
+      const common = asked.filter(a => hay.has(a))
+      if (common.length === 0) {
+        continue
+      }
+      if (why.length < 5) {
+        why.push(s)
+      }
+      for (const c of common) {
+        seen.add(c)
+      }
+    }
+    if (seen.size > 0) {
+      scored.push({ hit: { ...bare(p), why }, score: seen.size })
+    }
+  }
+  if (scored.length === 0) {
+    return {
+      found: false,
+      corpus,
+      searched: asked,
+      hint:
+        "механический поиск промахнулся. Дальше — модель, а промахнувшуюся фразу " +
+        "дописать в `triggers` нужной записи (навык create-registry-entry).",
+    }
+  }
+  // Больше совпавших основ — выше; при равенстве порядок ключа, чтобы выдача
+  // была воспроизводимой, а не зависела от порядка файла.
+  scored.sort((a, b) => b.score - a.score || a.hit.key.localeCompare(b.hit.key))
+  return {
+    found: true,
+    corpus,
+    total: scored.length,
+    truncated: scored.length > limit,
+    items: scored.slice(0, limit).map(s => s.hit),
+  }
+}
+
+// ── ПРИМИТИВ 3: `describe` — полное определение одной записи ───────────────
+
+export type Described = {
+  found: true
+  corpus: Corpus
+  where: string
+  record: Record<string, unknown>
+}
+
+export function describe(corpus: Corpus, key: string): Described | Miss {
+  const wanted = String(key ?? "").trim().toLowerCase()
+  const rec =
+    corpus === "facts"
+      ? allFacts().find(f => f.key === wanted)
+      : allTools().find(t => t.id === wanted)
+  if (!rec) {
+    return {
+      found: false,
+      corpus,
+      searched: [wanted],
+      hint: "записи с таким ключом нет; ключи берут из `list` или `find`",
+    }
+  }
+  return {
+    found: true,
+    corpus,
+    where: `${SOURCE[corpus]}#${wanted}`,
+    record: rec as unknown as Record<string, unknown>,
+  }
+}
+
+// ── ПРИМИТИВ 4: `recall` — что об этом уже известно ────────────────────────
+//
+// 🛑 `SELECT *` ПО ТАБЛИЦАМ ПРИЗНАКОВ ЗАПРЕЩЁН (закон 83): поднятая лестницей
+// таблица и вновь созданная имеют один набор колонок в разном порядке, и
+// позиционное чтение ломается ТОЛЬКО у того, у кого система уже поработала.
+// Поэтому колонки названы поимённо.
+
+export type Value = {
+  id: number
+  value: string | number | null
+  subject: string | null
+  scope: string | null
+  status: string | null
+  at: string | null
+}
+
+export type Recalled =
+  | { found: true; key: string; table: string; total: number; truncated: boolean; items: Value[] }
+  | (Miss & { key: string })
+  | { found: false; corpus: "facts"; key: string; error: string; hint: string; searched: string[] }
+
+export async function recall(
+  key: string,
+  opts: { subject?: string; scope?: string; limit?: number } = {}
+): Promise<Recalled> {
+  const wanted = String(key ?? "").trim().toLowerCase()
+  const fact = allFacts().find(f => f.key === wanted)
+  if (!fact) {
+    return {
+      found: false,
+      corpus: "facts",
+      key: wanted,
+      searched: [wanted],
+      hint: "признака с таким ключом в реестре нет; ключи берут из `find`",
+    }
+  }
+  const table = factTableName(wanted)
+  if (!table) {
+    return {
+      found: false,
+      corpus: "facts",
+      key: wanted,
+      error: "bad-key",
+      searched: [wanted],
+      hint: "из ключа не собирается имя таблицы — значений у признака быть не может",
+    }
+  }
+  const limit = cap(opts.limit)
+  const where: string[] = []
+  const params: unknown[] = []
+  if (opts.subject) {
+    where.push("subject_key = ?")
+    params.push(opts.subject)
+  }
+  if (opts.scope) {
+    where.push("scope_key = ?")
+    params.push(opts.scope)
+  }
+  const clause = where.length > 0 ? ` WHERE ${where.join(" AND ")}` : ""
+  const sql =
+    `SELECT id, value_text, value_num, subject_key, scope_key, status, created_at ` +
+    `FROM ${table}${clause} ORDER BY id DESC LIMIT ${limit + 1}`
+  let rows: Record<string, unknown>[] = []
+  try {
+    const r = await dataFetch("/db/migrate", {
+      method: "POST",
+      body: JSON.stringify({ sql, params }),
+    })
+    if (!r.ok) {
+      return {
+        found: false,
+        corpus: "facts",
+        key: wanted,
+        error: `http-${r.status}`,
+        searched: [wanted],
+        // 🔒 «СЛОЙ ДАННЫХ МОЛЧИТ» И «ЗНАЧЕНИЙ НЕТ» — РАЗНЫЕ ОТВЕТЫ. Слить их
+        // значило бы уверенно сказать «не знаю» там, где просто не спросили.
+        hint: "слой данных не ответил — это не «значений нет», это отказ",
+      }
+    }
+    const body = (await r.json()) as { rows?: Record<string, unknown>[] }
+    rows = Array.isArray(body.rows) ? body.rows : []
+  } catch {
+    return {
+      found: false,
+      corpus: "facts",
+      key: wanted,
+      error: "unreachable",
+      searched: [wanted],
+      hint: "слой данных недоступен — это не «значений нет», это отказ",
+    }
+  }
+  if (rows.length === 0) {
+    return {
+      found: false,
+      corpus: "facts",
+      key: wanted,
+      searched: [wanted, opts.subject ?? "", opts.scope ?? ""].filter(Boolean),
+      hint: "признак описан, но значений у него ещё нет",
+    }
+  }
+  const truncated = rows.length > limit
+  const items: Value[] = rows.slice(0, limit).map(r => ({
+    id: Number(r.id ?? 0),
+    value: (r.value_text as string | null) ?? (r.value_num as number | null) ?? null,
+    subject: (r.subject_key as string | null) ?? null,
+    scope: (r.scope_key as string | null) ?? null,
+    status: (r.status as string | null) ?? null,
+    at: (r.created_at as string | null) ?? null,
+  }))
+  return { found: true, key: wanted, table, total: items.length, truncated, items }
+}

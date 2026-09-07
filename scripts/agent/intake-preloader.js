@@ -49,6 +49,10 @@ const SEPARATE_URL =
   process.env.SEPARATE_URL || "http://127.0.0.1:3600/api/agent/separate";
 const CLOSE_URL =
   process.env.CLOSE_URL || "http://127.0.0.1:3600/api/agent/close";
+// 🔒 ОДНА ДВЕРЬ НА ЧЕТЫРЕ ПРИМИТИВА (157-5): имя примитива едет полем, а не
+// адресом. Четыре адреса — четыре места, где разойдётся форма ответа.
+const REGISTRY_URL =
+  process.env.REGISTRY_URL || "http://127.0.0.1:3600/api/agent/registry";
 const MACHINE_ENV_FILE =
   process.env.FRACTERA_MACHINE_ENV || "/etc/fractera/secrets.env";
 
@@ -470,6 +474,99 @@ function fail(id, message) {
   send({ error: { code: -32_603, message }, id, jsonrpc: "2.0" });
 }
 
+// ── ЕДИНЫЙ ВХОД В РЕЕСТРЫ: ЧЕТЫРЕ ПРИМИТИВА У АГЕНТА (157-5, паспорт §3о) ────
+//
+// 🔒 СХЕМЫ ИНСТРУМЕНТОВ ПОРОЖДАЮТСЯ ИЗ ОБЪЯВЛЕНИЯ, А НЕ ПИШУТСЯ ЗДЕСЬ. Единственный
+// источник — `lib/registry/access-decl.mjs`; ту же проверку параметров исполняет
+// дверь. Схема, написанная рядом с объявлением, разошлась бы с ним на первой
+// правке параметра.
+//
+// 🔒 ЗАГРУЗКА ЛЕНИВАЯ, ЧЕРЕЗ `import()`: объявление — модуль ESM, а этот файл
+// CommonJS. Переписать объявление под CommonJS значило бы либо потерять
+// потребителя на TypeScript, либо завести вторую копию.
+let ACCESS = null;
+async function accessModule() {
+  if (!ACCESS) {
+    const { pathToFileURL } = require("node:url");
+    const path = require("node:path");
+    const href = pathToFileURL(
+      path.join(__dirname, "..", "..", "lib", "registry", "access-decl.mjs")
+    ).href;
+    const mod = await import(href);
+    ACCESS = {
+      decls: mod.ACCESS_FUNCTIONS,
+      tools: mod.ACCESS_FUNCTIONS.map(mod.mcpToolFrom),
+      validate: mod.validateArgs,
+    };
+  }
+  return ACCESS;
+}
+
+/** Указатель одной строкой: ключ, имя, теги — и чем совпало, если это поиск. */
+function pointerLine(p) {
+  const bits = ["  " + p.key + " — " + p.name];
+  if (p.tags && p.tags.length) {
+    bits.push("[" + p.tags.join(" ") + "]");
+  }
+  if (p.why && p.why.length) {
+    bits.push("← совпало: " + p.why.slice(0, 3).join(" · "));
+  }
+  return bits.join(" ");
+}
+
+async function runAccess(name, args) {
+  const a = await accessModule();
+  const decl = a.decls.find((d) => d.name === name);
+  if (!decl) {
+    return "Такого примитива нет: " + name;
+  }
+  // 🔒 ПРОВЕРКА НА ГРАНИЦЕ, ТЕМ ЖЕ ОБЪЯВЛЕНИЕМ, ЧТО И У ДВЕРИ. Отказ называет
+  // причину: молчаливо отброшенный параметр выглядит как честный ответ по всем
+  // данным, хотя сужение просто не применилось.
+  const checked = a.validate(decl, args);
+  if (!checked.ok) {
+    return "Параметры не приняты:" + String.fromCharCode(10) +
+      checked.problems.map((p) => "  · " + p).join(String.fromCharCode(10));
+  }
+  const r = await postOwn(REGISTRY_URL, { args: checked.args, fn: decl.fn });
+  if (r?.ok !== true) {
+    const extra = Array.isArray(r?.problems) ? " — " + r.problems.join("; ") : "";
+    return "Реестр не ответил: " + String(r?.error || "нет ответа") + extra;
+  }
+  const ans = r.answer || {};
+  if (ans.found !== true) {
+    // 🔒 ПРОМАХ — ИСХОД, А НЕ ПУСТОТА: агент обязан увидеть, ПО ЧЕМУ искали, и
+    // что делать дальше. Пустая строка читалась бы как «система не знает».
+    const lines = ["Не найдено."];
+    if (ans.searched && ans.searched.length) {
+      lines.push("Искали по: " + ans.searched.join(", "));
+    }
+    if (ans.hint) {
+      lines.push(ans.hint);
+    }
+    return lines.join(String.fromCharCode(10));
+  }
+  if (decl.fn === "describe") {
+    return "Запись " + ans.where + String.fromCharCode(10) +
+      JSON.stringify(ans.record, null, 2);
+  }
+  if (decl.fn === "recall") {
+    const head = "Известно по признаку " + ans.key + " (таблица " + ans.table + "), всего " +
+      ans.total + (ans.truncated ? ", показаны не все" : "");
+    const rows = ans.items.map((v) =>
+      "  #" + v.id + " " + JSON.stringify(v.value) +
+      (v.subject ? " · чей: " + v.subject : "") +
+      (v.scope ? " · где верно: " + v.scope : "") +
+      (v.status ? " · " + v.status : "") +
+      (v.at ? " · " + v.at : "")
+    );
+    return [head].concat(rows).join(String.fromCharCode(10));
+  }
+  const head = "Найдено " + ans.total + " в корпусе " + ans.corpus +
+    (ans.truncated ? " (показаны не все — сузь запрос или подними limit)" : "");
+  return [head].concat(ans.items.map(pointerLine)).join(String.fromCharCode(10));
+}
+
 async function handle(m) {
   // Уведомления идут без `id` и ответа НЕ ждут: ответить на них значит нарушить
   // протокол и получить разрыв соединения.
@@ -485,19 +582,29 @@ async function handle(m) {
     });
   }
   if (m.method === "tools/list") {
-    return ok(m.id, { tools: [TOOL, TOOL_REQUEST, TOOL_SEPARATE, TOOL_CLOSE] });
+    // 🔒 ЧЕТЫРЕ ПРИМИТИВА ДОСТУПА ПРИХОДЯТ ПОРОЖДЁННЫМИ ИЗ ОБЪЯВЛЕНИЯ (157-5),
+    // а не перечисляются здесь: перечисление рядом с объявлением разошлось бы
+    // с ним на первой правке параметра.
+    const a = await accessModule();
+    return ok(m.id, {
+      tools: [TOOL, TOOL_REQUEST, TOOL_SEPARATE, TOOL_CLOSE].concat(a.tools),
+    });
   }
   if (m.method === "tools/call") {
     const p = m.params || {};
-    const KNOWN = [TOOL.name, TOOL_REQUEST.name, TOOL_SEPARATE.name, TOOL_CLOSE.name];
+    const access = await accessModule();
+    const ACCESS_NAMES = access.tools.map((t) => t.name);
+    const KNOWN = [TOOL.name, TOOL_REQUEST.name, TOOL_SEPARATE.name, TOOL_CLOSE.name]
+      .concat(ACCESS_NAMES);
     if (!KNOWN.includes(p.name)) {
       return fail(m.id, `unknown tool: ${p.name}`);
     }
     inFlight += 1;
     try {
       const args = p.arguments || {};
-      const text =
-        p.name === TOOL_REQUEST.name
+      const text = ACCESS_NAMES.includes(p.name)
+        ? await runAccess(p.name, args)
+        : p.name === TOOL_REQUEST.name
           ? await runRequest(args)
           : p.name === TOOL_SEPARATE.name
             ? await runSeparate(args)

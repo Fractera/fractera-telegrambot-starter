@@ -59,6 +59,10 @@ import file from "../../REGISTRY-CONFIG/registry-config.json"
 
 /** Запись файла. Все поля необязательны, кроме `key`: проверяем мы. */
 type FileFact = {
+  /** Разметка для механического поиска (157-4): теги, слова человека, вопросы. */
+  tags?: unknown
+  triggers?: unknown
+  answers?: unknown
   key?: unknown
   level?: unknown
   title?: unknown
@@ -105,6 +109,13 @@ function fromList<T extends string>(v: unknown, list: readonly T[]): T | undefin
  * которому некуда складывать значения, обязан выглядеть сломанным — молчание тут
  * читается как «работает».
  */
+/** Список строк из файла, без пустых и без нестрокового. Пусто — `undefined`. */
+function strings(v: unknown): string[] | undefined {
+  if (!Array.isArray(v)) return undefined
+  const out = v.filter(x => typeof x === "string" && x.trim() !== "") as string[]
+  return out.length > 0 ? out : undefined
+}
+
 function fromFile(r: FileFact): Fact | null {
   const key = str(r.key).trim().toLowerCase()
   if (!key) return null
@@ -149,6 +160,11 @@ function fromFile(r: FileFact): Fact | null {
     scope: Array.isArray(r.scope)
       ? (r.scope.filter(v => typeof v === "string" && v) as string[])
       : undefined,
+    // ── Разметка для механического поиска (157-4). Наличие стережёт сборка;
+    // здесь только чистка от нестрокового, как у `scope` выше.
+    tags: strings(r.tags),
+    triggers: strings(r.triggers),
+    answers: strings(r.answers),
   }
 }
 

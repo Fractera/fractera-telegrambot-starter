@@ -4,13 +4,15 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbo",
-    "build": "node scripts/check-registry.mjs && node scripts/check-tools.mjs && next build",
+    "build": "node scripts/check-registry.mjs && node scripts/check-tools.mjs && node scripts/build-registry-index.mjs --check && next build",
     "start": "node server.mjs",
     "check": "ultracite check",
     "fix": "ultracite fix",
     "start:next": "next start",
     "check:registry": "node scripts/check-registry.mjs",
-    "check:tools": "node scripts/check-tools.mjs"
+    "check:tools": "node scripts/check-tools.mjs",
+    "build:index": "node scripts/build-registry-index.mjs",
+    "check:index": "node scripts/build-registry-index.mjs --check"
   },
   "dependencies": {
     "@ai-sdk/openai": "^4.0.57",
