@@ -203,8 +203,19 @@ export async function setState(
   state: AutomationState,
   opts: { closingKind?: ClosingKind; reason?: string } = {},
 ): Promise<{ written: boolean; state: AutomationState }> {
-  const now = await currentState(automationId)
-  if (now === state && state !== "step-closed") return { written: false, state: now }
+  const history = await stateHistory(automationId)
+  const now = history.length === 0 ? "open" : history[history.length - 1].state
+  // 🔒 ПЕРВАЯ СТРОКА ПИШЕТСЯ ВСЕГДА, ДАЖЕ ЕСЛИ ЭТО `open`, И ЭТО НЕ
+  // ПРОТИВОРЕЧИТ ЗАКОНУ «ПУСТАЯ ИСТОРИЯ ЗНАЧИТ open» (143-1). Пустая история
+  // говорит, ЧТО автоматизация идёт, и молчит о том, ПОЧЕМУ она заведена;
+  // первая строка несёт причину («сепарация: automation-write») и время решения.
+  // ✗ НАЙДЕНО ПРИБОРОМ 155-3: дверь сепарации объявляла в комментарии, что
+  // пишет первое состояние, и не писала — совпадение с «текущим» гасило запись.
+  // Комментарий, разошедшийся с поведением, хуже отсутствующего: он выглядит
+  // объяснением.
+  if (history.length > 0 && now === state && state !== "step-closed") {
+    return { written: false, state: now }
+  }
   const res = await sql(
     `INSERT INTO ${AUTOMATION_STATES_TABLE} (automation_id, state, closing_kind, reason) VALUES (?, ?, ?, ?)`,
     [automationId, state, opts.closingKind ?? null, opts.reason ?? null],
