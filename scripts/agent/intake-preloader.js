@@ -36,6 +36,75 @@ const SECRET_FILE =
   process.env.INTAKE_SECRET_FILE || "/opt/fractera/app/.env.local";
 const SECRET_NAME = "TELEGRAM_HOOK_SECRET";
 
+// ── ДВЕРИ СВОЕЙ СЛУЖБЫ (155-7) ───────────────────────────────────────────────
+//
+// 🔒 ЭТИ ДВЕ ДВЕРИ ЖИВУТ НА 3600, А НЕ НА 3000, И ЭТО НЕ МЕЛОЧЬ РАЗМЕЩЕНИЯ.
+// Приём выше (`INTAKE_URL`) до сих пор ходит на порт 3000 и читает секрет из
+// `.env.local` СЛОТА — долг «дверь приёма переезжает внутрь службы» назван в
+// паспорте 2026-09-06. Новое кладём на своей стороне: служба обязана работать,
+// когда слота нет вовсе.
+// 🔒 СЕКРЕТ — ОБЩИЙ КЛЮЧ МАШИНЫ, а не новый: ключ, заведённый ради одной двери,
+// надо кому-то выдавать и когда-то менять.
+const SEPARATE_URL =
+  process.env.SEPARATE_URL || "http://127.0.0.1:3600/api/agent/separate";
+const CLOSE_URL =
+  process.env.CLOSE_URL || "http://127.0.0.1:3600/api/agent/close";
+const MACHINE_ENV_FILE =
+  process.env.FRACTERA_MACHINE_ENV || "/etc/fractera/secrets.env";
+
+function machineSecret() {
+  try {
+    for (const line of fs.readFileSync(MACHINE_ENV_FILE, "utf8").split(String.fromCharCode(10))) {
+      const i = line.indexOf("=");
+      if (i > 0 && line.slice(0, i).trim() === "DATA_SECRET") {
+        return line.slice(i + 1).trim().replace(/^["']|["']$/g, "");
+      }
+    }
+  } catch (e) {
+    // Файла нет — законное состояние на машине разработчика.
+  }
+  return "";
+}
+
+// 🔒 СВОЙ ОТПРАВИТЕЛЬ, А НЕ ПРАВКА `postJson`. Тот требует секрет СЛОТА и
+// обслуживает работающий путь приёма; добавив туда ветку, я тронул бы то, что
+// сегодня носит все сообщения владельца, ради двух новых дверей.
+function postOwn(url, payload) {
+  return new Promise((resolve) => {
+    const key = machineSecret();
+    if (!key) {
+      return resolve({ ok: false, error: "no-machine-secret" });
+    }
+    const u = new URL(url);
+    const lib = u.protocol === "https:" ? https : http;
+    const body = JSON.stringify(payload);
+    const req = lib.request(
+      {
+        headers: {
+          "content-length": Buffer.byteLength(body),
+          "content-type": "application/json",
+          "x-data-secret": key,
+        },
+        hostname: u.hostname,
+        method: "POST",
+        path: u.pathname,
+        port: u.port || (u.protocol === "https:" ? 443 : 80),
+      },
+      (res) => {
+        let buf = "";
+        res.on("data", (d) => { buf += d; });
+        res.on("end", () => {
+          try { resolve(JSON.parse(buf)); }
+          catch { resolve({ ok: false, error: "bad-answer", status: res.statusCode }); }
+        });
+      },
+    );
+    req.on("error", (e) => resolve({ ok: false, error: String(e.message) }));
+    req.write(body);
+    req.end();
+  });
+}
+
 /**
  * Секрет читается ИЗ ФАЙЛА, а не из окружения процесса.
  *
@@ -269,6 +338,100 @@ async function runRequest(a) {
   ].join(String.fromCharCode(10));
 }
 
+// ---------- инструменты первичной сепарации (155-7) ----------
+//
+// 🔒 РАЗБОР ДЕЛАЕТ АГЕНТ, А ИНСТРУМЕНТ ЗАПИСЫВАЕТ. Модель уже прочитала
+// сообщение; второй разбор на стороне службы стоил бы второго вызова ради
+// ответа, который есть, — и разошёлся бы с первым.
+const TOOL_SEPARATE = {
+  description:
+    "ПЕРВЫМ ДЕЛОМ на каждое сообщение человека: назови его род. Возвращает строку о категории, " +
+    "а для родов automation-read и automation-write — НОМЕР автоматизации, который назови человеку. " +
+    "Повтор с тем же message_id второй автоматизации не заводит.",
+  inputSchema: {
+    properties: {
+      kind: {
+        description:
+          "general (общий вопрос) | automation-read (вопрос к памяти) | automation-write (запрос на запись) | dev-request (просьба построить) | unparsed (разобрать не удалось)",
+        type: "string",
+      },
+      lang: { description: "ru или en", type: "string" },
+      message_id: { description: "message_id из тега — по нему повтор не задваивается", type: "string" },
+      remind: {
+        description:
+          "Отложенное действие, если человек попросил напомнить: {text, due_at (UTC, ISO), tz (IANA, например Europe/Madrid)}. Без tz срок НЕ создаётся — спроси зону у человека.",
+        type: "object",
+      },
+      scope: {
+        description:
+          "От чего зависит истинность: {\"geo.city\": \"Мадрид\"}. Назови, если человек указал место или другое условие.",
+        type: "object",
+      },
+    },
+    required: ["kind"],
+    type: "object",
+  },
+  name: "separate",
+};
+
+const TOOL_CLOSE = {
+  description:
+    "Объявить, что работа закончена: род step (закрыт шаг цепочки) или whole (закрыта целиком). " +
+    "Возвращает список решений с причинами — что система сделает и чего не станет делать. " +
+    "Закрытие не наступает само: молчание человека закрытием НЕ является.",
+  inputSchema: {
+    properties: {
+      automation_id: { description: "Номер автоматизации", type: "number" },
+      fact_keys: { description: "Ключи сработавших признаков реестра", type: "array" },
+      from_media: { description: "Было ли извлечение из фото, голоса или видео", type: "boolean" },
+      has_next_step: { description: "Объявлена ли следующая ступень цепочки", type: "boolean" },
+      kind: { description: "step | whole", type: "string" },
+      messages: { description: "Сколько сообщений было в цепочке", type: "number" },
+      missing_facts: { description: "Каких признаков не хватило при разборе", type: "array" },
+      summary: { description: "Короткий пересказ работы своими словами", type: "string" },
+      tools: { description: "Какие инструменты звались", type: "array" },
+    },
+    required: ["automation_id", "kind"],
+    type: "object",
+  },
+  name: "close",
+};
+
+async function runSeparate(a) {
+  const r = await postOwn(SEPARATE_URL, {
+    kind: String(a.kind || ''),
+    lang: a.lang === 'en' ? 'en' : 'ru',
+    message_id: a.message_id ? String(a.message_id) : undefined,
+    remind: a.remind || undefined,
+    scope: a.scope || undefined,
+  });
+  // 🔒 ОТКАЗ НАЗЫВАЕТСЯ ПРИЧИНОЙ, а не превращается в бодрое «готово».
+  if (r?.ok !== true) {
+    return 'Сепарация НЕ выполнена: ' + String(r?.error || 'нет ответа');
+  }
+  const out = [r.line];
+  if (r.automationId) {
+    out.push('Автоматизация № ' + r.automationId + (r.repeat ? ' (уже была заведена)' : ' (предварительно)'));
+  }
+  if (r.scopeKey) { out.push('Охват: ' + r.scopeKey); }
+  if (r.scopeRefused) { out.push('Охват назван неполно — ключ не собран; спроси недостающее у человека.'); }
+  if (r.scheduleId) { out.push('Напоминание поставлено, № ' + r.scheduleId); }
+  if (r.scheduleRefused === 'no-tz') { out.push('Напоминание НЕ поставлено: не назван часовой пояс. Спроси, где человек находится.'); }
+  if (r.scheduleRefused === 'no-due') { out.push('Напоминание НЕ поставлено: не назван срок.'); }
+  return out.join(String.fromCharCode(10));
+}
+
+async function runClose(a) {
+  const r = await postOwn(CLOSE_URL, a);
+  if (r?.ok !== true) {
+    return 'Закрытие НЕ выполнено: ' + String(r?.error || 'нет ответа');
+  }
+  const lines = ['Состояние: ' + r.state + '.'];
+  for (const d of r.decisions || []) {
+    lines.push((d.do ? 'ДА  ' : 'нет ') + d.action + ' — ' + d.why);
+  }
+  return lines.join(String.fromCharCode(10));
+}
 // ---------- MCP по stdio: построчный JSON-RPC ----------
 
 // 🔒 СЧЁТЧИК ЖИВЫХ ВЫЗОВОВ — НЕ УКРАШЕНИЕ, А ЗАЩИТА ОТ ОБОРВАННОГО ПРИЁМА.
@@ -309,11 +472,12 @@ async function handle(m) {
     });
   }
   if (m.method === "tools/list") {
-    return ok(m.id, { tools: [TOOL, TOOL_REQUEST] });
+    return ok(m.id, { tools: [TOOL, TOOL_REQUEST, TOOL_SEPARATE, TOOL_CLOSE] });
   }
   if (m.method === "tools/call") {
     const p = m.params || {};
-    if (p.name !== TOOL.name && p.name !== TOOL_REQUEST.name) {
+    const KNOWN = [TOOL.name, TOOL_REQUEST.name, TOOL_SEPARATE.name, TOOL_CLOSE.name];
+    if (!KNOWN.includes(p.name)) {
       return fail(m.id, `unknown tool: ${p.name}`);
     }
     inFlight += 1;
@@ -322,7 +486,11 @@ async function handle(m) {
       const text =
         p.name === TOOL_REQUEST.name
           ? await runRequest(args)
-          : await runIntake(args);
+          : p.name === TOOL_SEPARATE.name
+            ? await runSeparate(args)
+            : p.name === TOOL_CLOSE.name
+              ? await runClose(args)
+              : await runIntake(args);
       ok(m.id, { content: [{ text, type: "text" }] });
     } catch (e) {
       ok(m.id, {
