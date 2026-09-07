@@ -183,6 +183,27 @@ const server = createServer((req, res) => {
   handle(req, res);
 });
 
+// 🔒 СОБЫТИЕ `upgrade` ПРИНАДЛЕЖИТ МОСТУ ЦЕЛИКОМ, И ЭТО ОТБИРАЕТСЯ ЯВНО (157-3).
+//
+// ✗ ОПЛАЧЕНО ДНЁМ ОТЛАДКИ 2026-09-07. Next вешает СВОЙ обработчик `upgrade` не
+// при старте, а из обработчика ПЕРВОГО HTTP-запроса: `setupWebSocketHandler`
+// берёт сервер из `req.socket.server` (`next/dist/server/next.js:313`). Дальше
+// `router-server.js:670` закрывает сокет, если маршрутизатор что-то сматчил, —
+// в том числе тот, который мост уже поднял секундой раньше.
+//
+// 🛑 ОТСЮДА САМЫЙ ЗЛОЙ СИМПТОМ: ОТКАЗ ПЕРЕМЕЖАЮЩИЙСЯ. Первое соединение после
+// перезапуска живёт (Next ещё не привязался), все следующие рвутся через 3 мс
+// после приветствия — без ошибки, без кадра закрытия, с кодом 1006. Измеренная
+// разница «по петле работает, из браузера нет» была ложной: по петле я пробовал
+// сразу после перезапуска, а браузер успевал сделать HTTP-запрос до сокета.
+//
+// 🔒 ЛЕЧЕНИЕ — ЗАСТАВИТЬ NEXT ПРИВЯЗАТЬСЯ СЕЙЧАС И ТУТ ЖЕ СНЯТЬ ЕГО. Его
+// внутренний флаг `didWebSocketSetup` после этого не даст привязаться второй
+// раз. Ничего не теряется: наш обработчик сам зовёт `getUpgradeHandler()` для
+// всего, кроме `/pty`.
+app.setupWebSocketHandler?.(server);
+server.removeAllListeners("upgrade");
+
 const wss = new WebSocketServer({ noServer: true });
 let sessions = 0;
 
@@ -199,17 +220,6 @@ server.on("upgrade", (req, socket, head) => {
   }
 
   if (pathname === "/pty") {
-    // 🛑 ЛОВУШКА НА СОКЕТ (157-3). Кто закрывает соединение через 3 мс после
-    // приветствия — в коде моста такого места нет. Ловушка печатает СТЕК
-    // закрывающего: имя вместо пятой версии подряд.
-    const nm = (t) => { process.stderr.write("[pty] СОКЕТ " + t + ": " + new Error("trace").stack.split(String.fromCharCode(10)).slice(1, 7).join(" << ") + String.fromCharCode(10)); };
-    const origEnd = socket.end.bind(socket);
-    socket.end = (...a) => { nm("end"); return origEnd(...a); };
-    const origDestroy = socket.destroy.bind(socket);
-    socket.destroy = (...a) => { nm("destroy"); return origDestroy(...a); };
-    socket.on("end", () => process.stderr.write("[pty] СОКЕТ: FIN пришёл СНАРУЖИ" + String.fromCharCode(10)));
-    socket.on("error", (e) => process.stderr.write("[pty] СОКЕТ ошибка: " + e.message + String.fromCharCode(10)));
-    socket.on("close", (he) => process.stderr.write("[pty] СОКЕТ закрыт, hadError=" + he + String.fromCharCode(10)));
     wss.handleUpgrade(req, socket, head, (ws) => {
       wss.emit("connection", ws, req);
     });
