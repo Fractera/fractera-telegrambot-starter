@@ -103,7 +103,19 @@ export async function proxy(request: NextRequest) {
         "__Secure-next-auth.session-token",
         "next-auth.session-token",
       ]) {
-        away.cookies.set(name, "", { path: "/", maxAge: 0 });
+        // 🛑 ПРЕФИКС `__Secure-` ТРЕБУЕТ ФЛАГА `Secure`, ИНАЧЕ БРАУЗЕР
+        // ОТКЛОНЯЕТ УСТАНОВКУ МОЛЧА — И ОЧИСТКА НЕ ПРОИСХОДИТ. ✗ оплачено в тот
+        // же час: первая версия этой правки ставила пустое значение без `secure`,
+        // ответ уходил с заголовком, браузер его игнорировал, и человек
+        // оставался внутри — ровно как до правки. Заголовок в ответе и
+        // применённая кука — разные утверждения.
+        away.cookies.set(name, "", {
+          httpOnly: true,
+          maxAge: 0,
+          path: "/",
+          sameSite: "lax",
+          secure: name.startsWith("__Secure-"),
+        });
       }
     }
     return away;
