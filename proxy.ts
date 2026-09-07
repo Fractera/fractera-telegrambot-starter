@@ -25,11 +25,55 @@ function publicOrigin(request: NextRequest): string {
   return host ? `${proto}://${host}` : new URL(request.url).origin;
 }
 
+// 🔒 ЯЗЫКИ СЛУЖБЫ — ДВА, И СПИСОК ЗДЕСЬ ЕДИНСТВЕННЫЙ. Второй перечень рядом с
+// настоящим разошёлся бы молча: страница на языке, которого нет в списке,
+// оказалась бы за замком без причины.
+const SUPPORTED = ["ru", "en"];
+
+// 🔒 АДРЕС СЛУЖБЫ ВХОДА ВЫВОДИТСЯ ИЗ ХОСТА, А НЕ ХРАНИТСЯ КОНСТАНТОЙ — зеркало
+// приёма с порта 3000. На домене это `auth.<апекс>`, на голом IP — соседний
+// порт. Ссылка в разметке про это не знает и знать не должна.
+function publicAuthOrigin(request: NextRequest): string {
+  const host =
+    request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? "";
+  const proto = request.headers.get("x-forwarded-proto") ?? "https";
+  if (!host) {
+    return process.env.NEXT_PUBLIC_AUTH_URL ?? "http://localhost:3001";
+  }
+  // Голый IP с портом: служба входа живёт соседним портом на той же машине.
+  const m = host.match(/^([^:]+):(d+)$/);
+  if (m) {
+    return `${proto}://${m[1]}:3001`;
+  }
+  // Домен: `chat.aifa.dev` → `auth.aifa.dev`. Первый ярлык заменяется, апекс цел.
+  const parts = host.split(".");
+  const apex = parts.length > 2 ? parts.slice(1).join(".") : host;
+  return `${proto}://auth.${apex}`;
+}
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (pathname.startsWith("/ping")) {
     return new Response("pong", { status: 200 });
+  }
+
+  // 🔒 ССЫЛКИ ВХОДА И ВЫХОДА УВОДЯТСЯ В СЛУЖБУ — ЗЕРКАЛО ПОРТА 3000 (156-1).
+  // Островок главной страницы шлёт ОТНОСИТЕЛЬНЫЕ `/login` и `/logout`, как на
+  // 3000: адрес службы входа выводится из хоста здесь, а не в разметке. Иначе
+  // ссылка знала бы про домен, и на голом IP она вела бы в никуда.
+  // 🔒 ВЫХОДУ ПРИКЛАДЫВАЕТСЯ АДРЕС ВОЗВРАТА: служба чистит куку и обязана
+  // вернуть человека СЮДА, а вывести наш адрес сама она не может — порт и
+  // поддомен у каждой службы свои.
+  if (pathname === "/login" || pathname === "/register" || pathname === "/logout") {
+    const search = new URLSearchParams(request.nextUrl.search);
+    if (pathname === "/logout" && !search.has("redirectUrl")) {
+      search.set("redirectUrl", `${publicOrigin(request)}/${langOf(request)}`);
+    }
+    const qs = search.toString();
+    return NextResponse.redirect(
+      `${publicAuthOrigin(request)}${pathname}${qs ? `?${qs}` : ""}`
+    );
   }
 
   // Родные маршруты NextAuth шаблона оставлены живыми: сносить чужой механизм
@@ -57,6 +101,16 @@ export async function proxy(request: NextRequest) {
   // 🔒 ЯЗЫКОВОЙ АДРЕС ЗАГЛУШКИ ПРОПУСКАЕТСЯ БЕЗ СЕССИИ — иначе она отправляла бы
   // к входу того, кто на неё же и вернулся после выхода, и человек ходил бы по
   // кругу.
+  // 🔒 ГЛАВНАЯ СТРАНИЦА ПУБЛИЧНА (156-1, решение владельца 2026-09-07). Корень
+  // и языковой корень пропускаются без сессии: это единственная поверхность,
+  // которую служба показывает снаружи, и на ней стоит кнопка входа.
+  // 🛑 ПРОВЕРКА ТОЧНАЯ, А НЕ ПО ПРЕФИКСУ. `/ru` пропускается, `/ru/settings` —
+  // нет. Префикс открыл бы заодно всё, что появится под языком завтра, и открыл
+  // бы молча — та же ошибка, от которой защищены двери выше.
+  if (pathname === "/" || SUPPORTED.some(l => pathname === `/${l}`)) {
+    return NextResponse.next();
+  }
+
   if (pathname.endsWith("/welcome")) {
     return NextResponse.next();
   }
