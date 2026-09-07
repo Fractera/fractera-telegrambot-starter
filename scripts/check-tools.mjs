@@ -57,13 +57,7 @@ const EXCEPTIONS = [];
 // 🔒 ДОЛГИ — ПУСТОЙ СПИСОК С ОБЪЯСНЕНИЕМ, А НЕ ОТСУТСТВУЮЩИЙ МЕХАНИЗМ.
 const DEBTS = [];
 
-// Записи, существовавшие в день введения правила о разметке.
-const BASELINE = new Set([
-  "inbox-store",
-  "fact-matcher",
-  "registry-evolution",
-  "link-finder",
-]);
+
 
 const TAGS = new Set(listFrom("lib/registry/tags.ts", "REGISTRY_TAGS"));
 const cfg = JSON.parse(read("TOOLS-CONFIG/tools-config.json"));
@@ -75,7 +69,7 @@ const nonEmptyStrings = (v) =>
   v.every((x) => typeof x === "string" && x.trim().length > 0);
 
 let bad = 0;
-let unmarked = 0;
+
 
 // Дубли идентификаторов: две правды об одном инструменте.
 const ids = tools.map((t) => t.id);
@@ -118,20 +112,11 @@ for (const t of tools) {
   if (problems.length === 0) {
     continue;
   }
-  if (BASELINE.has(t.id)) {
-    unmarked += 1;
-    continue;
-  }
   bad += 1;
   console.error(`✗ ${t.id}: запись заведена без разметки — ${problems.join("; ")}`);
   console.error("  Лечение: навык `create-registry-entry`, раздел 2.");
 }
 
-if (unmarked) {
-  DEBTS.push(
-    `разметка (tags/triggers/answers) отсутствует у ${unmarked} из ${BASELINE.size} инструментов, заведённых до 2026-09-07 — механическим поиском они не находятся`
-  );
-}
 
 console.log(`\nисключения (${EXCEPTIONS.length}):`);
 for (const e of EXCEPTIONS) {
