@@ -217,6 +217,10 @@ server.on("upgrade", (req, socket, head) => {
 });
 
 wss.on("connection", (ws) => {
+  // 🔒 КАЖДОЕ СОЕДИНЕНИЕ НАЗЫВАЕТ СЕБЯ В ЖУРНАЛЕ. Без этого нельзя отличить
+  // «до моста не дошли» от «мост принял и отказал» — а это разные починки.
+  process.stderr.write(`[pty] соединение открыто, сессий сейчас ${sessions}
+`);
   let proc = null;
   let started = false;
 
@@ -226,8 +230,15 @@ wss.on("connection", (ws) => {
     }
   }, INIT_DEADLINE_MS);
 
+  // 🛑 ОТКАЗ МОСТА ОБЯЗАН НАЗВАТЬ ПРИЧИНУ В ЖУРНАЛЕ, А НЕ ТОЛЬКО В КОДЕ
+  // ЗАКРЫТИЯ (157-2). ✗ ОПЛАЧЕНО ТРЕМЯ ЧАСАМИ ОТЛАДКИ 2026-09-07: владелец
+  // видел чёрный экран и «соединение закрыто», браузер получал код 1006 без
+  // причины, а сервер знал ответ и молчал. Код закрытия проходит через nginx
+  // не всегда — причина, не попавшая в журнал, не существует ни для кого.
   function fail(reason) {
     clearTimeout(deadline);
+    process.stderr.write(`[pty] отказ: ${reason}
+`);
     ws.close(CLOSE_POLICY, reason);
   }
 
@@ -384,6 +395,11 @@ wss.on("connection", (ws) => {
       }
       proc = null;
     }
+  });
+
+  ws.on("close", (code, reason) => {
+    process.stderr.write(`[pty] закрыто code=${code} reason=${reason || "none"}
+`);
   });
 
   ws.on("error", (err) => {
