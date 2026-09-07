@@ -1,11 +1,17 @@
 import { dataFetch } from "@/lib/fractera/data-service"
 import {
+  AUTOMATION_STATES_TABLE,
+  AUTOMATION_STATES_TABLE_COLUMNS,
   AUTOMATIONS_TABLE,
   AUTOMATIONS_TABLE_COLUMNS,
+  automationStatesTableAlters,
+  automationStatesTableSql,
   automationsTableAlters,
   automationsTableSql,
   isAutomationConfirmState,
+  isAutomationState,
   type AutomationConfirmState,
+  type AutomationState,
 } from "./table"
 
 // ЧТЕНИЕ И ЗАПИСЬ АВТОМАТИЗАЦИЙ — ЧЕРЕЗ ЕДИНСТВЕННУЮ ДВЕРЬ (138-1).
@@ -109,4 +115,114 @@ export async function confirmAutomation(id: number): Promise<boolean> {
     ["confirmed", id, "draft"],
   )
   return Boolean(res.ok)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// СОСТОЯНИЕ АВТОМАТИЗАЦИИ В РАБОЧЕМ ПОТОКЕ (143-1).
+
+/** Род закрытия: закрыт шаг цепочки или автоматизация целиком (§3е). */
+export const CLOSING_KINDS = ["step", "whole"] as const
+export type ClosingKind = (typeof CLOSING_KINDS)[number]
+
+export type StateRow = {
+  id: number
+  automationId: number
+  state: AutomationState
+  closingKind: ClosingKind | null
+  reason: string | null
+  createdAt: string
+}
+
+function toStateRow(row: Record<string, unknown>): StateRow {
+  const state = row.state
+  const kind = row.closing_kind
+  return {
+    id: Number(row.id),
+    automationId: Number(row.automation_id),
+    state: isAutomationState(state) ? state : "open",
+    closingKind: kind === "step" || kind === "whole" ? kind : null,
+    reason: typeof row.reason === "string" ? row.reason : null,
+    createdAt: String(row.created_at ?? ""),
+  }
+}
+
+/** Создать таблицу переходов и провести существующую по лестнице. */
+export async function ensureAutomationStatesTable(): Promise<{ ok: boolean; upgraded: string[]; error?: string }> {
+  const created = await sql(automationStatesTableSql())
+  if (!created.ok) return { ok: false, upgraded: [], error: created.error ?? "refused" }
+  const upgraded: string[] = []
+  for (const statement of automationStatesTableAlters()) {
+    const res = await sql(statement)
+    if (res.ok) upgraded.push(statement.split("ADD COLUMN ")[1] ?? statement)
+    else if (!/duplicate column/i.test(res.error ?? "")) upgraded.push(`ОТКАЗ ${res.error ?? "failed"}`)
+  }
+  return { ok: true, upgraded }
+}
+
+/**
+ * Текущее состояние — ПОСЛЕДНЯЯ строка перехода.
+ *
+ * 🔒 ПУСТАЯ ИСТОРИЯ ЗНАЧИТ `open`, А НЕ «НЕИЗВЕСТНО». Автоматизация, о которой
+ * ещё никто ничего не решил, идёт — это и есть её нормальное начало.
+ * 🔒 ПОРЯДОК ПО `id`, А НЕ ПО ВРЕМЕНИ: два перехода внутри одной секунды получили
+ * бы одинаковую метку времени, и «последним» стал бы случайный.
+ */
+export async function currentState(automationId: number): Promise<AutomationState> {
+  const res = await sql(
+    `SELECT ${AUTOMATION_STATES_TABLE_COLUMNS.join(", ")} FROM ${AUTOMATION_STATES_TABLE}
+     WHERE automation_id = ? ORDER BY id DESC LIMIT 1`,
+    [automationId],
+  )
+  const row = res.rows?.[0]
+  return row ? toStateRow(row).state : "open"
+}
+
+/** Вся история переходов, от первой к последней. */
+export async function stateHistory(automationId: number): Promise<StateRow[]> {
+  const res = await sql(
+    `SELECT ${AUTOMATION_STATES_TABLE_COLUMNS.join(", ")} FROM ${AUTOMATION_STATES_TABLE}
+     WHERE automation_id = ? ORDER BY id ASC`,
+    [automationId],
+  )
+  return (res.rows ?? []).map(toStateRow)
+}
+
+/**
+ * Записать переход.
+ *
+ * 🔒 ПОВТОР ТОГО ЖЕ СОСТОЯНИЯ НЕ ПИШЕТСЯ — с одним названным исключением.
+ * `step-closed` законно повторяется: ступеней в цепочке много, и каждая
+ * закрывается своей строкой. Всё остальное, записанное дважды подряд, — шум,
+ * который потом читается как две разные работы.
+ *
+ * 🛑 ЭТО НЕ ИДЕМПОТЕНТНОСТЬ ПРОТОКОЛА. Здесь запрещён лишний повтор СТРОКИ;
+ * запрет вторых побочных действий — отзыва, заявки, публикации — живёт в 143-2.
+ */
+export async function setState(
+  automationId: number,
+  state: AutomationState,
+  opts: { closingKind?: ClosingKind; reason?: string } = {},
+): Promise<{ written: boolean; state: AutomationState }> {
+  const now = await currentState(automationId)
+  if (now === state && state !== "step-closed") return { written: false, state: now }
+  const res = await sql(
+    `INSERT INTO ${AUTOMATION_STATES_TABLE} (automation_id, state, closing_kind, reason) VALUES (?, ?, ?, ?)`,
+    [automationId, state, opts.closingKind ?? null, opts.reason ?? null],
+  )
+  return { written: Boolean(res.ok), state: res.ok ? state : now }
+}
+
+/**
+ * Закрыть — ЯВНО и с названным родом (§3е).
+ *
+ * 🔒 ЗАКРЫТИЕ ОБЪЯВЛЯЕТСЯ, А НЕ НАСТУПАЕТ. «Человек перестал писать» — это
+ * отсутствие сообщений, а не решение; на нём нельзя строить ни отзыв, ни
+ * следующую ступень. Поэтому закрыть может только этот вызов, и род обязателен.
+ */
+export async function closeAutomation(
+  automationId: number,
+  kind: ClosingKind,
+  reason?: string,
+): Promise<{ written: boolean; state: AutomationState }> {
+  return setState(automationId, kind === "step" ? "step-closed" : "closed", { closingKind: kind, reason })
 }

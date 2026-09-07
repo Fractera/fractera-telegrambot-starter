@@ -85,3 +85,79 @@ export const AUTOMATIONS_TABLE_COLUMNS = [
   "first_message_id",
   "created_at",
 ] as const
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// СОСТОЯНИЯ АВТОМАТИЗАЦИИ В РАБОЧЕМ ПОТОКЕ (143-1).
+//
+// 🔒 ЭТО ВТОРАЯ ОСЬ, А НЕ ПРОДОЛЖЕНИЕ ПЕРВОЙ. `confirm_state` выше отвечает на
+// вопрос «подтверждён ли НОМЕР» (§3а); здесь — «где автоматизация в РАБОТЕ»
+// (§3е). Разведены они в 138-1 до столкновения, и сливать их нельзя: иначе
+// «подтверждено» перестанет отличаться от «закрыто».
+//
+// 🔒 ПЕРЕХОД ПИШЕТСЯ НОВОЙ СТРОКОЙ, А НЕ ПРАВКОЙ ПОЛЯ. Отдельная колонка
+// «текущее состояние» была бы второй правдой и разошлась бы с историей молча —
+// тот же закон, что у `lifecycle` признаков. Текущее читается как ПОСЛЕДНЯЯ
+// строка.
+//
+// 🔒 СОРТИРОВКА ПО `id`, А НЕ ПО `created_at`, И ЭТО ОПЛАЧЕНО РАНЬШЕ: умолчание
+// времени в базе печатает СЕКУНДЫ, и два перехода внутри одной секунды дали бы
+// одинаковую метку — «последним» стал бы случайный.
+
+export const AUTOMATION_STATES_TABLE = "automation_states"
+
+/**
+ * Где автоматизация находится в работе.
+ *
+ *   open          — идёт;
+ *   step-closed   — закрыт ШАГ цепочки: дальше следующая ступень;
+ *   closed        — закрыта ЦЕЛИКОМ: результат у человека;
+ *   waiting-tool  — ждёт способности, которой в проекте нет (§3м, шаг 151).
+ *
+ * 🔒 ДВА РОДА ЗАКРЫТИЯ НЕ СВОДЯТСЯ ДРУГ К ДРУГУ (§3е): шаг, закрытый как
+ * автоматизация, оборвёт цепочку; автоматизация, закрытая как шаг, никогда не
+ * спросит отзыв.
+ * 🛑 `waiting-tool` ОБЪЯВЛЕН ЗДЕСЬ ЗНАЧЕНИЕМ, НО НЕ НАПОЛНЕН: его механизм —
+ * шаг 151. Объявлен намеренно, чтобы следующий агент не завёл рядом второй
+ * список состояний.
+ */
+export const AUTOMATION_STATES = ["open", "step-closed", "closed", "waiting-tool"] as const
+export type AutomationState = (typeof AUTOMATION_STATES)[number]
+
+export function isAutomationState(v: unknown): v is AutomationState {
+  return typeof v === "string" && (AUTOMATION_STATES as readonly string[]).includes(v)
+}
+
+/** Форма таблицы переходов. Починка — рядом, как и у соседей выше. */
+export function automationStatesTableSql(): string {
+  return `
+    CREATE TABLE IF NOT EXISTS ${AUTOMATION_STATES_TABLE} (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      automation_id INTEGER NOT NULL,
+      state TEXT NOT NULL,
+      -- Чем закрыто: шаг цепочки или автоматизация целиком. Пусто у не-закрытий.
+      closing_kind TEXT,
+      -- Почему перешли. Пусто — законно: причина известна не всегда.
+      reason TEXT,
+      created_at TEXT NOT NULL DEFAULT (strftime(%Y-%m-%dT%H:%M:%SZ,now))
+    );
+    CREATE INDEX IF NOT EXISTS ${AUTOMATION_STATES_TABLE}_owner ON ${AUTOMATION_STATES_TABLE} (automation_id, id);
+  `
+}
+
+export const AUTOMATION_STATES_LATE_COLUMNS: readonly string[] = []
+
+export function automationStatesTableAlters(): string[] {
+  return AUTOMATION_STATES_LATE_COLUMNS.map(
+    c => `ALTER TABLE ${AUTOMATION_STATES_TABLE} ADD COLUMN ${c} TEXT`,
+  )
+}
+
+export const AUTOMATION_STATES_TABLE_COLUMNS = [
+  "id",
+  "automation_id",
+  "state",
+  "closing_kind",
+  "reason",
+  "created_at",
+] as const
