@@ -2,8 +2,10 @@
 import { NextResponse } from "next/server"
 import {
   createAutomation,
+  currentState,
   ensureAutomationsTable,
   listAutomationRows,
+  readAutomation,
   setAutomationFields,
   setState,
 } from "@/lib/automations/store"
@@ -72,7 +74,29 @@ export async function POST(request: Request) {
   const lang = body.lang === "en" ? "en" : "ru"
   const line = categoryLine(kind, lang)
 
-  if (!opensAutomation(kind)) {
+  // ── УТОЧНЕНИЕ ПРОДОЛЖАЕТ АВТОМАТИЗАЦИЮ, А НЕ ЗАВОДИТ ВТОРУЮ (157-2) ──────
+  //
+  // ✗ ОПЛАЧЕНО ЖИВЬЁМ 2026-09-07. Бот спросил у владельца часовой пояс, тот
+  // ответил «Канарские острова» — и ответ на СВОЙ ЖЕ вопрос получил отдельный
+  // номер. Задача осталась в № 1, а охват и срок уехали в № 2: напоминание
+  // оказалось привязано не к той работе, и неполными стали ОБЕ записи.
+  //
+  // 🔒 ДЕДУП ПО `message_id` ЭТОГО НЕ ЛОВИТ ПО УСТРОЙСТВУ: он защищает от
+  // ПОВТОРНОЙ ДОСТАВКИ одного сообщения, а уточнение — сообщение НОВОЕ.
+  const continuesRaw = body.continues
+  const continues =
+    typeof continuesRaw === "number" && Number.isInteger(continuesRaw) && continuesRaw > 0
+      ? continuesRaw
+      : null
+  if (continuesRaw !== undefined && continuesRaw !== null && continues === null) {
+    return NextResponse.json({ ok: false, error: "bad-continues", line }, { status: 400 })
+  }
+
+  // 🔒 РОД, НЕ ОТКРЫВАЮЩИЙ АВТОМАТИЗАЦИЮ, ПРИ ПРОДОЛЖЕНИИ НЕ ПРЕРЫВАЕТ РАБОТУ.
+  // Уточнение часто выглядит как `general` — «Канарские острова» само по себе
+  // ничего не заводит. Выйди дверь здесь, охват и срок потерялись бы молча,
+  // а человек считал бы, что ответил на вопрос.
+  if (!opensAutomation(kind) && continues === null) {
     return NextResponse.json({ ok: true, kind, line, automationId: null })
   }
 
@@ -88,20 +112,49 @@ export async function POST(request: Request) {
   // 🔒 ПОВТОР ТОГО ЖЕ СООБЩЕНИЯ НЕ ЗАВОДИТ ВТОРУЮ АВТОМАТИЗАЦИЮ. Telegram и
   // плагин повторяют доставку чаще, чем кажется; без этой проверки один вопрос
   // человека получил бы два номера, и второй остался бы навсегда пустым.
-  if (messageId) {
-    const seen = await findByMessage(messageId)
-    if (seen !== null) {
-      return NextResponse.json({ ok: true, kind, line, automationId: seen, repeat: true })
-    }
-  }
+  let id: number
+  let continued = false
 
-  const id = await createAutomation(messageId)
-  if (id === null) {
-    return NextResponse.json({ ok: false, error: "not-created", line }, { status: 503 })
+  if (continues !== null) {
+    // 🔒 НЕСУЩЕСТВУЮЩИЙ НОМЕР — ОТКАЗ С ПРИЧИНОЙ, А НЕ ТИХОЕ ЗАВЕДЕНИЕ НОВОЙ.
+    // Молчаливая подмена вернула бы ровно тот дефект, ради которого правка и
+    // делается, — только теперь его нельзя было бы заметить.
+    const existing = await readAutomation(continues)
+    if (existing === null) {
+      return NextResponse.json(
+        { ok: false, error: "unknown-automation", got: continues, line },
+        { status: 400 },
+      )
+    }
+    // 🛑 ЗАКРЫТУЮ ПРОДОЛЖАТЬ НЕЛЬЗЯ: открыть заново — другое действие, и делать
+    // его молча значит дописывать срок в работу, объявленную законченной.
+    if ((await currentState(continues)) === "closed") {
+      return NextResponse.json(
+        { ok: false, error: "automation-closed", got: continues, line },
+        { status: 409 },
+      )
+    }
+    id = continues
+    continued = true
+    // Строки истории здесь нет намеренно: `setState` гасит повтор того же
+    // состояния (155-3), а «open» поверх «open» не несёт нового решения.
+  } else {
+    if (messageId) {
+      const seen = await findByMessage(messageId)
+      if (seen !== null) {
+        return NextResponse.json({ ok: true, kind, line, automationId: seen, repeat: true })
+      }
+    }
+
+    const created = await createAutomation(messageId)
+    if (created === null) {
+      return NextResponse.json({ ok: false, error: "not-created", line }, { status: 503 })
+    }
+    id = created
   }
   // 🔒 СОСТОЯНИЕ ПИШЕТСЯ СРАЗУ: автоматизация без первой строки перехода
   // читается как «о ней ещё никто ничего не решил», а решение уже принято.
-  await setState(id, "open", { reason: `сепарация: ${kind}` })
+  if (!continued) await setState(id, "open", { reason: `сепарация: ${kind}` })
 
   // ── ОХВАТ РАЗГОВОРА (155-4) ──────────────────────────────────────────────
   //
@@ -141,6 +194,9 @@ export async function POST(request: Request) {
     kind,
     line,
     automationId: id,
+    // 🔒 ПРОДОЛЖЕНИЕ НАЗЫВАЕТСЯ В ОТВЕТЕ: агент обязан сказать человеку «та же
+    // автоматизация», а не выдать номер повторно как новый.
+    continued,
     scopeKey: key || null,
     // 🔒 НЕДОСТАЮЩЕЕ НАЗЫВАЕТСЯ, А НЕ МОЛЧИТ: это вход для прямого вопроса
     // человеку (141-7), и без него агент не узнает, чего спросить.

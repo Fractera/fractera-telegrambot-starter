@@ -347,13 +347,20 @@ const TOOL_SEPARATE = {
   description:
     "ПЕРВЫМ ДЕЛОМ на каждое сообщение человека: назови его род. Возвращает строку о категории, " +
     "а для родов automation-read и automation-write — НОМЕР автоматизации, который назови человеку. " +
-    "Повтор с тем же message_id второй автоматизации не заводит.",
+    "Повтор с тем же message_id второй автоматизации не заводит. " +
+    "ЕСЛИ человек отвечает на ТВОЙ вопрос или уточняет уже заведённую работу — передай continues " +
+    "с её номером: уточнение продолжает автоматизацию, а не заводит новую.",
   inputSchema: {
     properties: {
       kind: {
         description:
           "general (общий вопрос) | automation-read (вопрос к памяти) | automation-write (запрос на запись) | dev-request (просьба построить) | unparsed (разобрать не удалось)",
         type: "string",
+      },
+      continues: {
+        description:
+          "Номер уже заведённой автоматизации, если это сообщение — уточнение к ней или ответ на твой вопрос. Тогда охват и срок лягут в НЕЁ, а новая не заведётся. Несуществующий номер даст отказ.",
+        type: "number",
       },
       lang: { description: "ru или en", type: "string" },
       message_id: { description: "message_id из тега — по нему повтор не задваивается", type: "string" },
@@ -399,6 +406,7 @@ const TOOL_CLOSE = {
 
 async function runSeparate(a) {
   const r = await postOwn(SEPARATE_URL, {
+    continues: typeof a.continues === 'number' ? a.continues : undefined,
     kind: String(a.kind || ''),
     lang: a.lang === 'en' ? 'en' : 'ru',
     message_id: a.message_id ? String(a.message_id) : undefined,
@@ -411,7 +419,12 @@ async function runSeparate(a) {
   }
   const out = [r.line];
   if (r.automationId) {
-    out.push('Автоматизация № ' + r.automationId + (r.repeat ? ' (уже была заведена)' : ' (предварительно)'));
+    // 🔒 ТРИ ИСХОДА НАЗЫВАЮТСЯ РАЗНЫМИ СЛОВАМИ. «Продолжена» человеку надо
+    // сказать иначе, чем «заведена»: иначе он решит, что у него две работы.
+    const mark = r.continued ? ' (продолжена, та же работа)'
+      : r.repeat ? ' (уже была заведена)'
+      : ' (предварительно)';
+    out.push('Автоматизация № ' + r.automationId + mark);
   }
   if (r.scopeKey) { out.push('Охват: ' + r.scopeKey); }
   if (r.scopeRefused) { out.push('Охват назван неполно — ключ не собран; спроси недостающее у человека.'); }
