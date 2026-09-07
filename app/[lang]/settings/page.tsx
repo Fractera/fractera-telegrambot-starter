@@ -19,7 +19,7 @@ import { TelegramAbout } from "./_components/telegram-about";
 import { TelegramSettings } from "./_components/telegram-settings";
 import { architectLayerUi } from "./_i18n/architect-layer.i18n";
 import { telegramUi } from "./_i18n/telegram.i18n";
-import { queryAutomations, readAutomationQuery } from "./_lib/automations";
+import { queryAutomationsLive, readAutomationQuery } from "./_lib/automations";
 import { passportOutline } from "./_lib/passport-outline";
 import {
   hrefOfTelegramLogView,
@@ -153,6 +153,11 @@ async function BotSettingsGate({
   // Удали кто-нибудь проект на 3000 целиком — настройки бота останутся живыми,
   // потому что читают не его.
   const channels = await readChannels();
+
+  // 🔒 ПЕРЕЧЕНЬ ЧИТАЕТСЯ ВСЕГДА, А НЕ ТОЛЬКО В СВОЁМ РАЗДЕЛЕ, И ЭТО ДЕШЕВЛЕ
+  // УСЛОВИЯ: один запрос к слою данных против ветки, которая забудется при
+  // следующей правке. Пустой список стоит столько же, сколько его отсутствие.
+  const automationsPage = await queryAutomationsLive(readAutomationQuery(sp));
 
   return (
     <main className="min-h-screen bg-background">
@@ -378,15 +383,20 @@ async function BotSettingsGate({
                 РАСКЛАДКА (`tabs`), а не эта страница — полоса была в
                 `WorkspaceShell` с самого начала. Построен первый вид, остальные
                 честно называют себя. */}
+            {/* 🔒 ПЕРЕЧЕНЬ ЦЕПОЧЕК ПЕРЕЕХАЛ В СВОЙ РАЗДЕЛ (147-2/147-3). Здесь
+                остаётся лента ТЕКУЩЕЙ работы — «Логи Realtime». */}
+            {active === "automations" && (
+              <AutomationsView
+                lang={lang}
+                page={automationsPage}
+                query={readAutomationQuery(sp)}
+                source={automationsPage.source}
+                words={ui.automations}
+              />
+            )}
+
             {active === "logs" &&
-              (view === "automations" ? (
-                <AutomationsView
-                  lang={lang}
-                  page={queryAutomations(readAutomationQuery(sp))}
-                  query={readAutomationQuery(sp)}
-                  words={ui.automations}
-                />
-              ) : view === "parse" ? (
+              (view === "parse" ? (
                 <TaskParseSection
                   dialogUi={appDialogUi(lang)}
                   state={channels}
