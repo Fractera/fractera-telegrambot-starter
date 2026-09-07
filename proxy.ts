@@ -78,9 +78,35 @@ export async function proxy(request: NextRequest) {
       search.set("redirectUrl", `${publicOrigin(request)}/${back}`);
     }
     const qs = search.toString();
-    return NextResponse.redirect(
+    const away = NextResponse.redirect(
       `${publicAuthOrigin(request)}${pathname}${qs ? `?${qs}` : ""}`
     );
+
+    // 🛑 ВЫХОД ЧИСТИТ КУКУ И НА НАШЕМ ХОСТЕ — БЕЗ ЭТОГО ОН НЕ РАБОТАЕТ ВОВСЕ.
+    // ✗ ОПЛАЧЕНО 2026-09-07 ТРЕМЯ КРУГАМИ ОТЛАДКИ, И НАШЁЛ ЭТО ВЛАДЕЛЕЦ, А НЕ Я:
+    // «на 3000 сессию потерял, а в чате всё ещё горит авторизация». Измерено:
+    // `auth.aifa.dev/api/session` отвечает `Unauthorized`, а `chat.aifa.dev/api/me`
+    // в тот же момент — `200` с почтой. Куки ДВЕ: одна общая, с `Domain=.aifa.dev`,
+    // вторая — HOST-ONLY на нашем хосте, оставшаяся от прежнего шаблона.
+    //
+    // 🔒 СЛУЖБА ВХОДА ВЫЧИСТИТЬ ЕЁ НЕ МОЖЕТ ФИЗИЧЕСКИ: браузер не даёт одному
+    // хосту стирать куки другого. Значит это НАША обязанность, и ничья больше.
+    //
+    // 🔒 ЧИСТИМ ВСЕ ИМЕНА, А НЕ ОДНО. Защищённый режим и режим без домена дают
+    // разные префиксы, а старые версии библиотеки — другое имя целиком. Кука,
+    // не попавшая в список, оставит человека внутри — и выглядеть это будет
+    // ровно так, как выглядело: выход «не работает» без единой ошибки.
+    if (pathname === "/logout") {
+      for (const name of [
+        "__Secure-authjs.session-token",
+        "authjs.session-token",
+        "__Secure-next-auth.session-token",
+        "next-auth.session-token",
+      ]) {
+        away.cookies.set(name, "", { path: "/", maxAge: 0 });
+      }
+    }
+    return away;
   }
 
   // Родные маршруты NextAuth шаблона оставлены живыми: сносить чужой механизм
