@@ -76,6 +76,11 @@ export type TelegramUi = {
     saving: string;
     failed: string;
     loading: string;
+    askBot: string;
+    askBotTitle: string;
+    askBotBody: string;
+    askBotWhy: string;
+    askBotClose: string;
   };
   /** Свёрнутая справка раздела «Описание». */
   helpMore: string;
@@ -766,6 +771,12 @@ const EN: TelegramUi = {
     saving: "Saving…",
     failed: "Could not save.",
     loading: "Reading…",
+    askBot: "Add a record",
+    askBotTitle: "Records appear from the conversation, not from a form",
+    askBotBody:
+      "To add more about yourself, just tell the Telegram bot in your own words — «call me Roma», «write to me only after ten», «I count in euros». The bot recognises what you said, remembers it, and the line appears here.",
+    askBotWhy: "This page is for reading and correcting. What you say in the bot is where knowledge about you is born — a second form here would be a second way to say the same thing.",
+    askBotClose: "Got it",
   },
   pages: {
     about: {
@@ -1205,6 +1216,12 @@ const RU: TelegramUi = {
     saving: "Сохраняю…",
     failed: "Сохранить не удалось.",
     loading: "Читаю…",
+    askBot: "Добавить запись",
+    askBotTitle: "Записи появляются из разговора, а не из формы",
+    askBotBody:
+      "Чтобы добавить о себе больше, просто расскажите об этом Telegram-боту в свободной форме — «зови меня Рома», «пиши мне только после десяти», «считаю в евро». Бот распознает сказанное, запомнит, и строка появится здесь.",
+    askBotWhy: "Эта страница — чтобы читать и поправлять. Сказанное боту и есть единственное место, где рождается знание о вас: вторая форма здесь была бы вторым способом сказать одно и то же.",
+    askBotClose: "Понятно",
   },
   pages: {
     about: {

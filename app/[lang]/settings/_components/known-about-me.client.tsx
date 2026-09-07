@@ -40,6 +40,11 @@ type Words = {
   saving: string;
   failed: string;
   loading: string;
+  askBot: string;
+  askBotTitle: string;
+  askBotBody: string;
+  askBotWhy: string;
+  askBotClose: string;
 };
 
 // 🔒 АДРЕС ДВЕРИ ОТНОСИТЕЛЬНЫЙ, КАК У ВСЕХ СОСЕДЕЙ ЭТОГО РАЗДЕЛА. Свой способ
@@ -49,6 +54,7 @@ export function KnownAboutMe({ words }: { words: Words }) {
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
+  const [ask, setAsk] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -109,7 +115,51 @@ export function KnownAboutMe({ words }: { words: Words }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-muted-foreground text-sm">{words.lead}</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <p className="max-w-2xl text-muted-foreground text-sm">{words.lead}</p>
+        <Button onClick={() => setAsk(true)} size="sm" type="button" variant="outline">
+          {words.askBot}
+        </Button>
+      </div>
+
+      {/* 🔒 КНОПКА НЕ ДОБАВЛЯЕТ, А ОБЪЯСНЯЕТ, ГДЕ ДОБАВЛЯЮТ — решение владельца
+          2026-09-08: «вместо того чтобы прямо здесь добавлять, нужно вывести
+          диалоговое окно… расскажите об этом в Telegram-бот в свободной форме».
+          🔒 ДОВОД СИЛЬНЕЕ УДОБСТВА: форма здесь стала бы ВТОРЫМ способом сказать
+          одно и то же. Бот — место, где человек говорит; эта страница — где он
+          смотрит и правит. Две двери к одной способности расходятся молча. */}
+      {ask ? (
+        <div
+          aria-labelledby="known-ask-title"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setAsk(false)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              setAsk(false);
+            }
+          }}
+          role="dialog"
+        >
+          {/* biome-ignore lint/a11y/noStaticElementInteractions: остановка всплытия,
+              чтобы клик по самому окну его не закрывал */}
+          <div
+            className="flex w-full max-w-lg flex-col gap-3 rounded-lg border border-border bg-background p-5 shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="font-medium text-base" id="known-ask-title">
+              {words.askBotTitle}
+            </h3>
+            <p className="text-muted-foreground text-sm">{words.askBotBody}</p>
+            <p className="text-muted-foreground text-xs">{words.askBotWhy}</p>
+            <div className="flex justify-end">
+              <Button onClick={() => setAsk(false)} size="sm" type="button">
+                {words.askBotClose}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {failed ? (
         <p className="text-destructive text-sm" role="alert">
           {failed}

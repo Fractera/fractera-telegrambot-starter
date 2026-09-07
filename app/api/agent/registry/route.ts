@@ -2,6 +2,8 @@
 import { NextResponse } from "next/server"
 import { ACCESS_FUNCTIONS, validateArgs } from "@/lib/registry/access-decl.mjs"
 import { describe, find, isCorpus, list, recall, rememberMiss } from "@/lib/registry/access"
+import { allFacts } from "@/lib/facts/registry"
+import { writeFact } from "@/lib/facts/write"
 import { machineEnv } from "@/lib/fractera/machine-env"
 
 // ДВЕРЬ ЕДИНОГО ВХОДА (157-5, паспорт §3о).
@@ -64,7 +66,7 @@ export async function POST(request: Request) {
 
   // Корпус проверяется отдельно: объявление знает, что это строка, и не знает,
   // какая именно. Закрытый список живёт рядом с примитивами.
-  if (decl.fn !== "recall" && !isCorpus(args.corpus)) {
+  if (decl.fn !== "recall" && decl.fn !== "remember" && !isCorpus(args.corpus)) {
     return NextResponse.json(
       { ok: false, error: "unknown-corpus", got: args.corpus, known: ["facts", "tools"] },
       { status: 400 }
@@ -99,6 +101,37 @@ export async function POST(request: Request) {
   if (decl.fn === "describe") {
     const answer = describe(args.corpus as "facts" | "tools", String(args.key ?? ""))
     return NextResponse.json({ ok: true, fn: "describe", answer })
+  }
+  if (decl.fn === "remember") {
+    // 🛑 ГРАНИЦУ СТЕРЕЖЁТ ДВЕРЬ, А НЕ ОБЪЯВЛЕНИЕ (158-5а). Ключ приходит от
+    // модели; без этой проверки пятый примитив стал бы способом дописать что
+    // угодно в любую таблицу признаков. Пишем только то, что человек говорит
+    // О СЕБЕ, — у таких признаков объявлен `subject: self`.
+    const key = String(args.key ?? "").trim().toLowerCase()
+    const fact = allFacts().find(f => f.key === key)
+    if (!fact || fact.subject !== "self") {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "not-a-person-fact",
+          got: key,
+          hint: "запоминать можно только факты о человеке; ключ берут из registry_find",
+        },
+        { status: 400 }
+      )
+    }
+    const written = await writeFact({
+      key,
+      value: String(args.value ?? ""),
+      subject: "self",
+      source: String(args.source ?? "сказано человеком в переписке"),
+    })
+    return NextResponse.json(
+      written.ok
+        ? { ok: true, fn: "remember", key, table: written.table }
+        : { ok: false, fn: "remember", error: written.error, hint: written.hint },
+      { status: written.ok ? 200 : 503 }
+    )
   }
   const answer = await recall(String(args.key ?? ""), {
     subject: args.subject as string | undefined,
