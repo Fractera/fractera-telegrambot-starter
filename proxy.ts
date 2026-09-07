@@ -68,7 +68,14 @@ export async function proxy(request: NextRequest) {
   if (pathname === "/login" || pathname === "/register" || pathname === "/logout") {
     const search = new URLSearchParams(request.nextUrl.search);
     if (pathname === "/logout" && !search.has("redirectUrl")) {
-      search.set("redirectUrl", `${publicOrigin(request)}/${langOf(request)}`);
+      // 🔒 ЯЗЫК БЕРЁТСЯ ИЗ ТОГО, ЧТО ПРИСЛАЛ ОСТРОВОК, А НЕ ИЗ АДРЕСА ВЫХОДА.
+      // У `/logout` языкового сегмента нет по устройству, и `langOf()` там
+      // падает на заголовок браузера — русского человека выход возвращал бы на
+      // английскую главную. ✗ измерено: `redirectUrl` указывал на `/en` при
+      // `?lang=ru` в самой ссылке. Зеркало 3000: там читают ровно этот параметр.
+      const asked = search.get("lang") ?? "";
+      const back = SUPPORTED.includes(asked) ? asked : langOf(request);
+      search.set("redirectUrl", `${publicOrigin(request)}/${back}`);
     }
     const qs = search.toString();
     return NextResponse.redirect(
@@ -107,6 +114,16 @@ export async function proxy(request: NextRequest) {
   // 🛑 ПРОВЕРКА ТОЧНАЯ, А НЕ ПО ПРЕФИКСУ. `/ru` пропускается, `/ru/settings` —
   // нет. Префикс открыл бы заодно всё, что появится под языком завтра, и открыл
   // бы молча — та же ошибка, от которой защищены двери выше.
+  // 🔒 ДВЕРЬ «КТО ВОШЁЛ» ОТВЕЧАЕТ САМА, И ЭТО НЕ ДЫРА В ЗАМКЕ (156-1).
+  // Её зовёт островок публичной главной. Перехваченная привратником, она отдаёт
+  // `307` на заглушку, островок читает HTML вместо JSON и решает «гость» —
+  // случайно верно, а значит вдвойне опасно: вошедший тоже увидел бы «Войти».
+  // ✗ ИЗМЕРЕНО: `/api/me` без куки отвечал `307` вместо `401`.
+  // 🛑 Дверь ничего не открывает: без сессии она сама отдаёт `401`.
+  if (pathname === "/api/me") {
+    return NextResponse.next();
+  }
+
   if (pathname === "/" || SUPPORTED.some(l => pathname === `/${l}`)) {
     return NextResponse.next();
   }
