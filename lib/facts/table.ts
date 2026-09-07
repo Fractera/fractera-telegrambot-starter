@@ -102,11 +102,16 @@ export function factTableSql(table: string): string {
       -- Состояние на момент строки. Переход пишется НОВОЙ строкой, а не правкой:
       -- вопрос «когда задание стало проверенным» без истории ответа не имеет.
       status      TEXT,
+      -- Где этот факт верен: geo.city=madrid|lang=ru (141-2). Пусто — «не знаю
+      -- где», а НЕ «везде»: беспризорный факт показывается названным.
+      scope_key   TEXT,
       created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
     );
     CREATE INDEX IF NOT EXISTS ${table}_message ON ${table} (message_id);
     -- Накопление спрашивают по хозяину и времени: «сколько Я за неделю».
     CREATE INDEX IF NOT EXISTS ${table}_subject ON ${table} (subject_key, created_at);
+    -- Чтение сужается по охвату: «что я знаю про такси ЗДЕСЬ».
+    CREATE INDEX IF NOT EXISTS ${table}_scope ON ${table} (scope_key, created_at);
   `
 }
 
@@ -141,7 +146,7 @@ export function factTableSql(table: string): string {
 // 🔒 СВЕРКА СТАНДАРТА СРАВНИВАЕТ НАБОР, А НЕ ПОСЛЕДОВАТЕЛЬНОСТЬ — по той же
 // причине. Сравнивай она порядок, каждая поднятая лестницей таблица объявлялась
 // бы нестандартной, и отчёт кричал бы о двадцати четырёх исправных таблицах.
-export const FACT_TABLE_LATE_COLUMNS = ["slot", "subject_key", "status"] as const
+export const FACT_TABLE_LATE_COLUMNS = ["slot", "subject_key", "status", "scope_key"] as const
 
 export function factTableAlters(table: string): string[] {
   return FACT_TABLE_LATE_COLUMNS.map(c => `ALTER TABLE ${table} ADD COLUMN ${c} TEXT`)
@@ -162,6 +167,8 @@ export const FACT_TABLE_COLUMNS = [
   "slot",
   "subject_key",
   "status",
+  // ── Третий слой (141-2): где факт верен.
+  "scope_key",
   "created_at",
 ] as const
 
