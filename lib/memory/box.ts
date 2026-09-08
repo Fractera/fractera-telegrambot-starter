@@ -989,23 +989,30 @@ export async function read(input: {
   // 163-2 поймал дефект замысла: стоило человеку назвать ОДНО, предложение
   // исчезало целиком. Знакомство — это очередь, а не единственный вопрос при
   // первой встрече; оно кончается, когда названы ВСЕ признаки очереди.
+  // 🔒 СПУТНИКИ ОТВЕТА СЧИТАЮТСЯ ОДНОВРЕМЕННО, А НЕ ДРУГ ЗА ДРУГОМ.
+  //
+  // ✗ ИЗМЕРЕНО 2026-09-08, И ЭТО МОЙ ЖЕ ДЕФЕКТ ИЗ 163-2: каждое чтение делало
+  // ТРИ последовательных похода в слой данных — само значение, список признаков
+  // для очереди знакомства и язык человека. Обычный ответ стоил 140–300 мс, но
+  // всплески доходили до **1551 мс** — то есть «мгновенный первый уровень»
+  // временами переставал быть мгновенным. Причина не в базе, а в сложении задержек.
+  // 🔒 ЗАПРОС ЯЗЫКА ОДИН НА ОТВЕТ, А НЕ ДВА: он нужен и знакомству, и предложению
+  // запомнить находку, и раньше спрашивался обоими по отдельности.
   let acquaint: Acquaint | undefined
-  if (subject === "self") {
-    // 🔒 ЛИШНЕГО ЧТЕНИЯ НЕТ: там, где список признаков человека уже прочитан
-    // ветвью «что ты знаешь обо мне», он же и используется. Отдельный поход в
-    // базу делается только когда своих значений в ответе нет вовсе.
-    let known = selfKeys
-    if (!known) {
-      const mine = await recallSubject(subject, { limit: 50 })
-      known = new Set(mine.found === true ? mine.items.map(v => v.key) : [])
-    }
-    acquaint = nextQuestion(known, await personLanguage(subject)) ?? undefined
+  const needLearn = Boolean(query) && items.some(i => i.about === "all-records" && i.claim === "guess")
+  const [known, language] = await Promise.all([
+    subject === "self" && !selfKeys
+      ? recallSubject(subject, { limit: 50 }).then(m =>
+          new Set(m.found === true ? m.items.map(v => v.key) : []))
+      : Promise.resolve(selfKeys),
+    subject === "self" || needLearn ? personLanguage(subject) : Promise.resolve(null),
+  ])
+  if (subject === "self" && known) {
+    acquaint = nextQuestion(known, language) ?? undefined
   }
 
   let learnOffer: LearnOffer | undefined
-  const fromDepth = items.filter(i => i.about === "all-records" && i.claim === "guess")
-  if (query && fromDepth.length > 0) {
-    const language = await personLanguage(subject)
+  if (needLearn) {
     learnOffer = {
       anchors: askedLabels.length > 0 ? askedLabels : [],
       ask: offerToLearn(language),
@@ -1038,7 +1045,7 @@ export async function read(input: {
   // честного «такого признака в реестре нет». Читающий останавливал поиск,
   // решив, что спросил правильно и просто рано. Закон 144: уверенное умолчание
   // дороже отсутствующего значения.
-  const known = key ? allFacts().some(f => f.key === key) : false
+  const keyExists = key ? allFacts().some(f => f.key === key) : false
   return {
     acquaint,
     deeper: depth >= MAX_DEPTH ? noDeeper : offer,
@@ -1046,7 +1053,7 @@ export async function read(input: {
     levels,
     looked,
     hint: key
-      ? known
+      ? keyExists
         ? "признак есть, значений у него пока нет"
         : "такого признака в реестре нет — проверьте ключ или спросите словами"
       : query
