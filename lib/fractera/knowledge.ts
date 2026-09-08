@@ -36,11 +36,33 @@ export type KnowledgeAnswer = {
 export async function ask(
   question: string,
   mode: "hybrid" | "local" | "global" | "naive" = "hybrid",
+  opts: {
+    /**
+     * Взять КОНТЕКСТ, а не сочинённый движком ответ (162-3).
+     *
+     * 🔒 ИЗМЕРЕНО 2026-09-08 НА ОДНОМ ВОПРОСЕ: с генерацией — 7533 мс (`local`) и
+     * 6391 мс (`naive`), 1,6 КБ прозы; за контекстом — 2213 мс, а с выключенным
+     * пере-ранжированием **551 мс** и **10,3 КБ сущностей и связей**. То есть
+     * контекст даёт вшестеро больше данных за вчетверо меньшее время.
+     * 🔒 ПОЧЕМУ ЭТО ПРАВИЛЬНО, А НЕ ПРОСТО БЫСТРО: сочинять ответ человеку будет
+     * НАШ агент — у него есть и личные факты, и разговор. Просить чужую модель
+     * написать прозу, чтобы наша переписала её своими словами, значит платить
+     * дважды: деньгами и секундами.
+     * 🛑 ЦЕНА ВЫКЛЮЧЕННОГО РЕРАЙТА НЕ ИЗМЕРЕНА В КАЧЕСТВЕ — он затем и стоит,
+     * чтобы наверху оказалось подходящее. Мерить на кейсе 162-7 обеими
+     * настройками; пока выбран быстрый путь, и это названо, а не умолчано.
+     */
+    context?: boolean;
+  } = {},
 ): Promise<KnowledgeAnswer> {
   try {
     const data = await dataJson<{ response?: string; result?: string }>("/service/rag/query", {
       method: "POST",
-      body: JSON.stringify({ query: question, mode }),
+      body: JSON.stringify(
+        opts.context
+          ? { query: question, mode, only_need_context: true, enable_rerank: false }
+          : { query: question, mode },
+      ),
     });
     const answer = data.response ?? data.result ?? null;
     return { available: true, answer, raw: data };
