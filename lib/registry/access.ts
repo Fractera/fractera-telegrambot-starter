@@ -478,11 +478,21 @@ export async function recallSubject(
   }
   const limit = cap(opts.limit)
   const items: (Value & { key: string; title: string })[] = []
-  for (const fact of mine) {
+  // 🔒 ПРИЗНАКИ СПРАШИВАЮТСЯ ОДНОВРЕМЕННО, А НЕ ПО ОЧЕРЕДИ (164-4).
+  //
+  // ✗ ИЗМЕРЕНО 2026-09-08: цикл ждал каждый признак по отдельности — четырнадцать
+  // запросов подряд, и каждый вдобавок заново спрашивал список таблиц. До
+  // **двадцати восьми** последовательных походов в слой данных при цене 20 мс за
+  // поход: отсюда всплески первого уровня до 1,5 с. Один голый запрос при этом
+  // стоит 16–36 мс — то есть медленной была не база, а очередь.
+  // 🔒 ПОРЯДОК ОТВЕТА СОХРАНЁН: одновременность меняет время, а не очерёдность.
+  // Потолок применяется после сбора, как и раньше.
+  const got = await Promise.all(mine.map(f => recall(f.key, { subject: who, limit: 1 })))
+  for (let i = 0; i < mine.length; i += 1) {
     if (items.length >= limit) break
-    const got = await recall(fact.key, { subject: who, limit: 1 })
-    if (got.found === true && got.items.length > 0) {
-      items.push({ ...got.items[0], key: fact.key, title: fact.title })
+    const one = got[i]
+    if (one.found === true && one.items.length > 0) {
+      items.push({ ...one.items[0], key: mine[i].key, title: mine[i].title })
     }
   }
   if (items.length === 0) {

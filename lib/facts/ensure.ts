@@ -49,8 +49,28 @@ async function migrate(sql: string): Promise<{ ok: boolean; error?: string }> {
   }
 }
 
-/** Какие таблицы признаков уже есть на этой машине. */
+/**
+ * Какие таблицы признаков уже есть на этой машине.
+ *
+ * 🔒 ОТВЕТ ЖИВЁТ КОРОТКОЕ ВРЕМЯ В ПАМЯТИ ПРОЦЕССА (164-4), И ЭТО ИЗМЕРЕНИЕ, А НЕ
+ * ПРЕДОСТОРОЖНОСТЬ. Каждое чтение признака спрашивало этот список заново: при
+ * ответе на «что ты знаешь обо мне» — четырнадцать раз подряд, по 20 мс за поход.
+ * Список меняется только когда создаётся таблица, а это делаем мы сами — и сами
+ * же сбрасываем память ниже.
+ * 🛑 ПЯТЬ СЕКУНД, А НЕ НАВСЕГДА: таблицу может создать сосед — прибор, экран,
+ * другой процесс, — и вечный кэш означал бы «таблицы нет» до перезапуска службы.
+ */
+let tablesCache: { at: number; set: Set<string> } | null = null
+const TABLES_TTL_MS = 5000
+
+/** Забыть список таблиц: зовётся после создания новой. */
+export function forgetTablesCache(): void {
+  tablesCache = null
+}
+
 export async function existingFactTables(): Promise<Set<string>> {
+  const now = Date.now()
+  if (tablesCache && now - tablesCache.at < TABLES_TTL_MS) return tablesCache.set
   try {
     const r = await dataFetch("/db/migrate", {
       method: "POST",
@@ -58,9 +78,13 @@ export async function existingFactTables(): Promise<Set<string>> {
         sql: "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'fact\\_%' ESCAPE '\\'",
       }),
     })
+    // 🛑 ОТКАЗ НЕ КЭШИРУЕТСЯ: «слой данных молчит» и «таблиц нет» — разные вещи,
+    // и запомнить первое как второе значит на пять секунд объявить память пустой.
     if (!r.ok) return new Set()
     const d = (await r.json()) as { rows?: { name: string }[] }
-    return new Set((d.rows ?? []).map(x => x.name))
+    const set = new Set((d.rows ?? []).map(x => x.name))
+    tablesCache = { at: now, set }
+    return set
   } catch {
     return new Set()
   }
@@ -95,8 +119,12 @@ export async function ensureFactTables(facts: Fact[]): Promise<EnsureReport> {
       continue
     }
     const res = await migrate(factTableSql(table))
-    if (res.ok) report.created.push(table)
-    else report.failed.push({ table, error: res.error ?? "failed" })
+    if (res.ok) {
+      report.created.push(table)
+      // 🔒 СОЗДАЛИ ТАБЛИЦУ — ЗАБЫЛИ СПИСОК. Иначе чтение следующие пять секунд
+      // отвечало бы «признак описан, значений не было» по только что созданной.
+      forgetTablesCache()
+    } else report.failed.push({ table, error: res.error ?? "failed" })
   }
   return report
 }
