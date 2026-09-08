@@ -1,5 +1,6 @@
 import { dataFetch } from "@/lib/fractera/data-service"
 import { valueToCell } from "@/lib/facts/depth-guard"
+import { type Placement, placementOf } from "@/lib/facts/placement"
 import { allFacts } from "@/lib/facts/registry"
 import { factTableName } from "@/lib/facts/table"
 import { type FactClaim, writeFact } from "@/lib/facts/write"
@@ -182,6 +183,18 @@ export async function write(input: MemoryWriteInput): Promise<MemoryWriteResult>
 // случае, иначе оно не обещание.
 const DEEP_SECONDS = 5
 
+/**
+ * Адрес значения одной строкой: имя таблицы, а у чужой колонки — `таблица.колонка`.
+ *
+ * 🔒 ОДНА ФОРМА НА ВЕСЬ ОТВЕТ. Она едет и в `looked`, и в `from`, и в `missing`;
+ * две формы одного адреса читались бы как два разных места.
+ */
+function placeAddress(p: Placement): string {
+  if (p.kind === "own") return p.table
+  if (p.kind === "column") return `${p.table}.${p.column}`
+  return p.why
+}
+
 export type MemoryItem = {
   key: string
   title: string
@@ -191,7 +204,33 @@ export type MemoryItem = {
   basis: string | null
   scope: string | null
   at: string | null
+  /**
+   * Откуда взято: имя таблицы, а у чужой колонки — `таблица.колонка` (162-2).
+   *
+   * 🔒 БЕЗ ПРОИСХОЖДЕНИЯ ЗНАЧЕНИЯ РАВНЫ МЕЖДУ СОБОЙ, А ОНИ НЕ РАВНЫ: одно
+   * сказано человеком о себе, другое посчитано по всем записям склада.
+   */
+  from: string
+  /**
+   * О ком это значение.
+   *
+   * 🔒 `self` — о самом человеке (личная таблица, сужение по субъекту работает).
+   * `all-records` — по всем записям склада: сужать там нечем, колонок субъекта в
+   * чужой таблице нет. 🛑 ВЫДАВАТЬ ВТОРОЕ ЗА ПЕРВОЕ ЗАПРЕЩЕНО: «потрачено 200»
+   * по всему складу и «вы потратили 200» — разные утверждения, и человек примет
+   * второе за свой факт.
+   */
+  about: "self" | "all-records"
 }
+
+/**
+ * Кандидат, который посмотрели и не получили значения (162-2).
+ *
+ * 🔒 ПРОМАХ НАЗЫВАЕТСЯ ПРИЧИНОЙ, А НЕ ИСЧЕЗАЕТ. Кандидат, пропавший молча,
+ * неотличим от того, которого система не рассматривала, — и следующий шаг
+ * (углубление, вопрос человеку, правка триггеров) делать не из чего.
+ */
+export type Missing = { key: string; title: string; where: string; why: string }
 
 /** Стоит ли идти глубже и во что это обойдётся. */
 export type Deeper = { available: boolean; cost_seconds: number; what: string }
@@ -222,6 +261,7 @@ export type MemoryReadResult =
       items: MemoryItem[]
       deeper: Deeper
       looked: LookedAt[]
+      missing?: Missing[]
     }
   | {
       found: false
@@ -230,6 +270,7 @@ export type MemoryReadResult =
       hint: string
       deeper: Deeper
       looked: LookedAt[]
+      missing?: Missing[]
     }
 
 function capLimit(v: unknown): number {
@@ -278,59 +319,111 @@ export async function read(input: {
   // Промах без карты неотличим от «искали не там»; с картой видно, что система
   // сочла относящимся к вопросу и где собиралась смотреть.
   // 🛑 БЕЗ ВЫЗОВА МОДЕЛИ: это механическое сопоставление основ слов (закон 157-5).
-  const looked: LookedAt[] = []
-  if (query) {
-    for (const c of candidates(query, { limit: 12 }).hits) {
-      looked.push({
-        key: c.key,
-        title: c.title,
-        where: c.placement.kind === "none" ? c.placement.why : c.placement.table,
-        why: c.why,
-      })
-    }
-  }
+  const hits = query ? candidates(query, { limit: 12 }).hits : []
+  const looked: LookedAt[] = hits.map(c => ({
+    key: c.key,
+    title: c.title,
+    where: c.placement.kind === "none" ? c.placement.why : c.placement.table,
+    why: c.why,
+  }))
 
   const items: MemoryItem[] = []
+  const missing: Missing[] = []
 
   // ── СТУПЕНЬ 0: ТО, ЧТО ЗАПИСАНО ───────────────────────────────────────────
   if (key) {
-    const got = await recall(key, { subject, limit })
+    const fact = allFacts().find(f => f.key === key)
+    const placed = fact ? placementOf(fact) : null
+    // 🔒 У ЧУЖОЙ КОЛОНКИ СУЖЕНИЕ ПО СУБЪЕКТУ НЕ ПРОСТО НЕ РАБОТАЕТ — `recall`
+    // ОТКАЗЫВАЕТ, увидев его (там нет колонки субъекта). Спрашивать надо так,
+    // как хранилище умеет отвечать, и честно называть, что ответ по всем записям.
+    const byColumn = placed?.kind === "column"
+    const got = await recall(key, byColumn ? { limit } : { subject, limit })
     if (got.found === true) {
-      const fact = allFacts().find(f => f.key === key)
       for (const v of got.items) {
         items.push({
+          about: byColumn ? "all-records" : "self",
           at: v.at,
           basis: v.basis,
           claim: v.claim,
+          from: placed ? placeAddress(placed) : "",
           key,
           scope: v.scope,
           title: fact?.title ?? key,
           value: v.value,
         })
       }
+    } else if (fact && placed) {
+      missing.push({
+        key,
+        title: fact.title,
+        where: placeAddress(placed),
+        why: got.hint ?? "значений нет",
+      })
     }
   } else if (query) {
-    // 🔒 МЕХАНИЧЕСКИЙ ПОИСК ПО СЛОВАМ, БЕЗ ВЫЗОВА МОДЕЛИ. Ключей человек не знает
-    // и знать не обязан; поиск по основам слов стоит ноль ходов рассуждения.
-    const hits = find("facts", query, { limit: 5 })
-    if (hits.found === true) {
-      for (const hit of hits.items) {
-        if (items.length >= limit) break
-        const fact = allFacts().find(f => f.key === hit.key)
-        if (!fact || fact.subject !== "self") continue
-        const got = await recall(hit.key, { subject, limit: 1 })
-        if (got.found === true && got.items.length > 0) {
-          const v = got.items[0]
-          items.push({
-            at: v.at,
-            basis: v.basis,
-            claim: v.claim,
-            key: hit.key,
-            scope: v.scope,
-            title: fact.title,
-            value: v.value,
-          })
-        }
+    // ── УРОВЕНЬ 1: ЧИТАЕМ ВСЕ ТАБЛИЦЫ-КАНДИДАТЫ, А НЕ ТОЛЬКО ЛИЧНЫЕ (162-2) ──
+    //
+    // 🎯 ТРЕБОВАНИЕ ВЛАДЕЛЬЦА: «делаешь извлечение данных из соответствующих
+    // таблиц» — из соответствующих, а не из тех, что про самого человека.
+    //
+    // ✗ ЧЕМ ОПЛАЧЕНО. Прежний код брал кандидатов и тут же выбрасывал каждого,
+    // у кого `subject !== "self"`, а остальных спрашивал С СУЖЕНИЕМ по субъекту —
+    // на что `recall` у чужой колонки отвечает отказом по устройству. Два
+    // независимых запрета на один путь: значения из `tgdesk_messages` (17
+    // признаков), `tgdesk_entries` (6) и `tgdesk_artifacts` (3) не находились
+    // вопросом человека НИКОГДА. Измерено 2026-09-08: 14 записей из 49.
+    //
+    // 🔒 ПРЕДЕЛ УРОВНЯ 1 — ЧИСЛО ЗАПРОСОВ, А НЕ ЧИСЛО ЗНАЧЕНИЙ, и он существует
+    // ради цели владельца: «возвращать необходимое количество информации запросом
+    // первого уровня, чтобы обеспечить реактивную работу». Каждый кандидат — это
+    // поход в слой данных; непрочитанные названы в `missing`, а не забыты.
+    const LEVEL1_READS = 8
+    let reads = 0
+    for (const hit of hits) {
+      const fact = allFacts().find(f => f.key === hit.key)
+      if (!fact) continue
+      const placed = placementOf(fact)
+      const address = placeAddress(placed)
+      if (placed.kind === "none") {
+        // Ветвь разбора: значений нет по устройству — это не промах и не отказ.
+        missing.push({ key: hit.key, title: fact.title, where: address, why: placed.why })
+        continue
+      }
+      if (items.length >= limit || reads >= LEVEL1_READS) {
+        missing.push({
+          key: hit.key,
+          title: fact.title,
+          where: address,
+          why: "не читали: достигнут предел первого уровня — спросите точнее или углубитесь",
+        })
+        continue
+      }
+      reads += 1
+      // 🔒 СУЖЕНИЕ ПО СУБЪЕКТУ — ТОЛЬКО ТАМ, ГДЕ ЕСТЬ ЧЕМ СУЖАТЬ.
+      const byColumn = placed.kind === "column"
+      const got = await recall(hit.key, byColumn ? { limit: 1 } : { subject, limit: 1 })
+      if (got.found === true && got.items.length > 0) {
+        const v = got.items[0]
+        items.push({
+          // 🛑 ЗНАЧЕНИЕ ИЗ ЧУЖОЙ ТАБЛИЦЫ НЕ ОБЪЯВЛЯЕТСЯ ФАКТОМ О ЧЕЛОВЕКЕ.
+          about: byColumn ? "all-records" : "self",
+          at: v.at,
+          basis: v.basis,
+          claim: v.claim,
+          from: address,
+          key: hit.key,
+          scope: v.scope,
+          title: fact.title,
+          value: v.value,
+        })
+      } else {
+        missing.push({
+          key: hit.key,
+          title: fact.title,
+          where: address,
+          why: got.found === false ? got.hint ?? "значений нет" : "значений нет",
+        })
       }
     }
   } else {
@@ -338,10 +431,15 @@ export async function read(input: {
     const all = await recallSubject(subject, { limit })
     if (all.found === true) {
       for (const v of all.items) {
+        const fact = allFacts().find(f => f.key === v.key)
         items.push({
+          // Это ответ на «что ты знаешь обо мне»: сюда попадают только личные
+          // таблицы, у них субъект есть и он спрошен.
+          about: "self",
           at: v.at,
           basis: v.basis,
           claim: v.claim,
+          from: fact ? placeAddress(placementOf(fact)) : "",
           key: v.key,
           scope: v.scope,
           title: v.title,
@@ -352,7 +450,15 @@ export async function read(input: {
   }
 
   if (items.length > 0) {
-    return { deeper: deep ? noDeeper : offer, found: true, items, looked, subject, total: items.length }
+    return {
+      deeper: deep ? noDeeper : offer,
+      found: true,
+      items,
+      looked,
+      missing,
+      subject,
+      total: items.length,
+    }
   }
 
   // ── СТУПЕНЬ 2: ЗНАНИЕ ОБ ОКРУЖЕНИИ — ТОЛЬКО ПО РАЗРЕШЕНИЮ БЮДЖЕТА ─────────
@@ -388,9 +494,13 @@ export async function read(input: {
         looked,
         items: [
           {
+            // 🔒 ЗНАНИЕ ОБ ОКРУЖЕНИИ — НЕ ФАКТ О ЧЕЛОВЕКЕ: оно собрано по всем
+            // историям, и субъекта у него нет (162-2).
+            about: "all-records",
             at: null,
             basis: "собрано из связей знания об окружении, а не записано человеком",
             claim: "guess",
+            from: "связи знания об окружении",
             key: "surroundings",
             scope: null,
             title: "Знание об окружении",
@@ -422,8 +532,11 @@ export async function read(input: {
         ? "признак есть, значений у него пока нет"
         : "такого признака в реестре нет — проверьте ключ или спросите словами"
       : query
-        ? "по этим словам в записанном ничего не нашлось"
+        ? missing.length > 0
+          ? "по этим словам смотрели в названные таблицы — значений там нет; причина у каждой в `missing`"
+          : "по этим словам в записанном ничего не нашлось"
         : "о человеке пока ничего не записано",
+    missing,
     searched,
     subject,
   }
