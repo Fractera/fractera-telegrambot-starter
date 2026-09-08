@@ -116,6 +116,30 @@ export function automationById(id: string): Automation | undefined {
   return listAutomations().find((a) => a.id === id)
 }
 
+/**
+ * Одна автоматизация ИЗ БАЗЫ, по номеру.
+ *
+ * ✗ НАЙДЕНО ВЛАДЕЛЬЦЕМ 2026-09-08, И ЭТО ХУДШИЙ ИЗ КЛАССОВ: список показывал
+ * ЖИВЫЕ автоматизации из базы, а страница карточки искала номер среди ДВЕНАДЦАТИ
+ * ВЫДУМАННЫХ образцов — и отвечала «автоматизации с таким адресом нет» о записи,
+ * которая существует. Список и карточка читали разные источники.
+ * 🔒 ПРИЗНАК, ПО КОТОРОМУ ЭТО ЛОВИТСЯ: две поверхности одной сущности обязаны
+ * брать её В ОДНОМ МЕСТЕ. Здесь их было два, и второй никто не подключил.
+ * 🛑 ОБРАЗЦЫ ОСТАЮТСЯ ЖИТЬ РЯДОМ: они помечены `demo: true` и нужны, пока база
+ * пуста, — но живая запись ищется ПЕРВОЙ, и выдуманная её больше не заслоняет.
+ */
+export async function automationByIdLive(id: string): Promise<Automation | undefined> {
+  const num = Number(id)
+  if (Number.isInteger(num) && num > 0) {
+    const { ok, rows } = await listForScreen()
+    if (ok) {
+      const found = rows.find(r => r.id === num)
+      if (found) return fromRow(found)
+    }
+  }
+  return automationById(id)
+}
+
 /** Адрес страницы автоматизации. */
 export function hrefOfAutomation(lang: string, id: string): string {
   return `/${lang}/automation/${id}`

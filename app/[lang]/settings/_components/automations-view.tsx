@@ -75,8 +75,15 @@ function hrefWith(
 ): string {
   const next = { ...query, ...patch }
   const p = new URLSearchParams()
-  p.set("section", "logs")
-  p.set("view", "automations")
+  // ✗ ЗДЕСЬ СТОЯЛО `section=logs&view=automations`, И ЭТО УВОДИЛО СО СТРАНИЦЫ.
+  // Автоматизации — СВОЙ раздел (`TELEGRAM_SECTIONS`), а не вид внутри «Логов»;
+  // среди видов логов имени `automations` нет вовсе, и проверка честно
+  // возвращала первый вид списка — «разбор». Человек нажимал «показывать по 25»
+  // и оказывался на другой странице.
+  // 🔒 ПРИЧИНА ШИРЕ ОПЕЧАТКИ: адрес собирался здесь ВРУЧНУЮ, рядом с готовым
+  // `hrefOfTelegramSection`. Вторая сборка того же адреса разошлась с первой —
+  // тот же класс, которым проект платил за вторые копии правил.
+  p.set("section", "automations")
   if (next.q) {
     p.set("q", next.q)
   }
@@ -309,9 +316,11 @@ export function AutomationsView({
             query={query}
           />
 
+          {/* ✗ ТОТ ЖЕ ДЕФЕКТ, ЧТО В `hrefWith`: «сбросить фильтры» уводило в
+              «Логи → разбор». Второе место, где адрес собирался руками. */}
           <Link
             className="ml-auto text-[length:var(--fs-small)] text-muted-foreground underline-offset-4 hover:underline"
-            href={`/${lang}/settings?section=logs&view=automations`}
+            href={`/${lang}/settings?section=automations`}
             scroll={false}
           >
             {words.reset}

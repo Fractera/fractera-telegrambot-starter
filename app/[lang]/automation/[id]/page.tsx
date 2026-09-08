@@ -1,7 +1,7 @@
 import { Suspense } from "react"
 import { Breadcrumbs } from "@/components/nav/breadcrumbs.server"
 import { Eyebrow, H1, Lead, Small } from "@/components/ui/typography"
-import { automationById, listAutomations } from "../../settings/_lib/automations"
+import { automationByIdLive, listAutomations } from "../../settings/_lib/automations"
 import { automationUi } from "./_i18n/automation.i18n"
 
 // СТРАНИЦА ОДНОЙ АВТОМАТИЗАЦИИ — ШАБЛОН (2026-09-06).
@@ -71,7 +71,10 @@ async function AutomationBody({
 }) {
   const { id, lang } = await params
   const ui = automationUi(lang)
-  const item = automationById(decodeURIComponent(id))
+  // 🔒 ЖИВАЯ ЗАПИСЬ ИЩЕТСЯ ПЕРВОЙ, ОБРАЗЕЦ — ЗАПАСНЫМ (найдено владельцем
+  // 2026-09-08): страница отвечала «такой нет» о записи, которая есть в базе,
+  // потому что читала только выдуманные образцы.
+  const item = await automationByIdLive(decodeURIComponent(id))
 
   return (
     <main className="mx-auto flex w-full max-w-[1100px] flex-1 flex-col gap-8 px-6 py-10 md:px-8">
