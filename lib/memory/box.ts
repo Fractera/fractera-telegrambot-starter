@@ -653,6 +653,9 @@ export async function read(input: {
 
   const items: MemoryItem[] = []
   const missing: Missing[] = []
+  // 🔒 КЛЮЧИ ПРИЗНАКОВ ЧЕЛОВЕКА, ЕСЛИ ОНИ УЖЕ ПРОЧИТАНЫ ПО ХОДУ (163-2): очередь
+  // знакомства считается по ним, и второго похода в базу за тем же не делается.
+  let selfKeys: Set<string> | null = null
   const startedLevel1 = Date.now()
 
   // ── СТУПЕНЬ 0: ТО, ЧТО ЗАПИСАНО ───────────────────────────────────────────
@@ -769,6 +772,7 @@ export async function read(input: {
     // 🔒 НИ КЛЮЧА, НИ ВОПРОСА — ЭТО «ЧТО ТЫ ЗНАЕШЬ ОБО МНЕ», И ЭТО ОДИН ВОПРОС.
     const all = await recallSubject(subject, { limit })
     if (all.found === true) {
+      selfKeys = new Set(all.items.map(v => v.key))
       for (const v of all.items) {
         const fact = allFacts().find(f => f.key === v.key)
         items.push({
@@ -981,10 +985,20 @@ export async function read(input: {
   // знакомство в разговоре, где оно давно состоялось.
   // 🛑 И ОНО ИСЧЕЗАЕТ САМО: как только человек назвал признак, следующий вопрос
   // становится другим, а когда названы все — предложения нет вовсе.
+  // ✗ ПЕРВАЯ РЕДАКЦИЯ СЧИТАЛА ЭТО ТОЛЬКО ПРИ ПОЛНОСТЬЮ ПУСТОМ ОТВЕТЕ — и прибор
+  // 163-2 поймал дефект замысла: стоило человеку назвать ОДНО, предложение
+  // исчезало целиком. Знакомство — это очередь, а не единственный вопрос при
+  // первой встрече; оно кончается, когда названы ВСЕ признаки очереди.
   let acquaint: Acquaint | undefined
-  if (subject === "self" && items.every(i => i.about !== "self")) {
-    const mine = await recallSubject(subject, { limit: 50 })
-    const known = new Set(mine.found === true ? mine.items.map(v => v.key) : [])
+  if (subject === "self") {
+    // 🔒 ЛИШНЕГО ЧТЕНИЯ НЕТ: там, где список признаков человека уже прочитан
+    // ветвью «что ты знаешь обо мне», он же и используется. Отдельный поход в
+    // базу делается только когда своих значений в ответе нет вовсе.
+    let known = selfKeys
+    if (!known) {
+      const mine = await recallSubject(subject, { limit: 50 })
+      known = new Set(mine.found === true ? mine.items.map(v => v.key) : [])
+    }
     acquaint = nextQuestion(known, await personLanguage(subject)) ?? undefined
   }
 
