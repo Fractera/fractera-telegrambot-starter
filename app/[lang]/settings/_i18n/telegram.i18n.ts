@@ -97,6 +97,21 @@ export type TelegramUi = {
     restart: string;
   };
   knownWords: {
+    search: string;
+    searchDo: string;
+    reset: string;
+    colFact: string;
+    colValue: string;
+    colTags: string;
+    colWhen: string;
+    colWhat: string;
+    filledAny: string;
+    filledYes: string;
+    filledNo: string;
+    found: string;
+    page: string;
+    prev: string;
+    next: string;
     lead: string;
     empty: string;
     down: string;
@@ -466,6 +481,7 @@ export type TelegramUi = {
   };
 
   about: {
+    views: { bot: string; memory: string },
     /**
      * ПЕРВЫЙ АБЗАЦ ОПИСАНИЯ (77-10, 2026-09-01, заказ владельца).
      *
@@ -523,6 +539,7 @@ export type TelegramUi = {
 
 const EN: TelegramUi = {
   about: {
+    views: { bot: "How the bot works", memory: "How memory works" },
     arranged:
       "One service on this machine is the only reader of the bot. It listens, keeps what it heard, and hands every message to this project at once. Nothing about the bot lives in your repository except the screens you are looking at.",
     arrangedTitle: "How it is arranged.",
@@ -819,6 +836,21 @@ const EN: TelegramUi = {
     restart: "Saved to the file. The agent reads it at the next session start — the current conversation still runs on the old text.",
   },
   knownWords: {
+    search: "Search by name, tag or value",
+    searchDo: "Find",
+    reset: "Reset",
+    colFact: "What",
+    colValue: "Value",
+    colTags: "Tags",
+    colWhen: "Since",
+    colWhat: "Meaning",
+    filledAny: "All rows",
+    filledYes: "Filled only",
+    filledNo: "Empty only",
+    found: "{n} rows · {f} filled",
+    page: "Page {p} of {t}",
+    prev: "Back",
+    next: "Forward",
     lead: "Every line below is what the bot remembers about you. Correct it or clear it — the next answer uses the new value.",
     empty: "Not said yet — the bot will ask when it needs this.",
     down: "Could not read: the data layer did not answer. This is a failure, not an empty value.",
@@ -995,6 +1027,7 @@ const EN: TelegramUi = {
 
 const RU: TelegramUi = {
   about: {
+    views: { bot: "Как работает бот", memory: "Как работает память" },
     arranged:
       "На этой машине есть одна служба, и она единственный читатель бота. Она слушает, хранит услышанное и сразу передаёт каждое сообщение в этот проект. В вашем репозитории от бота нет ничего, кроме экранов, на которые вы сейчас смотрите.",
     arrangedTitle: "Как это устроено.",
@@ -1291,6 +1324,21 @@ const RU: TelegramUi = {
     restart: "Сохранено в файл. Агент прочитает его при следующем запуске сессии — текущий разговор идёт по старому тексту.",
   },
   knownWords: {
+    search: "Поиск по названию, метке или значению",
+    searchDo: "Найти",
+    reset: "Сбросить",
+    colFact: "Что",
+    colValue: "Значение",
+    colTags: "Метки",
+    colWhen: "С какого времени",
+    colWhat: "Что это значит",
+    filledAny: "Все строки",
+    filledYes: "Только заполненные",
+    filledNo: "Только пустые",
+    found: "строк: {n} · заполнено: {f}",
+    page: "Страница {p} из {t}",
+    prev: "Назад",
+    next: "Вперёд",
     lead: "Каждая строка ниже — то, что бот о вас помнит. Поправьте или снимите: следующий ответ пойдёт по новому значению.",
     empty: "Пока не говорили — бот спросит, когда это понадобится.",
     down: "Прочитать не удалось: слой данных не ответил. Это отказ, а не пустое значение.",

@@ -123,6 +123,23 @@ export function hrefOfTelegramSection(
 // «сосед цел», «способность жива на новом месте».
 // 🔒 ВИДОВ СТАЛО ВОСЕМЬ; первым теперь «Разбор запроса» — лента открывается на
 // том, что происходит СЕЙЧАС, а не на списке прошлого.
+// 🔒 ВТОРОЙ УРОВЕНЬ У ВКЛАДКИ «ОПИСАНИЕ» (2026-09-08, слово владельца: «сделай
+// вверху переключатель: по умолчанию как работает бот оставим то что есть
+// сейчас, как работает память делай новую вкладку»).
+// 🔒 ТЕМ ЖЕ ПРИЁМОМ, ЧТО ВИДЫ «ЛОГОВ»: свойство `tabs` у раскладки. Своя полоса
+// вкладок здесь была бы второй копией готового — и разошлась бы с первой.
+export const TELEGRAM_ABOUT_VIEWS = ["bot", "memory"] as const;
+export type TelegramAboutView = (typeof TELEGRAM_ABOUT_VIEWS)[number];
+
+export function isTelegramAboutView(raw: unknown): raw is TelegramAboutView {
+  return typeof raw === "string" && (TELEGRAM_ABOUT_VIEWS as readonly string[]).includes(raw);
+}
+
+/** Вид «Описания» из адреса. Умолчание — `bot`: то, что было здесь всегда. */
+export function readTelegramAboutView(raw: unknown): TelegramAboutView {
+  return isTelegramAboutView(raw) ? raw : "bot";
+}
+
 export const TELEGRAM_LOG_VIEWS = [
   "parse",
   "db",

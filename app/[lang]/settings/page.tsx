@@ -12,7 +12,7 @@ import { AutoRefresh } from "./_components/auto-refresh.client";
 import { AutomationsView } from "./_components/automations-view";
 import { InProgress } from "./_components/in-progress";
 import { PassportBody } from "./_components/passport-body.client";
-import { KnownAboutMe } from "./_components/known-about-me.client";
+import { KnownTable } from "./_components/known-table.client";
 import { SectionIntro } from "./_components/section-intro.client";
 import { StarterCard } from "./_components/starter-card";
 import { TaskParseSection } from "./_components/task-parse-section";
@@ -29,7 +29,10 @@ import {
   resolveTelegramSection,
   TELEGRAM_LOG_VIEWS,
   TELEGRAM_SECTIONS,
+  TELEGRAM_ABOUT_VIEWS,
+  readTelegramAboutView,
 } from "./_lib/telegram-sections";
+import { queryKnown, readKnownQuery } from "./_lib/known";
 
 // СТРАНИЦА БОТА ПЕРЕЕХАЛА СЮДА С ПОРТА 3000 (шаг 137, 2026-09-05/06).
 //
@@ -125,6 +128,22 @@ async function BotSettingsGate({
   // которого свой репозиторий; чей паспорт показывать на этом экране — решение
   // владельца, и пока читается свой, потому что читать чужую папку значило бы
   // молча связать две службы там, где связи никто не объявлял.
+  // 🔒 СТАНДАРТ ПАМЯТИ ЧИТАЕТСЯ ТЕМ ЖЕ СПОСОБОМ, ЧТО ПАСПОРТ, И РЯДОМ С НИМ.
+  // Файл на диске, а не строка в коде: правка документа видна без пересборки
+  // (закон 159), и человек читает ровно то, что лежит в репозитории.
+  const aboutView = readTelegramAboutView(sp.about);
+  let memoryDoc = "";
+  if (active === "about" && aboutView === "memory") {
+    try {
+      memoryDoc = await readFile(
+        join(process.cwd(), "development-docs", "MEMORY-STANDARD.md"),
+        "utf8"
+      );
+    } catch {
+      memoryDoc = "";
+    }
+  }
+
   let passport = "";
   if (active === "passport") {
     try {
@@ -159,6 +178,11 @@ async function BotSettingsGate({
   // УСЛОВИЯ: один запрос к слою данных против ветки, которая забудется при
   // следующей правке. Пустой список стоит столько же, сколько его отсутствие.
   const automationsPage = await queryAutomationsLive(readAutomationQuery(sp));
+  // 🔒 ОТБОР И СТРАНИЦЫ СЧИТАЮТСЯ НА СЕРВЕРЕ, КАК У АВТОМАТИЗАЦИЙ (2026-09-08).
+  // Пока признаков полтора десятка, клиент мог грузить всё; при линейном росте
+  // это делает страницу тем медленнее, чем дольше человек пользуется системой.
+  const knownQuery = readKnownQuery(sp);
+  const knownPage = await queryKnown(knownQuery);
 
   return (
     <main className="min-h-screen bg-background">
@@ -214,6 +238,16 @@ async function BotSettingsGate({
           menuTitle={ui.menuTitle}
           menuWord={t.menuTitle}
           tabs={
+            active === "about"
+              ? // 🔒 ПЕРЕКЛЮЧАТЕЛЬ ВВЕРХУ «ОПИСАНИЯ» (2026-09-08): «как работает бот» —
+                // то, что было здесь всегда, и остаётся умолчанием; «как работает
+                // память» показывает стандарт из файла репозитория.
+                TELEGRAM_ABOUT_VIEWS.map((v) => ({
+                  active: v === aboutView,
+                  href: `/${lang}/settings?page=about${v === "bot" ? "" : `&about=${v}`}`,
+                  label: ui.about.views[v],
+                }))
+              :
             active === "passport"
               ? passportTabs
               : active === "logs"
@@ -253,7 +287,7 @@ async function BotSettingsGate({
                 уход на другой раздел и обратно даёт снова свёрнутый вид.
                 🔒 ВИДЕН ТОЛЬКО ПЕРВЫЙ АБЗАЦ (77-12, правка владельца): `summary`
                 — это то, что читают ВСЕГДА, поэтому там ровно один абзац. */}
-            {active === "about" && (
+            {active === "about" && aboutView === "bot" && (
               <>
                 <SectionIntro
                   key={active}
@@ -318,6 +352,19 @@ async function BotSettingsGate({
                 <TelegramAbout ui={ui} />
               </>
             )}
+
+            {active === "about" && aboutView === "memory" &&
+              (memoryDoc ? (
+                // 🔒 ТОТ ЖЕ РЕНДЕРЕР, ЧТО У ПАСПОРТА. Второй способ показывать разметку
+                // разошёлся бы с первым на первой правке стиля таблиц.
+                <PassportBody text={memoryDoc} />
+              ) : (
+                <div className="rounded-md border border-muted-foreground/30 border-dashed p-6 text-[length:var(--fs-small)] text-muted-foreground">
+                  {lang === "ru"
+                    ? "Стандарт памяти лежит файлом development-docs/MEMORY-STANDARD.md в самом проекте. Файла нет — значит его удалили или проект собран без него."
+                    : "The memory standard lives as development-docs/MEMORY-STANDARD.md in the project itself. No file means it was removed, or the project was built without it."}
+                </div>
+              ))}
 
             {/* 🔒 НЕПРИЕХАВШИЕ РАЗДЕЛЫ ГОВОРЯТ О СЕБЕ ТЕМ ЖЕ `InProgress`, ЧТО НА
                 3000, А НЕ САМОДЕЛЬНОЙ ПЛАШКОЙ. ✗ 137-1 нарисовал свою жёлтую
@@ -389,7 +436,7 @@ async function BotSettingsGate({
             {/* 🔒 ПЕРЕЧЕНЬ ЦЕПОЧЕК ПЕРЕЕХАЛ В СВОЙ РАЗДЕЛ (147-2/147-3). Здесь
                 остаётся лента ТЕКУЩЕЙ работы — «Логи Realtime». */}
             {active === "known" && (
-              <KnownAboutMe words={ui.knownWords} />
+              <KnownTable page={knownPage} query={knownQuery} words={ui.knownWords} />
             )}
 
             {active === "automations" && (
