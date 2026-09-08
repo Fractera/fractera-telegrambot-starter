@@ -6,7 +6,13 @@ import { factTableName } from "@/lib/facts/table"
 import { type FactClaim, writeFact } from "@/lib/facts/write"
 import { ask, forgetDocuments, labelSearch, learn } from "@/lib/fractera/knowledge"
 import { find, recall, recallSubject } from "@/lib/registry/access"
-import { composeResearch, offerToLearn, type ResearchInput } from "./research"
+import {
+  composeCorrection,
+  composeResearch,
+  type CorrectionInput,
+  offerToLearn,
+  type ResearchInput,
+} from "./research"
 import { candidates } from "./schema-map"
 
 // ВНУТРЕННОСТИ ЧЁРНОГО ЯЩИКА ПАМЯТИ (161-1, стандарт памяти §10).
@@ -34,6 +40,12 @@ export type MemoryWriteInput = {
   research?: ResearchInput
   /** Человек сказал «да» на предложение зафиксировать. Без этого род `research` не пишется. */
   confirmed?: boolean
+  /**
+   * Опровержение человека (162-10): что неверно, как на самом деле, чего не поняли.
+   *
+   * 🔒 РАЗРЕШЕНИЯ НЕ ТРЕБУЕТ — возражение и есть команда запомнить.
+   */
+  correction?: CorrectionInput
 }
 
 export type MemoryWriteResult =
@@ -65,6 +77,13 @@ export async function write(input: MemoryWriteInput): Promise<MemoryWriteResult>
   // лишнего аргумента, который никто не читает.
   if (input.research) {
     return writeResearch(input)
+  }
+
+  // 🔒 ОТРИЦАТЕЛЬНОЕ ДООБУЧЕНИЕ ИДЁТ БЕЗ РАЗРЕШЕНИЯ (162-10) — и это единственное
+  // место в ящике, где запись не спрашивает ничего. Причина словами владельца:
+  // «сам тот факт, что он ответил в отрицательной форме, уже является командой».
+  if (input.correction) {
+    return writeCorrection(input)
   }
 
   if (!cell) {
@@ -149,6 +168,51 @@ export async function write(input: MemoryWriteInput): Promise<MemoryWriteResult>
       hint:
         "блок дообучения записан: он ложится в граф, его обработка идёт в фоне, и тот же объект " +
         "остаётся в векторе. Вывод остался предположением — произноси его теми же словами",
+    }
+  }
+
+  /**
+   * Записать опровержение человека (162-10).
+   *
+   * 🛑 ЗДЕСЬ НЕТ ПРОВЕРКИ `confirmed`, И ЭТО НЕ ЗАБЫТО, А РЕШЕНО. Возражение
+   * человека само есть команда; переспрашивать «записать ли, что я ошибся?» —
+   * значит не слышать сказанное. Асимметрия с `research` намеренная и описана
+   * в §6.1а стандарта.
+   * 🔒 ИСХОДНЫЙ БЛОК НЕ ТРОГАЕТСЯ ВООБЩЕ: ни удаления, ни правки. Опровержение
+   * встаёт рядом на ТОМ ЖЕ ЯКОРЕ — значит вопрос по имени приводит к обоим.
+   */
+  async function writeCorrection(input: MemoryWriteInput): Promise<MemoryWriteResult> {
+    const c = input.correction as CorrectionInput
+    const anchorsFor = anchors.length > 0 ? anchors : c.anchors
+    if (anchorsFor.length === 0) {
+      return {
+        ok: false,
+        error: "no-anchors",
+        hint:
+          "назови имена, к которым относится опровержение: оно ищется тем же якорем, что и " +
+          "опровергнутое, и без якоря они разойдутся",
+      }
+    }
+    const text = composeCorrection({ ...c, anchors: anchorsFor, automationId: input.automationId ?? null })
+    const done = await learn({
+      anchors: anchorsFor,
+      origin: "опровержение, полученное от человека",
+      // 🔒 ТРЕТИЙ НАШ ПРЕФИКС, И ОН ОТЛИЧАЕТСЯ ОТ ДВУХ ПРЕЖНИХ НАМЕРЕННО:
+      // `memory/` — сказанное человеком, `research/` — наш вывод, `correction/` —
+      // опровержение нашего вывода. Разные роды забываются по отдельности.
+      source: `correction/${anchorsFor[0]}-${Date.now()}`,
+      text,
+    })
+    if (!done.accepted) {
+      return { ok: false, error: done.refused ?? "refused", hint: "опровержение не принято хранилищем" }
+    }
+    return {
+      ok: true,
+      where: "surroundings",
+      stored: text,
+      hint:
+        "опровержение записано без спроса — так и задумано. Прежний вывод НЕ удалён: при следующем " +
+        "похожем вопросе произноси их вместе, а не вместо",
     }
   }
 
@@ -1220,7 +1284,7 @@ async function forgetLinks(anchors: string[]): Promise<{
     // `forgetDocuments` возвращал это причиной, а сборщик считал только удалённые —
     // и наружу уходило `ok: true, deleted: 0`, то есть «забыл» при живой истории.
     // Ровно тот класс, которым проект платил в 143: отказ, проглоченный по дороге.
-    for (const prefix of [`memory/${name}-`, `research/${name}-`]) {
+    for (const prefix of [`memory/${name}-`, `research/${name}-`, `correction/${name}-`]) {
       const one = await forgetDocuments(prefix)
       deleted += one.deleted.length
       looked = Math.max(looked, one.looked)

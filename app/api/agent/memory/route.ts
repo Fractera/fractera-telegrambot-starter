@@ -54,6 +54,43 @@ function researchFrom(raw: unknown): {
   return { anchors, answer, basis: basis || undefined, question }
 }
 
+/**
+ * Разобрать опровержение человека (162-10).
+ *
+ * 🛑 БЕЗ «ЧТО НЕВЕРНО» И «КАК НА САМОМ ДЕЛЕ» ЭТО НЕ ОПРОВЕРЖЕНИЕ, А ЖАЛОБА.
+ * Запись из половины полей через месяц читается как полноценное знание — и
+ * отменяет вывод, не сказав, чем его заменить.
+ * 🔒 НОМЕР АВТОМАТИЗАЦИИ ПРИХОДИТ ОТДЕЛЬНЫМ ПОЛЕМ ЗАПРОСА и подставляется здесь:
+ * ✗ ровно на этом месте в 162-9 номер терялся молча.
+ */
+function correctionFrom(raw: unknown, automation: unknown): {
+  wrong: string
+  right: string
+  misunderstood?: string
+  question?: string
+  automationId?: number | null
+  anchors: string[]
+} | undefined {
+  if (!raw || typeof raw !== "object") return undefined
+  const c = raw as Record<string, unknown>
+  const wrong = String(c.wrong ?? "").trim()
+  const right = String(c.right ?? "").trim()
+  if (!wrong || !right) return undefined
+  const anchors = Array.isArray(c.anchors)
+    ? c.anchors.filter(a => typeof a === "string" && a.trim()).map(a => String(a).trim())
+    : []
+  const misunderstood = String(c.misunderstood ?? "").trim()
+  const question = String(c.question ?? "").trim()
+  return {
+    anchors,
+    automationId: typeof automation === "number" && Number.isInteger(automation) ? automation : null,
+    misunderstood: misunderstood || undefined,
+    question: question || undefined,
+    right,
+    wrong,
+  }
+}
+
 export async function POST(request: Request) {
   const expected = secret()
   if (!expected || (request.headers.get("x-data-secret") ?? "") !== expected) {
@@ -112,6 +149,9 @@ export async function POST(request: Request) {
       // 🔒 ПОДТВЕРЖДЕНИЕ ЧЕЛОВЕКА ЕДЕТ ОТДЕЛЬНЫМ ПОЛЕМ И ПРОВЕРЯЕТСЯ ЯЩИКОМ (162-9):
       // блок дообучения без «да» не пишется вовсе.
       confirmed: args.confirmed === true,
+      // 🔒 ОПРОВЕРЖЕНИЕ РАЗБИРАЕТСЯ У ГРАНИЦЫ, КАК И БЛОК ДООБУЧЕНИЯ, И ПО ТОЙ ЖЕ
+      // ПРИЧИНЕ: объявление принимает `value`, то есть что угодно объектом.
+      correction: correctionFrom(args.correction, args.automation_id),
       key: args.key as string | undefined,
       // 🛑 ФОРМА БЛОКА ПРОВЕРЯЕТСЯ ЗДЕСЬ, А НЕ ВНУТРИ: объявление принимает `value`,
       // то есть что угодно объектом, и без разбора сюда доехал бы мусор.
