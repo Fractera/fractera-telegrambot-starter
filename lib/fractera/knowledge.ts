@@ -58,15 +58,66 @@ export async function ask(
  * `source` is the name the document is remembered by — pass a filename or a
  * stable identifier, or every document becomes "unknown_source".
  */
-export async function learn(text: string, source: string): Promise<{ accepted: boolean }> {
+export type LearnInput = {
+  /** Что запоминаем — текст, из которого граф извлечёт сущности и связи. */
+  text: string
+  /**
+   * Якоря: имена сущностей ПЕРВОГО уровня, через которые запись связана с человеком.
+   *
+   * 🔒 БЕЗ ЯКОРЯ ЗАПИСЬ НЕ НАЙДЁТСЯ НИКОГДА, и это не преувеличение: вопрос
+   * приходит от корня («кто из моих друзей…»), а связи с корнем у такой записи нет.
+   * Она существует и недостижима — граф превращается в свалку текста, где ответ
+   * есть и не добывается.
+   * 🔒 ЯКОРЬ — ТО ЖЕ ИМЯ, ЧТО В ЛИЧНОЙ ТАБЛИЦЕ. «Денис» здесь и «Денис» в
+   * `person.important-people` — одна строка, иначе мост не сходится.
+   */
+  anchors: string[]
+  /** Имя, под которым документ помнится. Пусто — граф назовёт его unknown_source. */
+  source: string
+  /** Откуда это знание: разговор, автоматизация, документ. Едет в шапку. */
+  origin?: string
+}
+
+/**
+ * Положить документ в граф знаний — обязательно с якорем.
+ *
+ * 🔒 ЯКОРЯ ПИШУТСЯ В САМ ТЕКСТ, А НЕ В МЕТАДАННЫЕ, И ПРИЧИНА МЕХАНИЧЕСКАЯ: граф
+ * извлекает сущности ИЗ ТЕКСТА. Имя, положенное рядом с документом в поле, для него
+ * не существует; имя, названное первой строкой, становится сущностью и связывается
+ * со всем остальным содержимым.
+ * 🛑 ПОЭТОМУ ШАПКА — ЧАСТЬ ДОКУМЕНТА, А НЕ ОФОРМЛЕНИЕ. Убрав её ради краткости,
+ * мы получим запись, которую нельзя найти ни одним вопросом.
+ *
+ * 🔒 ЗАПИСЬ БЕЗ ЯКОРЯ ОТВЕРГАЕТСЯ, А НЕ ПРИНИМАЕТСЯ МОЛЧА. Тихо принятый документ
+ * выглядит успехом ровно до того дня, когда его понадобится найти.
+ */
+export async function learn(input: LearnInput): Promise<{ accepted: boolean; refused?: string }> {
+  const text = (input.text ?? "").trim()
+  const anchors = (input.anchors ?? []).map(a => String(a ?? "").trim()).filter(Boolean)
+
+  if (!text) return { accepted: false, refused: "empty-text" }
+  if (anchors.length === 0) {
+    return { accepted: false, refused: "no-anchor" }
+  }
+
+  // Шапка: имена сущностей и происхождение — первыми строками документа.
+  const head = [
+    `Относится к: ${anchors.join(", ")}.`,
+    input.origin ? `Откуда это известно: ${input.origin}.` : "",
+  ]
+    .filter(Boolean)
+    .join(" ")
+
   try {
     await dataJson("/service/rag/documents/text", {
       method: "POST",
-      body: JSON.stringify({ text, file_source: source }),
+      body: JSON.stringify({ text: `${head}
+
+${text}`, file_source: input.source || "unknown_source" }),
     });
-    return { accepted: true };
+    return { accepted: true }
   } catch {
-    return { accepted: false };
+    return { accepted: false, refused: "unreachable" }
   }
 }
 

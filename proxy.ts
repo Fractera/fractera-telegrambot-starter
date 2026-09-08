@@ -260,7 +260,8 @@ export async function proxy(request: NextRequest) {
     pathname === "/api/agent/separate" ||
     pathname === "/api/agent/close" ||
     pathname === "/api/agent/registry" ||
-    pathname === "/api/agent/feedback"
+    pathname === "/api/agent/feedback" ||
+    pathname === "/api/agent/knowledge"
   ) {
     return NextResponse.next();
   }
