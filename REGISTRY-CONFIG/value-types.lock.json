@@ -46,5 +46,6 @@
   "person.currency": "text",
   "person.avoid": "text",
   "person.projects": "text",
-  "person.important-people": "text"
+  "person.important-people": "text",
+  "person.nationality": "text"
 }
