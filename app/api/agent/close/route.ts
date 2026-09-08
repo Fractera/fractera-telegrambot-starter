@@ -4,6 +4,7 @@ import { decideClosing, type RunFacts } from "@/lib/automations/closing"
 import { planNextStep, type NextStepResult } from "@/lib/automations/chain"
 import { proposeFacts, type FactProposal } from "@/lib/automations/fact-proposal"
 import { ensureAutomationRowsTable } from "@/lib/automations/rows"
+import { rememberSummary } from "@/lib/automations/similar"
 import { runFactsFromRows } from "@/lib/automations/run-facts"
 import { ensureAutomationsTable, closeAutomation, readAutomationRow, setAutomationFields } from "@/lib/automations/store"
 import { machineEnv } from "@/lib/fractera/machine-env"
@@ -156,6 +157,17 @@ export async function POST(request: Request) {
       ...(summary ? { summary } : {}),
       ...(tags.length > 0 ? { tags } : {}),
     })
+  }
+
+  // ── САММАРИ ЕДЕТ В ВЕКТОРНЫЙ СКЛАД (146-2) ───────────────────────────────
+  //
+  // 🔒 ТОЛЬКО САММАРИ — ТО, ЧЕГО НЕТ В КОЛОНКАХ. Теги, охват, вердикты и
+  // состояние типизированы и отбираются SQL; продублировать их в вектор значит
+  // завести вторую правду и получить медленный ответ вместо быстрого.
+  // 🔒 ОТКАЗ СКЛАДА НЕ ОТМЕНЯЕТ ЗАКРЫТИЕ: поиск похожего — удобство, закрытие —
+  // работа человека. Кончился ключ OpenAI — закрывать от этого нельзя.
+  if (summary) {
+    await rememberSummary(id, summary)
   }
 
   // 🔒 ИСХОД ПОБОЧНОГО ДЕЙСТВИЯ НАЗЫВАЕТСЯ В ОТВЕТЕ, А НЕ МОЛЧИТ (158-5): агент
