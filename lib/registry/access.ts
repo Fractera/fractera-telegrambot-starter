@@ -3,7 +3,7 @@ import toolsIndex from "../../TOOLS-CONFIG/index.json"
 import { dataFetch } from "@/lib/fractera/data-service"
 import { allFacts } from "@/lib/facts/registry"
 import { existingFactTables } from "@/lib/facts/ensure"
-import { factTableName } from "@/lib/facts/table"
+import { placementOf } from "@/lib/facts/placement"
 import { allTools } from "@/lib/tools/store"
 import { stems } from "./text.mjs"
 
@@ -527,20 +527,13 @@ export async function recall(
   // 🔒 ИМЕНА ТАБЛИЦ И КОЛОНОК ПРОВЕРЯЮТСЯ БЕЛЫМ СПИСКОМ. `storedIn` пишет агент
   // в конфиг; попав в запрос без проверки, оно перестало бы быть адресом и стало
   // бы SQL — тот же закон, что у имени таблицы признака (81-2).
+  // 🔒 АДРЕС БЕРЁТСЯ У ОБЩЕЙ ФУНКЦИИ (162-1). Здесь стояла своя копия разбора
+  // `storedIn` с собственным белым списком; когда тот же разбор понадобился карте
+  // схемы, копия стала бы второй границей — и та, что слабее, настоящей.
+  const placed = placementOf(fact)
+  const table = placed.kind === "none" ? "" : placed.table
+  const column = placed.kind === "column" ? placed.column : ""
   const stored = String(fact.storedIn ?? "").trim()
-  const NAME = /^[a-z][a-z0-9_]*$/
-  const own = factTableName(wanted)
-  let table = ""
-  let column = ""
-  if (own && stored === own) {
-    table = own
-  } else {
-    const dot = stored.split(".")
-    if (dot.length === 2 && NAME.test(dot[0]) && NAME.test(dot[1])) {
-      table = dot[0]
-      column = dot[1]
-    }
-  }
   if (!table) {
     return {
       found: false,

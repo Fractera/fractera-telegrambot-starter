@@ -5,6 +5,7 @@ import { factTableName } from "@/lib/facts/table"
 import { type FactClaim, writeFact } from "@/lib/facts/write"
 import { ask, learn } from "@/lib/fractera/knowledge"
 import { find, recall, recallSubject } from "@/lib/registry/access"
+import { candidates } from "./schema-map"
 
 // ВНУТРЕННОСТИ ЧЁРНОГО ЯЩИКА ПАМЯТИ (161-1, стандарт памяти §10).
 //
@@ -195,9 +196,41 @@ export type MemoryItem = {
 /** Стоит ли идти глубже и во что это обойдётся. */
 export type Deeper = { available: boolean; cost_seconds: number; what: string }
 
+/**
+ * Куда память посмотрела и почему — карта поиска в ответе (162-1).
+ *
+ * 🎯 ТРЕБОВАНИЕ ВЛАДЕЛЬЦА: «сопоставить, с какими таблицами теоретически может
+ * быть связан этот запрос». Это сопоставление и есть содержимое `looked`.
+ * 🔒 ОНО ВОЗВРАЩАЕТСЯ НАРУЖУ, А НЕ ОСТАЁТСЯ ВНУТРИ: зовущий обязан видеть, что
+ * система СЧИТАЛА относящимся к вопросу, — иначе пустой ответ неотличим от
+ * «искали не там», и следующий шаг делать не из чего.
+ */
+export type LookedAt = {
+  key: string
+  title: string
+  /** Где лежат значения: имя таблицы, либо почему их нет. */
+  where: string
+  /** Чем совпало с вопросом: строки триггеров и вопросов записи. */
+  why: string[]
+}
+
 export type MemoryReadResult =
-  | { found: true; subject: string; total: number; items: MemoryItem[]; deeper: Deeper }
-  | { found: false; subject: string; searched: string[]; hint: string; deeper: Deeper }
+  | {
+      found: true
+      subject: string
+      total: number
+      items: MemoryItem[]
+      deeper: Deeper
+      looked: LookedAt[]
+    }
+  | {
+      found: false
+      subject: string
+      searched: string[]
+      hint: string
+      deeper: Deeper
+      looked: LookedAt[]
+    }
 
 function capLimit(v: unknown): number {
   const n = typeof v === "number" && Number.isFinite(v) ? Math.floor(v) : 20
@@ -238,6 +271,24 @@ export async function read(input: {
       : "глубже искать нечем: для этого нужен вопрос словами, а не ключ",
   }
   const noDeeper: Deeper = { available: false, cost_seconds: 0, what: "глубже идти уже некуда" }
+
+  // ── КАРТА ПОИСКА: С ЧЕМ ВООБЩЕ МОЖЕТ БЫТЬ СВЯЗАН ЭТОТ ВОПРОС (162-1) ──────
+  //
+  // 🔒 СЧИТАЕТСЯ ДО ЧТЕНИЯ И ВОЗВРАЩАЕТСЯ ВСЕГДА — И ПРИ НАХОДКЕ, И ПРИ ПРОМАХЕ.
+  // Промах без карты неотличим от «искали не там»; с картой видно, что система
+  // сочла относящимся к вопросу и где собиралась смотреть.
+  // 🛑 БЕЗ ВЫЗОВА МОДЕЛИ: это механическое сопоставление основ слов (закон 157-5).
+  const looked: LookedAt[] = []
+  if (query) {
+    for (const c of candidates(query, { limit: 12 }).hits) {
+      looked.push({
+        key: c.key,
+        title: c.title,
+        where: c.placement.kind === "none" ? c.placement.why : c.placement.table,
+        why: c.why,
+      })
+    }
+  }
 
   const items: MemoryItem[] = []
 
@@ -301,7 +352,7 @@ export async function read(input: {
   }
 
   if (items.length > 0) {
-    return { deeper: deep ? noDeeper : offer, found: true, items, subject, total: items.length }
+    return { deeper: deep ? noDeeper : offer, found: true, items, looked, subject, total: items.length }
   }
 
   // ── СТУПЕНЬ 2: ЗНАНИЕ ОБ ОКРУЖЕНИИ — ТОЛЬКО ПО РАЗРЕШЕНИЮ БЮДЖЕТА ─────────
@@ -334,6 +385,7 @@ export async function read(input: {
       return {
         deeper: noDeeper,
         found: true,
+        looked,
         items: [
           {
             at: null,
@@ -356,6 +408,7 @@ export async function read(input: {
   return {
     deeper: deep ? noDeeper : offer,
     found: false,
+    looked,
     hint: key
       ? "признак есть, значений у него пока нет"
       : query
