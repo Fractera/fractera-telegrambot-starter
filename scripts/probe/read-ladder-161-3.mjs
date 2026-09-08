@@ -73,14 +73,26 @@ say(r.json.answer?.found === true && all.length >= 2 && r.ms < 3000,
 const unknown = "что известно о человеке по фамилии Ратмиров"
 r = await memory("read", { query: unknown })
 const fastMs = r.ms
-say(r.json.answer?.found === false && fastMs < 1500,
-  `fast на незнакомый вопрос: не нашёл в записанном за ${fastMs} мс и в связи НЕ ходил`)
+// 🪦 ПЕРЕНАЦЕЛЕНО 2026-09-08 ШАГОМ 162-2, И ЭТО СМЕНА УТВЕРЖДЕНИЯ О СОСТОЯНИИ,
+// А НЕ ПРАВИЛА. Здесь стояло `found === false`: до 162-2 уровень 1 читал только
+// личные признаки и на этом вопросе не находил НИЧЕГО. Теперь он читает все
+// таблицы-кандидаты и законно может что-то найти. Правило же — «быстрый путь НЕ
+// ходит в связи» — осталось и проверяется прямо: ни одного значения оттуда.
+const fastFromLinks = (r.json.answer?.items ?? []).filter(i => /связ/i.test(String(i.from ?? "")))
+say(fastFromLinks.length === 0 && fastMs < 1500,
+  `fast за ${fastMs} мс и в связи НЕ ходил: значений оттуда ${fastFromLinks.length}`)
 say(r.json.answer?.deeper?.available === true && r.json.answer?.deeper?.cost_seconds > 0,
   `ответ сам предлагает глубину и называет цену: ${r.json.answer?.deeper?.cost_seconds} с — «${String(r.json.answer?.deeper?.what ?? "").slice(0, 60)}»`)
 
 r = await memory("read", { query: unknown, budget: "deep" })
 const deepMs = r.ms
-const deepItem = (r.json.answer?.items ?? [])[0]
+// 🪦 ПЕРЕНАЦЕЛЕНО 2026-09-08 ШАГОМ 162-3: здесь бралось `items[0]`. Уровни стали
+// КУМУЛЯТИВНЫМИ — глубина 2 содержит всё, что дал уровень 1, и найденное в связях
+// стоит после записанного. Утверждение «ответ из связей ПЕРВЫЙ» перестало быть
+// верным законно; правило «в связях нашлось» осталось и проверяется по любому
+// значению оттуда.
+const deepItem = (r.json.answer?.items ?? []).find(i => /связ/i.test(String(i.from ?? "")))
+  ?? (r.json.answer?.items ?? [])[0]
 // 🛑 ОБРАЗЕЦ ТЕРПИТ ОБА ЯЗЫКА, И ЭТО НЕ ПОБЛАЖКА, А ИСПРАВЛЕНИЕ СЛЕПОТЫ.
 // ✗ измерено 161-3: на строчный вопрос граф отвечает ПО-АНГЛИЙСКИ («is a person
 // who has been maintaining a beehive»), и русский образец объявил это отказом —
@@ -89,8 +101,17 @@ say(r.json.answer?.found === true && /пасек|мёд|мед|ярмарк|beeh
   `deep нашёл в связях за ${deepMs} мс: «${String(deepItem?.value ?? "").slice(0, 80).replace(/\n/g, " ")}…»`)
 // 🔒 РАЗНИЦА ВО ВРЕМЕНИ И ЕСТЬ ДОКАЗАТЕЛЬСТВО, ЧТО БЮДЖЕТ РАБОТАЕТ, А НЕ ЧИСЛИТСЯ.
 say(deepMs > fastMs * 2, `глубина дороже быстрого пути: ${deepMs} мс против ${fastMs} мс`)
-// 🔒 НЕГАТИВНЫЙ КОНТРОЛЬ ПРЕДЛОЖЕНИЯ: при `deep` предлагать больше нечего.
-say(r.json.answer?.deeper?.available === false, `при deep глубже не предлагается: «${String(r.json.answer?.deeper?.what ?? "")}»`)
+// 🔒 НЕГАТИВНЫЙ КОНТРОЛЬ ПРЕДЛОЖЕНИЯ: на ПОСЛЕДНЕМ уровне предлагать нечего.
+// 🪦 ПЕРЕНАЦЕЛЕНО 2026-09-08 ШАГОМ 162-3 — И ЭТО РЕШЕНИЕ ВЛАДЕЛЬЦА, А НЕ ПОДГОНКА.
+// Здесь проверялось, что `budget: "deep"` — конец лестницы: уровней было ДВА.
+// Теперь их три (записанное · связи · похожее по смыслу), и `deep` равен второму,
+// после которого честно предлагается третий. Правило «на дне предлагать нечего»
+// не изменилось — изменилось, где дно.
+say(r.json.answer?.deeper?.available === true && /вектор|похож/i.test(String(r.json.answer?.deeper?.what ?? "")),
+  `после связей предлагается последний уровень: «${String(r.json.answer?.deeper?.what ?? "")}»`)
+const bottom = await memory("read", { query: unknown, depth: 3 })
+say(bottom.json.answer?.deeper?.available === false,
+  `на последнем уровне глубже не предлагается: «${String(bottom.json.answer?.deeper?.what ?? "")}»`)
 
 // ── ПЛОСКОСТЬ 2: ФОРМА ОТВЕТА ─────────────────────────────────────────────
 say(deepItem?.claim === "guess" && Boolean(deepItem?.basis),

@@ -90,6 +90,7 @@ export async function POST(request: Request) {
   if (decl.fn === "read") {
     const answer = await read({
       budget: args.budget as string | undefined,
+      depth: args.depth as number | undefined,
       key: args.key as string | undefined,
       limit: args.limit as number | undefined,
       query: args.query as string | undefined,
