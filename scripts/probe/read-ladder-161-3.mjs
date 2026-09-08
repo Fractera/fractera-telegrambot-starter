@@ -96,6 +96,7 @@ const deepMs = r.ms
 // «ответ из связей» перестали быть одним и тем же. Проверяем ЛЮБОЙ из них.
 const fromLinks = (r.json.answer?.items ?? []).filter(i => /связ/i.test(String(i.from ?? "")))
 const deepItem = {
+  basis: fromLinks[0]?.basis,
   claim: fromLinks[0]?.claim,
   value: fromLinks.map(i => String(i.value ?? "")).join(" \n "),
 }
