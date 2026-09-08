@@ -1,6 +1,7 @@
 // @api закрытие автоматизации: агент объявляет род закрытия, служба решает и записывает
 import { NextResponse } from "next/server"
 import { decideClosing, type RunFacts } from "@/lib/automations/closing"
+import { runFactsFromRows } from "@/lib/automations/run-facts"
 import { closeAutomation, readAutomationRow, setAutomationFields } from "@/lib/automations/store"
 import { machineEnv } from "@/lib/fractera/machine-env"
 
@@ -51,26 +52,41 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "not-found" }, { status: 404 })
   }
 
-  const run: RunFacts = {
-    automationId: id,
-    messages: Number(body.messages ?? 1),
-    factKeys: toStrings(body.fact_keys),
-    tools: toStrings(body.tools),
-    fromMedia: body.from_media === true,
-    hasNextStep: body.has_next_step === true,
+  // ── ФАКТЫ ПРОГОНА БЕРУТСЯ ИЗ ЛЕНТЫ, А НЕ ИЗ ТЕЛА ЗАПРОСА (143-4) ──────────
+  //
+  // 🔒 ЗАКОН §3е ДОСЛОВНО: условия закрытия считаются ИЗ ФАКТОВ ПРОГОНА, а не из
+  // впечатления модели. До 143-4 здесь стояло чтение `body.messages`,
+  // `body.fact_keys`, `body.tools`, `body.from_media`, `body.missing_facts` —
+  // то есть система верила агенту на слово о его собственной работе.
+  // ✗ ЧЕМ ЭТО ПЛОХО КОНКРЕТНО: модель, пересказывающая себя, ошибается В СВОЮ
+  // ПОЛЬЗУ. «Звал инструменты» звучит лучше, чем «ничего не сделал», — и отзыв
+  // просили бы у человека после пустого разговора.
+  //
+  // 🔒 СО СЛОВ АГЕНТА ОСТАЁТСЯ РОВНО ТО, ЧЕМУ НЕТ СЛЕДА В ЗАПИСЯХ: род закрытия
+  // (решение, а не факт), саммари (текст для человека) и срок следующей ступени
+  // (его называет человек). Остальное имеет след в ленте — спрашивать об этом
+  // свидетеля значит не читать протокол.
+  //
+  // 🔒 ТРИ ЗНАЧЕНИЯ ПРИХОДЯТ ИЗ ЗАПИСИ АВТОМАТИЗАЦИИ, А НЕ ИЗ ЛЕНТЫ: публичный
+  // договор и «уже спрашивали» живут в её колонках; наличие следующей ступени —
+  // свойство цепочки, и до шага 150 (§3л) его называет вызывающий.
+  const run: RunFacts = await runFactsFromRows(id, {
     publicContract: row.publicContract,
     // 🔒 «УЖЕ СПРАШИВАЛИ» БЕРЁТСЯ ИЗ ЗАПИСИ, А НЕ ИЗ СЛОВ АГЕНТА: агент забудет,
     // строка — нет. Так второй отзыв за тот же номер не запрашивается даже после
     // перезапуска сессии.
     feedbackAsked: row.liked !== null || row.needsWork !== null,
-    missingFacts: toStrings(body.missing_facts),
-  }
+    hasNextStep: body.has_next_step === true,
+  })
 
   const decisions = decideClosing(run, kind)
   const written = await closeAutomation(id, kind, `закрытие: ${kind}`)
 
   const summary = typeof body.summary === "string" ? body.summary.trim() : ""
-  const tags = toStrings(body.fact_keys)
+  // 🔒 ТЕГИ — ТОЖЕ ФАКТ ПРОГОНА, А НЕ СЛОВО АГЕНТА (143-4). Раньше они брались
+  // из `body.fact_keys` рядом с саммари, и это было незаметное второе место, где
+  // модель рассказывала о себе. Теперь — те же ключи, что попали в ленту.
+  const tags = run.factKeys
   if (summary || tags.length > 0) {
     // 🔒 САММАРИ И ТЕГИ ПИШУТСЯ ЗАПЛАТОЙ: вердикты и договор принадлежат другим
     // писателям, и снимок затёр бы их.

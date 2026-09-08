@@ -195,3 +195,63 @@ export const AUTOMATION_STATES_TABLE_COLUMNS = [
   "reason",
   "created_at",
 ] as const
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ЛЕНТА ПРОГОНА — СТРОКИ РАЗБОРА, ПРИВЯЗАННЫЕ К НОМЕРУ (143-3)
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// 🔒 СТОЛ РАЗБОРА И ЛЕНТА ПРОГОНА — РАЗНЫЕ ВЕЩИ, И СКЛЕИВАТЬ ИХ НЕЛЬЗЯ.
+// `task_current` (`lib/task/store.ts`) отвечает на вопрос «что происходит
+// ПРЯМО СЕЙЧАС»: одна строка, живёт 30 минут, **заменяется следующим
+// сообщением**. Лента отвечает на другой вопрос — «что случилось за прогон
+// номера N» — и обязана пережить весь разговор, потому что по ней считаются
+// условия закрытия (§3е).
+// ✗ ИЗМЕРЕНО 2026-09-08 ПРИ ПЛАНИРОВАНИИ: `appendRows` не звал НИКТО — лента
+// строк была построена целиком и не имела ни одного писателя. Закрытие при этом
+// брало факты прогона **со слов агента**, то есть из впечатления модели.
+//
+// 🔒 ФОРМА СТРОКИ ОДНА НА ОБА ХРАНИЛИЩА — `TaskRow` из `lib/task/types.ts`.
+// Вторая форма разошлась бы с первой на первой же правке, и экран человека начал
+// бы показывать не то, по чему система принимает решения.
+//
+// 🔒 НАЧИНКА ЛОЖИТСЯ ОДНОЙ КОЛОНКОЙ JSON, А ПОИСКОВЫЕ ПОЛЯ — ОТДЕЛЬНЫМИ.
+// `kind` и `fact` вынуты потому, что по ним спрашивают («сколько строк без
+// признака»); всё остальное спрашивают целиком и никогда по частям.
+
+export const AUTOMATION_ROWS_TABLE = "automation_rows"
+
+/** Форма таблицы ленты. Починка — рядом, как у соседей выше. */
+export function automationRowsTableSql(): string {
+  return `
+    CREATE TABLE IF NOT EXISTS ${AUTOMATION_ROWS_TABLE} (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      automation_id INTEGER NOT NULL,
+      -- Вид строки: intake · store · match · evolve · extract · resolve · plan · reveal.
+      kind TEXT NOT NULL,
+      -- Ключ признака. ПУСТО у reveal значит no-fact: признака под это в реестре НЕТ,
+      -- и это законный исход, а не потеря. По нему считается нехватка (143-7).
+      fact TEXT,
+      -- Строка целиком, как её видит экран: payload, phrase, next, rejected.
+      payload TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (strftime(%Y-%m-%dT%H:%M:%SZ,now))
+    );
+    CREATE INDEX IF NOT EXISTS ${AUTOMATION_ROWS_TABLE}_owner ON ${AUTOMATION_ROWS_TABLE} (automation_id, id);
+  `
+}
+
+export const AUTOMATION_ROWS_LATE_COLUMNS: readonly string[] = []
+
+export function automationRowsTableAlters(): string[] {
+  return AUTOMATION_ROWS_LATE_COLUMNS.map(
+    c => `ALTER TABLE ${AUTOMATION_ROWS_TABLE} ADD COLUMN ${c} TEXT`,
+  )
+}
+
+export const AUTOMATION_ROWS_TABLE_COLUMNS = [
+  "id",
+  "automation_id",
+  "kind",
+  "fact",
+  "payload",
+  "created_at",
+] as const

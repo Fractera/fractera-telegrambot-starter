@@ -13,7 +13,10 @@ import { machineEnv } from "@/lib/fractera/machine-env"
 import { scopeKey } from "@/lib/facts/scope"
 import { writeFact } from "@/lib/facts/write"
 import { planSchedule } from "@/lib/schedule/store"
+import { appendAutomationRows, ensureAutomationRowsTable } from "@/lib/automations/rows"
 import { categoryLine, isMessageKind, opensAutomation } from "@/lib/task/separation"
+import { nowMs } from "@/lib/task/store"
+import type { TaskRow } from "@/lib/task/types"
 
 // ДВЕРЬ ПЕРВИЧНОЙ СЕПАРАЦИИ (155-2, 155-3).
 //
@@ -156,6 +159,40 @@ export async function POST(request: Request) {
   // 🔒 СОСТОЯНИЕ ПИШЕТСЯ СРАЗУ: автоматизация без первой строки перехода
   // читается как «о ней ещё никто ничего не решил», а решение уже принято.
   if (!continued) await setState(id, "open", { reason: `сепарация: ${kind}` })
+
+  // ── ПЕРВАЯ СТРОКА ЛЕНТЫ ПРОГОНА (143-3) ──────────────────────────────────
+  //
+  // 🔒 ЛЕНТА ПОЛУЧАЕТ ПЕРВОГО ПИСАТЕЛЯ ЗДЕСЬ, И ЭТО НЕ СЛУЧАЙНОЕ МЕСТО.
+  // Сепарация — единственная точка, через которую сообщение попадает в систему;
+  // строка, написанная здесь, есть у КАЖДОГО прогона, а не у удачного.
+  // ✗ ИЗМЕРЕНО 2026-09-08: до этой правки условия закрытия считались со слов
+  // агента, потому что записанных фактов прогона не существовало вовсе.
+  //
+  // 🔒 ОТКАЗ ЗАПИСИ НЕ ЛОМАЕТ СЕПАРАЦИЮ — тот же закон, что у памяти о часовом
+  // поясе (158-5): номер присвоен, охват принят, срок заведён. Лента — материал
+  // для решения о закрытии, а не условие работы.
+  await ensureAutomationRowsTable()
+  const intakeRow: TaskRow = {
+    id: 0,
+    kind: "intake",
+    // 🔒 НАЧИНКА ПЕРВИЧНА, ФРАЗА СОБИРАЕТСЯ ИЗ НЕЁ (закон 91-5): в `payload`
+    // лежит то, по чему считают, во `phrase` — то, что читают глазами.
+    payload: {
+      messageKind: kind,
+      continued,
+      messageId,
+      hasAttachment: body.has_attachment === true,
+    },
+    phrase: line,
+    source: "model",
+    tool: "separate",
+    toolWhat: "первичная сепарация: род сообщения и номер автоматизации",
+    // 🔒 ОДНО СЛЕДУЮЩЕЕ ДЕЙСТВИЕ ЕСТЬ ВСЕГДА, КАКИМ БЫ НИ БЫЛ РАЗБОР — проверить
+    // связь с другим сообщением. Это сцепка таблицы, а не подпись.
+    next: continued ? "продолжение известной автоматизации" : "проверить связь с другим сообщением",
+    at: nowMs(),
+  }
+  await appendAutomationRows(id, [intakeRow])
 
   // ── ОХВАТ РАЗГОВОРА (155-4) ──────────────────────────────────────────────
   //
