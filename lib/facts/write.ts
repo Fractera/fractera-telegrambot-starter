@@ -1,3 +1,4 @@
+import { checkDepth, valueToCell } from "./depth-guard"
 import { indexFact } from "./index-table"
 import { dataFetch } from "@/lib/fractera/data-service"
 import { allFacts } from "./registry"
@@ -25,7 +26,14 @@ export type WriteFact = {
   /** Ключ признака из реестра. Чужой ключ — отказ, а не создание таблицы. */
   key: string
   /** Значение словами. Пусто — нечего записывать. */
-  value: string
+  /**
+   * Значение: строка или объект глубины 1.
+   *
+   * 🔒 ОБЪЕКТ ДОПУСКАЕТСЯ ТОЛЬКО ОДНОУРОВНЕВЫЙ, И ЭТО ПРОВЕРЯЕТ СТОРОЖ. Вложенный
+   * объект — это атрибут ЧУЖОЙ сущности, то есть глубина 2; такому место в графе
+   * с якорем, а не в личной таблице (§3п, стандарт памяти).
+   */
+  value: string | Record<string, unknown>
   /** Чей это факт: ключ субъекта. Для `subject: self` — идентификатор человека. */
   subject?: string | null
   /** Где факт верен (охват). */
@@ -58,7 +66,10 @@ export type WriteResult =
  */
 export async function writeFact(input: WriteFact): Promise<WriteResult> {
   const key = String(input.key ?? "").trim().toLowerCase()
-  const value = String(input.value ?? "").trim()
+  // 🔒 ЗНАЧЕНИЕ ПРИВОДИТСЯ К ЯЧЕЙКЕ ОДНИМ МЕСТОМ, А НЕ КАЖДЫМ ВЫЗЫВАЮЩИМ.
+  // Объект уезжает JSON-строкой в ту же колонку: колонка на каждое поле означала
+  // бы `ALTER TABLE` на каждую фразу человека и таблицу, формы которой никто не знает.
+  const value = valueToCell(input.value)
 
   const fact = allFacts().find(f => f.key === key)
   if (!fact) {
@@ -70,6 +81,28 @@ export async function writeFact(input: WriteFact): Promise<WriteResult> {
   }
   if (value === "") {
     return { ok: false, error: "empty-value", hint: "пустое значение не записывается" }
+  }
+
+  // ── СТОРОЖ ГЛУБИНЫ (160-4) ───────────────────────────────────────────────
+  //
+  // 🎯 ТРЕБОВАНИЕ ВЛАДЕЛЬЦА 2026-09-08: «нужно чётко установить правила сторожа:
+  // не пропускать в личную таблицу данные с глубиной больше единицы».
+  //
+  // 🔒 СТОИТ ЗДЕСЬ, А НЕ У ВЫЗЫВАЮЩЕГО, ПОТОМУ ЧТО ЗДЕСЬ ЕДИНСТВЕННОЕ МЕСТО, ГДЕ
+  // ЗНАЧЕНИЕ ЛОЖИТСЯ В ТАБЛИЦУ. Сторож у двери пропустил бы запись из соседнего
+  // кода, а запрет, который можно обойти, — это не запрет.
+  //
+  // 🔒 ПОРЯДОК СУБЪЕКТА СЕГОДНЯ ВЫЧИСЛЯЕТСЯ ПРОСТО, И ГРАНИЦА ЭТОГО НАЗВАНА:
+  // субъекты второго порядка в проекте не заводятся вовсе — `subject` у всех
+  // признаков либо `self`, либо не объявлен. Значит проверка срабатывает только
+  // на явной попытке записать факт о чужой сущности, и это честно: сторож не
+  // умеет того, чего в системе ещё нет, и не притворяется, что умеет.
+  const verdict = checkDepth(input.value, {
+    valueType: fact.valueType,
+    subjectIsFirstOrder: fact.subject === undefined || fact.subject === "self",
+  })
+  if (!verdict.ok) {
+    return { ok: false, error: verdict.reason, hint: verdict.hint }
   }
 
   // 🛑 ИМЯ ТАБЛИЦЫ СОБИРАЕТСЯ БЕЛЫМ СПИСКОМ, А НЕ ИЗ КЛЮЧА КАК ЕСТЬ (закон 81-2).

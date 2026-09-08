@@ -102,6 +102,64 @@ export async function POST(request: Request) {
     const answer = describe(args.corpus as "facts" | "tools", String(args.key ?? ""))
     return NextResponse.json({ ok: true, fn: "describe", answer })
   }
+  if (decl.fn === "remember_many") {
+    // 🔒 КАЖДЫЙ ФАКТ ПРОВЕРЯЕТСЯ ОТДЕЛЬНО, И ОТКАЗ ПО ОДНОМУ НЕ ОТМЕНЯЕТ ОСТАЛЬНЫЕ.
+    // Человек рассказал о себе тремя фразами; если одна не легла — потерять две
+    // другие значило бы наказать его за то, что он сказал лишнее.
+    // 🛑 И ОБРАТНОЕ ТОЖЕ ЗАПРЕЩЕНО: молча проглотить неудачную запись. В ответе
+    // перечислено, что записано и что нет, с причиной по каждой.
+    const raw = Array.isArray(args.facts) ? (args.facts as unknown[]) : []
+    if (raw.length === 0) {
+      return NextResponse.json(
+        { ok: false, fn: "remember_many", error: "no-facts", hint: "список пуст: нечего записывать" },
+        { status: 400 }
+      )
+    }
+    const results: {
+      key: string
+      ok: boolean
+      table?: string
+      error?: string
+      hint?: string
+    }[] = []
+    for (const item of raw) {
+      const rec = item && typeof item === "object" ? (item as Record<string, unknown>) : {}
+      const key = String(rec.key ?? "").trim().toLowerCase()
+      // 🛑 ГРАНИЦУ СТЕРЕЖЁТ ДВЕРЬ, А НЕ ОБЪЯВЛЕНИЕ (158-5а) — та же проверка, что у
+      // одиночного `remember`: пишем только то, что человек говорит О СЕБЕ.
+      const fact = allFacts().find(f => f.key === key)
+      if (!fact || fact.subject !== "self") {
+        results.push({
+          key,
+          ok: false,
+          error: "not-a-person-fact",
+          hint: "запоминать можно только факты о человеке; ключ берут из registry_find",
+        })
+        continue
+      }
+      const written = await writeFact({
+        key,
+        value: (rec.value ?? "") as string | Record<string, unknown>,
+        subject: "self",
+        source: String(args.source ?? "сказано человеком в переписке"),
+        automationId:
+          typeof args.automation_id === "number" && Number.isInteger(args.automation_id)
+            ? args.automation_id
+            : null,
+      })
+      results.push(
+        written.ok
+          ? { key, ok: true, table: written.table }
+          : { key, ok: false, error: written.error, hint: written.hint }
+      )
+    }
+    const saved = results.filter(r => r.ok).length
+    return NextResponse.json(
+      { ok: saved > 0, fn: "remember_many", saved, total: results.length, results },
+      { status: saved > 0 ? 200 : 400 }
+    )
+  }
+
   if (decl.fn === "remember") {
     // 🛑 ГРАНИЦУ СТЕРЕЖЁТ ДВЕРЬ, А НЕ ОБЪЯВЛЕНИЕ (158-5а). Ключ приходит от
     // модели; без этой проверки пятый примитив стал бы способом дописать что

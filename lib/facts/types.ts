@@ -45,7 +45,12 @@ export type FactLevel = (typeof FACT_LEVELS)[number]
 //   адрес; два разных предмета под одним словом путались бы вечно.
 //   Прежнее имя `link` отменено:
 //   «всегда и у всех по умолчанию».
-export const FACT_VALUE_TYPES = ["flag", "text", "number", "money", "date", "geo", "relation", "list"] as const
+// 🔒 `object` ДОБАВЛЕН 2026-09-08 (160-3): глубина 1 хранится ОБЪЕКТОМ, а не прозой.
+// «Рада — дочь, 16 лет» строкой не даёт ни выбрать год рождения, ни отобрать по роли;
+// `{ name, role, birthYear }` даёт и то и другое, оставаясь одной записью.
+// 🛑 ВЛОЖЕННОСТЬ У ОБЪЕКТА ОДНА: второй уровень и есть глубина 2, и его отвергает
+// сторож `lib/facts/depth-guard.ts`.
+export const FACT_VALUE_TYPES = ["flag", "text", "number", "money", "date", "geo", "relation", "list", "object"] as const
 export type FactValueType = (typeof FACT_VALUE_TYPES)[number]
 
 /**
