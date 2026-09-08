@@ -4,7 +4,7 @@ import { type Placement, placementOf } from "@/lib/facts/placement"
 import { allFacts } from "@/lib/facts/registry"
 import { factTableName } from "@/lib/facts/table"
 import { type FactClaim, writeFact } from "@/lib/facts/write"
-import { ask, labelSearch, learn } from "@/lib/fractera/knowledge"
+import { ask, forgetDocuments, labelSearch, learn } from "@/lib/fractera/knowledge"
 import { find, recall, recallSubject } from "@/lib/registry/access"
 import { candidates } from "./schema-map"
 
@@ -931,22 +931,70 @@ export async function mutate(input: {
 // данные того же рода (§3ж).
 
 export type MemoryForgetResult =
-  | { ok: true; key: string; removed: number; table: string; definitionKept: true }
+  | {
+      ok: true
+      key: string
+      removed: number
+      table: string
+      definitionKept: true
+      /** Что забыто в связях: по каким именам искали и сколько документов убрано (162-5). */
+      links?: { anchors: string[]; deleted: number; looked: number }
+    }
   | { ok: false; error: string; hint: string }
 
+/**
+ * Забыть — в личной памяти, в связях или в обоих (162-5).
+ *
+ * 🔒 ГЛУБИНА У ЗАБЫВАНИЯ ЗНАЧИТ «И В СВЯЗЯХ ТОЖЕ», И ЭТО ПРЯМОЙ ОТВЕТ ВЛАДЕЛЬЦА
+ * НА ВОПРОС ОБ ИЗВЛЕЧЕНИИ: глубина у всех четырёх глаголов, а не только у чтения.
+ * Без этого просьба «забудь про Дениса» стирала бы строку в таблице и оставляла
+ * историю о нём в связях — то есть система отвечала бы «забыл» и продолжала знать.
+ *
+ * 🛑 УДАЛЯЕТСЯ ТОЛЬКО СВОЁ, ПО СВОЕЙ МЕТКЕ. Документы связей ищутся по имени
+ * источника `memory/<якорь>-`, которое печатаем мы сами при записи. Чужое —
+ * сообщения, файлы, чьи-то другие документы — не трогается никогда.
+ * 🔒 УДАЛЁННОЕ НАЗЫВАЕТСЯ ЧИСЛОМ: «забыл» без числа неотличимо от «не нашёл, что
+ * забывать», а разница здесь и есть ответ человеку.
+ */
 export async function forget(input: {
-  key: string
+  key?: string
+  anchors?: string[]
   subject?: string
   id?: number
+  depth?: number
 }): Promise<MemoryForgetResult> {
   const key = String(input.key ?? "").trim().toLowerCase()
   const subject = String(input.subject ?? "").trim() || "self"
+  const asked = (Array.isArray(input.anchors) ? input.anchors : [])
+    .filter(a => typeof a === "string" && a.trim())
+    .map(a => a.trim())
+  const deepForget = Number(input.depth) >= 2 || asked.length > 0
+
+  // ── ТОЛЬКО СВЯЗИ: КЛЮЧА НЕТ, ЕСТЬ ИМЕНА ────────────────────────────────
+  //
+  // 🔒 ИСТОРИЯ ОБ ОКРУЖЕНИИ ЖИВЁТ БЕЗ КЛЮЧА ПРИЗНАКА, И ЗАБЫВАТЬ ЕЁ НАДО ПО
+  // ИМЕНИ. Требовать ключ здесь значило бы отказать в законной просьбе «забудь
+  // про Дениса»: такого признака в реестре нет и быть не должно.
+  if (!key && asked.length > 0) {
+    const gone = await forgetLinks(asked)
+    return {
+      definitionKept: true,
+      key: "",
+      links: gone,
+      ok: true,
+      removed: 0,
+      table: "",
+    }
+  }
+
   const fact = allFacts().find(f => f.key === key)
   if (!fact) {
     return {
       ok: false,
       error: "unknown-fact",
-      hint: "такого признака в реестре нет — забывать нечего",
+      hint: key
+        ? "такого признака в реестре нет — забывать нечего"
+        : "не назван ни ключ признака, ни имена, о ком забыть",
     }
   }
   if (fact.subject !== "self") {
@@ -981,5 +1029,44 @@ export async function forget(input: {
   // службы — её слово о себе; разница «было минус осталось» — наше измерение.
   const after = await recall(key, { limit: 50, subject })
   const left = after.found === true ? after.items.length : 0
-  return { definitionKept: true, key, ok: true, removed: had - left, table }
+
+  // 🔒 ГЛУБИНА 2: ЗАБЫВАЕМ И ИСТОРИИ, ПРИВЯЗАННЫЕ К ЭТИМ ЗНАЧЕНИЯМ. Имена берутся
+  // из того, что БЫЛО записано, — «забудь про важных людей» обязано убрать и
+  // рассказы о них. 🛑 Имена названы в ответе поимённо: молчаливое удаление по
+  // выведенному списку — худший вид удаления, потому что его нельзя обжаловать.
+  let links: { anchors: string[]; deleted: number; looked: number } | undefined
+  if (deepForget) {
+    const names = before.found === true
+      ? before.items
+          .map(v => (typeof v.value === "string" ? v.value : String((v.value as { name?: unknown })?.name ?? "")))
+          .filter(v => v.trim().length >= 2)
+      : []
+    const all = [...new Set([...asked, ...names])]
+    if (all.length > 0) links = await forgetLinks(all)
+  }
+
+  return { definitionKept: true, key, links, ok: true, removed: had - left, table }
+}
+
+/**
+ * Убрать наши документы связей по именам.
+ *
+ * 🔒 ОТДЕЛЬНАЯ ФУНКЦИЯ, А НЕ ВЕТКА ВНУТРИ `forget`: её зовут два пути — забывание
+ * по имени и забывание по ключу с глубиной. Две копии разошлись бы на первом же
+ * ужесточении правила «удаляем только своё».
+ */
+async function forgetLinks(anchors: string[]): Promise<{
+  anchors: string[]
+  deleted: number
+  looked: number
+}> {
+  let deleted = 0
+  let looked = 0
+  for (const name of anchors.slice(0, 5)) {
+    // 🔒 ПРЕФИКС ТОТ ЖЕ, ЧТО ПЕЧАТАЕТ ЗАПИСЬ: `memory/<якорь>-<время>`.
+    const gone = await forgetDocuments(`memory/${name}-`)
+    deleted += gone.deleted.length
+    looked = Math.max(looked, gone.looked)
+  }
+  return { anchors, deleted, looked }
 }

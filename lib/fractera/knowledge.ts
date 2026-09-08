@@ -121,6 +121,56 @@ export async function labelSearch(q: string, limit = 10): Promise<string[]> {
 }
 
 /**
+ * Забыть наши документы связей по имени источника (162-5).
+ *
+ * 🔒 АДРЕС — ТОТ, КОТОРЫЙ МЫ САМИ И ПЕЧАТАЕМ: `memory/<якорь>-<время>`. Значит
+ * забывание не угадывает, что удалять, а находит своё по своей же метке. Тот же
+ * закон, что у приборов: убирать за собой ПО СВОЕЙ МЕТКЕ, а не по хранилищу.
+ *
+ * 🔒 ПУТИ ИЗМЕРЕНЫ У ПЕРВОИСТОЧНИКА (`openapi.json` движка, 2026-09-08):
+ * `GET /documents` отдаёт `statuses.<состояние>[]` с полями `id` и `file_path`;
+ * `DELETE /documents/delete_document` принимает `doc_ids`. Удалять по имени
+ * источника напрямую движок не умеет — сначала находим, потом удаляем.
+ *
+ * 🛑 УДАЛЕНИЕ БЕЗВОЗВРАТНО, ПОЭТОМУ ПРЕФИКС ОБЯЗАТЕЛЕН И НЕ БЫВАЕТ ПУСТЫМ.
+ * Пустой префикс совпал бы со ВСЕМИ документами — включая те, что положил не мы.
+ */
+export async function forgetDocuments(prefix: string): Promise<{
+  deleted: string[];
+  looked: number;
+  error?: string;
+}> {
+  const head = String(prefix ?? "").trim();
+  if (!head) return { deleted: [], looked: 0, error: "empty-prefix" };
+  let docs: { id?: unknown; file_path?: unknown }[] = [];
+  try {
+    const data = await dataJson<{ statuses?: Record<string, { id?: unknown; file_path?: unknown }[]> }>(
+      "/service/rag/documents",
+      { method: "GET" },
+    );
+    for (const group of Object.values(data.statuses ?? {})) {
+      if (Array.isArray(group)) docs = docs.concat(group);
+    }
+  } catch {
+    return { deleted: [], looked: 0, error: "unreachable" };
+  }
+  const mine = docs
+    .filter(d => String(d.file_path ?? "").startsWith(head))
+    .map(d => String(d.id ?? ""))
+    .filter(Boolean);
+  if (mine.length === 0) return { deleted: [], looked: docs.length };
+  try {
+    await dataJson<unknown>("/service/rag/documents/delete_document", {
+      method: "DELETE",
+      body: JSON.stringify({ doc_ids: mine, delete_file: false }),
+    });
+    return { deleted: mine, looked: docs.length };
+  } catch {
+    return { deleted: [], looked: docs.length, error: "refused" };
+  }
+}
+
+/**
  * Add a document. Returns as soon as it is accepted: the graph is built in the
  * background, so a question asked immediately may not see it yet.
  *

@@ -114,6 +114,8 @@ export async function POST(request: Request) {
 
   if (decl.fn === "forget") {
     const result = await forget({
+      anchors: Array.isArray(args.anchors) ? (args.anchors as string[]) : undefined,
+      depth: typeof args.depth === "number" ? args.depth : undefined,
       id: typeof args.id === "number" ? args.id : undefined,
       key: String(args.key ?? ""),
       subject: args.subject as string | undefined,
