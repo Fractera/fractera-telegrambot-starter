@@ -1,7 +1,7 @@
 // @api единый вход в реестры: четыре примитива за одной дверью
 import { NextResponse } from "next/server"
 import { ACCESS_FUNCTIONS, validateArgs } from "@/lib/registry/access-decl.mjs"
-import { describe, find, isCorpus, list, recall, rememberMiss } from "@/lib/registry/access"
+import { describe, find, isCorpus, list, recall, recallSubject, rememberMiss } from "@/lib/registry/access"
 import { allFacts } from "@/lib/facts/registry"
 import { writeFact } from "@/lib/facts/write"
 import { machineEnv } from "@/lib/fractera/machine-env"
@@ -133,7 +133,30 @@ export async function POST(request: Request) {
       { status: written.ok ? 200 : 503 }
     )
   }
-  const answer = await recall(String(args.key ?? ""), {
+  // 🔒 СУБЪЕКТ БЕЗ КЛЮЧА — ЭТО ВОПРОС «ЧТО ИЗВЕСТНО О ЧЕЛОВЕКЕ», И ОН ОДИН.
+  // ✗ оплачено 2026-09-08: агент отвечал на него тринадцатью вызовами — сервер
+  // тратил 595 мс, а модель тринадцать ходов рассуждения. Дорого стоила форма
+  // примитива, а не данные.
+  const askedKey = String(args.key ?? "").trim()
+  const askedSubject = String(args.subject ?? "").trim()
+  if (!askedKey && askedSubject) {
+    const answer = await recallSubject(askedSubject, {
+      limit: args.limit as number | undefined,
+    })
+    return NextResponse.json({ ok: true, fn: "recall", answer })
+  }
+  if (!askedKey) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "bad-args",
+        fn: "recall",
+        problems: ["нужен либо `key` (один признак), либо `subject` (всё о человеке)"],
+      },
+      { status: 400 }
+    )
+  }
+  const answer = await recall(askedKey, {
     subject: args.subject as string | undefined,
     scope: args.scope as string | undefined,
     limit: args.limit as number | undefined,

@@ -173,6 +173,19 @@ const CASES = [
       && !/не ответил|недоступен/.test(String(r.json.answer.hint))
       && /не было|ещё нет/.test(String(r.json.answer.hint)),
   },
+  {
+    name: "recall: subject без key отдаёт ВСЁ известное одним вызовом",
+    body: { fn: "recall", args: { subject: "self" } },
+    ok: (r) => r.json?.answer?.found === true
+      && Array.isArray(r.json.answer.items)
+      && r.json.answer.items.length >= 3
+      && r.json.answer.items.every(i => i.key && i.title),
+  },
+  {
+    name: "НК: recall без key и без subject отвергается с причиной",
+    body: { fn: "recall", args: {} },
+    ok: (r) => r.json?.ok === false && r.json.error === "bad-args",
+  },
 ];
 
 

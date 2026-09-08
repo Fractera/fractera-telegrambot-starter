@@ -415,6 +415,74 @@ export type Recalled =
   | (Miss & { key: string })
   | { found: false; corpus: "facts"; key: string; error: string; hint: string; searched: string[] }
 
+/**
+ * Всё, что известно о субъекте, ОДНИМ вызовом.
+ *
+ * ✗ ОПЛАЧЕНО ЖИВЬЁМ 2026-09-08, И ЦЕНА БЫЛА НЕ ТАМ, ГДЕ КАЗАЛОСЬ. Владелец
+ * спросил бота «что ты знаешь обо мне» и получил ответ ДОЛГО. Измерено: сервер
+ * отвечает за 595 мс на тринадцать запросов — то есть база ни при чём.
+ * Дорого стоила МОДЕЛЬ: каждый `recall` это отдельный ход — написать вызов,
+ * дождаться, прочитать, решить снова. Тринадцать ходов рассуждения и есть те
+ * самые десятки секунд.
+ *
+ * 🔒 ОДИН ВОПРОС — ОДИН ВЫЗОВ. «Что известно о человеке» — это один вопрос, а не
+ * тринадцать; дробить его на ключи заставляло не устройство данных, а форма
+ * примитива. Форма ответа при этом та же: у каждого значения появляется `key`.
+ *
+ * 🛑 ПОТОЛОК ЗДЕСЬ ЖЁСТЧЕ: по одному последнему значению на признак. Вопрос
+ * «что ты знаешь обо мне» просит СРЕЗ, а не историю; история — это `recall` по
+ * конкретному ключу.
+ */
+export async function recallSubject(
+  subject: string,
+  opts: { limit?: number } = {}
+): Promise<
+  | { found: true; subject: string; total: number; items: (Value & { key: string; title: string })[] }
+  | (Miss & { subject: string })
+> {
+  const who = String(subject ?? "").trim()
+  if (!who) {
+    return {
+      found: false,
+      corpus: "facts",
+      subject: who,
+      searched: [],
+      hint: "не назван субъект: чьи факты спрашиваем",
+    }
+  }
+  const mine = allFacts().filter(f => f.subject === (who === "self" ? "self" : "person"))
+  if (mine.length === 0) {
+    return {
+      found: false,
+      corpus: "facts",
+      subject: who,
+      searched: [who],
+      hint: "признаков с таким субъектом в реестре нет",
+    }
+  }
+  const limit = cap(opts.limit)
+  const items: (Value & { key: string; title: string })[] = []
+  for (const fact of mine) {
+    if (items.length >= limit) break
+    const got = await recall(fact.key, { subject: who, limit: 1 })
+    if (got.found === true && got.items.length > 0) {
+      items.push({ ...got.items[0], key: fact.key, title: fact.title })
+    }
+  }
+  if (items.length === 0) {
+    return {
+      found: false,
+      corpus: "facts",
+      subject: who,
+      searched: [who],
+      // 🔒 «НИЧЕГО НЕ ЗНАЮ» — ЗАКОННЫЙ ОТВЕТ, И ОН НАЗЫВАЕТ, ЧЕГО ИМЕННО НЕТ:
+      // признаки описаны, значений не было. Пустой список читался бы как поломка.
+      hint: `описано признаков: ${mine.length}, значений пока ни у одного`,
+    }
+  }
+  return { found: true, subject: who, total: items.length, items }
+}
+
 export async function recall(
   key: string,
   opts: { subject?: string; scope?: string; limit?: number } = {}
