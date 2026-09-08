@@ -94,7 +94,17 @@ export async function POST(request: Request) {
     // строка — нет. Так второй отзыв за тот же номер не запрашивается даже после
     // перезапуска сессии.
     feedbackAsked: row.liked !== null || row.needsWork !== null,
-    hasNextStep: body.has_next_step === true,
+    // 🔒 НАЗВАННАЯ СТУПЕНЬ САМА ЕСТЬ ЕЁ ОБЪЯВЛЕНИЕ — И ЭТО ПРАВКА ПО ЗАМЕРУ.
+    // ✗ НАЙДЕНО ПРИБОРОМ 2026-09-08: агент присылал `next_what` и `next_due_at`,
+    // а флага `has_next_step` не ставил — и не происходило НИЧЕГО, молча.
+    // Требовать объявления отдельным полем при уже присланном сроке значит
+    // завести ловушку, в которую попадёт каждый, кто не прочитал схему целиком.
+    // 🔒 ФЛАГ ОСТАЁТСЯ ЗАКОННЫМ ПУТЁМ: он говорит «ступень будет, но срок ещё
+    // не назван» — и тогда отказ объяснит, чего не хватает.
+    hasNextStep:
+      body.has_next_step === true ||
+      (typeof body.next_what === "string" && body.next_what.trim().length > 0 &&
+        typeof body.next_due_at === "string" && body.next_due_at.trim().length > 0),
   })
 
   const decisions = decideClosing(run, kind)

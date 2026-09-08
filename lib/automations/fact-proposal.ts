@@ -1,5 +1,6 @@
 import { readAutomationRows } from "./rows"
 import { allFacts } from "@/lib/facts/registry"
+import { scopeValue } from "@/lib/facts/scope"
 
 // ПРЕДЛОЖЕНИЕ ПРИЗНАКА — ПЯТОЕ ДЕЙСТВИЕ ЗАКРЫТИЯ (143-7).
 //
@@ -67,14 +68,22 @@ export async function proposeFacts(automationId: number): Promise<FactProposal[]
  * её копии тут не заводится.
  */
 function candidate(said: string): string {
-  const latin = said
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ".")
-    .replace(/^\.+|\.+$/g, "")
-  if (!latin) return ""
-  const parts = latin.split(".").filter(Boolean).slice(0, 3)
-  return parts.length >= 2 ? parts.join(".") : `misc.${parts[0]}`
+  // 🔒 КИРИЛЛИЦА ПЕРЕВОДИТСЯ ТОЙ ЖЕ ТАБЛИЦЕЙ, ЧТО У ОХВАТА, А НЕ ВТОРОЙ СВОЕЙ.
+  // ✗ НАЙДЕНО ПРИБОРОМ 2026-09-08: без перевода «погода за окном» давала ПУСТОЙ
+  // кандидат — то есть кандидат был пуст ВСЕГДА, потому что человек говорит
+  // по-русски. Ошибка выглядела как предусмотрительность: в комментарии стояло
+  // «вместо выдуманного ключа возвращается пустой», и это было правдой ровно в
+  // той мере, в какой бесполезно.
+  // 🔒 ВТОРОЙ ТАБЛИЦЫ НЕ ЗАВОДИТСЯ: две транслитерации разошлись бы, и один
+  // предмет получил бы два ключа — ровно тот дефект, что найден в 83 на именах.
+  const words = said.trim().toLowerCase().split(/[s,.;:!?]+/).filter(Boolean).slice(0, 3)
+  const parts = words.map(w => scopeValue(w)).filter(Boolean)
+  if (parts.length === 0) return ""
+  // 🔒 ЭТО ЧЕРНОВИК, А НЕ ИМЯ. Настоящий ключ придумывает человек: имя вечное, на
+  // нём повиснут таблица и запросы. Кандидат нужен, чтобы было что править.
+  return parts.length >= 2 ? `${parts[0]}.${parts[1]}` : `misc.${parts[0]}`
 }
+
 
 /**
  * Что уже есть похожего.

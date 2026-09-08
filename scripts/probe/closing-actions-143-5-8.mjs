@@ -65,6 +65,8 @@ await row(id, "reveal", null, "погода за окном", "registry")
 const before = await chainCount(id)
 const step = await door("/api/agent/close", {
   automation_id: id, kind: "step",
+  // 🔒 ФЛАГА `has_next_step` ЗДЕСЬ НЕТ НАМЕРЕННО: присланный срок сам объявляет
+  // ступень. До правки 2026-09-08 это молча не делало ничего.
   next_what: "проверить результат", next_due_at: "2027-01-01T10:00:00Z", next_tz: "Atlantic/Canary",
 })
 say(step.status === 200, `закрытие шага: HTTP ${step.status}`)
@@ -86,7 +88,8 @@ say(await chainCount(id) === afterStep, `после закрытия ЦЕЛИК�
 const countFacts = () => JSON.parse(readFileSync("REGISTRY-CONFIG/registry-config.json", "utf8")).facts.length
 const factsBefore = countFacts()
 const proposals = whole.json.proposals ?? []
-say(proposals.length > 0, `предложений признака: ${proposals.length} — «${proposals[0]?.said ?? ""}» → ${proposals[0]?.candidateKey ?? "—"}`)
+say(proposals.length > 0 && Boolean(proposals[0]?.candidateKey),
+  `предложений признака: ${proposals.length} — «${proposals[0]?.said ?? ""}» → ключ-кандидат «${proposals[0]?.candidateKey ?? ""}» (пустой = бесполезен)`)
 const factsAfter = countFacts()
 say(factsBefore === factsAfter && factsBefore > 0,
   `записей реестра до ${factsBefore}, после ${factsAfter} — ПРЕДЛАГАЕТ, НО НЕ ПРИМЕНЯЕТ`)
