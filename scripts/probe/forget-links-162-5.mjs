@@ -68,14 +68,21 @@ const two = await call("write", { anchors: [NEIGHBOUR], what: `${NEIGHBOUR} де
 say(one.ok === true && two.ok === true, `посеяны две истории: ${one.ok} / ${two.ok}`)
 await call("write", { key: "person.city", what: "Зеленодольск", source: SOURCE })
 
-// 🔒 СВЯЗИ СТРОЯТСЯ В ФОНЕ — ЖДЁМ ПОЯВЛЕНИЯ ДОКУМЕНТА ПО ФАКТУ, А НЕ ПАУЗОЙ.
-let seeded = 0
-for (let i = 0; i < 60; i += 1) {
-  seeded = await mineCount("memory/")
-  if (seeded >= 2) break
+// 🔒 ЖДЁМ СВОИ ДОКУМЕНТЫ ПОИМЁННО, А НЕ «ДВА ЛЮБЫХ».
+// ✗ ОПЛАЧЕНО КРАСНЫМ ПРОГОНОМ 2026-09-08: ожидание «в `memory/` стало ≥ 2»
+// выполнялось чужими документами — историей соседнего прибора и посевом прошлого
+// прогона, — и забывание звалось РАНЬШЕ, чем движок успевал завести наш файл.
+// Снаружи это выглядело как «удаление не работает»: `deleted: 0` при живой
+// способности. **Ожидание по числу чужого — это не ожидание.**
+let mine = 0
+let neighbour0 = 0
+for (let i = 0; i < 90; i += 1) {
+  mine = await mineCount(`memory/${MINE}-`)
+  neighbour0 = await mineCount(`memory/${NEIGHBOUR}-`)
+  if (mine > 0 && neighbour0 > 0) break
   await sleep(1000)
 }
-say(seeded >= 2, `документы наших историй появились: ${seeded}`)
+say(mine > 0 && neighbour0 > 0, `оба наших документа появились: ${MINE}=${mine}, ${NEIGHBOUR}=${neighbour0}`)
 
 // ── ПЛОСКОСТЬ 1: ЧТЕНИЕ ПОСЛЕ УДАЛЕНИЯ ───────────────────────────────────
 const before = await mineCount(`memory/${MINE}-`)
