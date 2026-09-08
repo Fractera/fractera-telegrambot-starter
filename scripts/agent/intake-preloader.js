@@ -490,6 +490,14 @@ async function runClose(a) {
       ? 'Следующая ступень № ' + r.nextStep.id + ' — ' + r.nextStep.why
       : 'Следующая ступень НЕ заведена: ' + r.nextStep.why);
   }
+  // 🔒 ПРЕДЛОЖЕНИЕ ПРИЗНАКА ПРОИЗНОСИТСЯ ЧЕЛОВЕКУ, А НЕ ПРИМЕНЯЕТСЯ (143-7).
+  // Реестр меняет он; наше дело — сказать, чего системе не хватило.
+  for (const pr of r.proposals || []) {
+    lines.push('Не хватило признака: «' + pr.said + '»' +
+      (pr.candidateKey ? ' — предлагаю ключ ' + pr.candidateKey : ' — ключ придумать словами') +
+      (pr.near && pr.near.length ? ' (рядом уже есть: ' + pr.near.join(', ') + ')' : '') +
+      '. Завести? Реестр меняешь ты, не я.');
+  }
   return lines.join(String.fromCharCode(10));
 }
 // ---------- MCP по stdio: построчный JSON-RPC ----------

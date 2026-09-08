@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server"
 import { decideClosing, type RunFacts } from "@/lib/automations/closing"
 import { planNextStep, type NextStepResult } from "@/lib/automations/chain"
+import { proposeFacts, type FactProposal } from "@/lib/automations/fact-proposal"
 import { runFactsFromRows } from "@/lib/automations/run-facts"
 import { closeAutomation, readAutomationRow, setAutomationFields } from "@/lib/automations/store"
 import { machineEnv } from "@/lib/fractera/machine-env"
@@ -106,6 +107,17 @@ export async function POST(request: Request) {
     })
   }
 
+  // ── ПЯТОЕ ДЕЙСТВИЕ: ПРЕДЛОЖЕНИЕ ПРИЗНАКА (143-7) ─────────────────────────
+  //
+  // 🔒 ПРЕДЛАГАЕТ, НО НЕ ПРИМЕНЯЕТ. Возвращается агенту, чтобы он показал это
+  // человеку словами; реестр меняет ЧЕЛОВЕК. Признак, заведённый системой
+  // самой, меняет то, что она понимает, — и завтра она разберёт сообщение
+  // иначе, а объяснить это будет некому.
+  let proposals: FactProposal[] = []
+  if (decisions.some(d => d.action === "propose-fact" && d.do)) {
+    proposals = await proposeFacts(id)
+  }
+
   const summary = typeof body.summary === "string" ? body.summary.trim() : ""
   // 🔒 ТЕГИ — ТОЖЕ ФАКТ ПРОГОНА, А НЕ СЛОВО АГЕНТА (143-4). Раньше они брались
   // из `body.fact_keys` рядом с саммари, и это было незаметное второе место, где
@@ -123,7 +135,7 @@ export async function POST(request: Request) {
   // 🔒 ИСХОД ПОБОЧНОГО ДЕЙСТВИЯ НАЗЫВАЕТСЯ В ОТВЕТЕ, А НЕ МОЛЧИТ (158-5): агент
   // обязан знать, заведена ступень или нет, — иначе он пообещает человеку
   // напоминание, которого не существует.
-  return NextResponse.json({ ok: true, state: written.state, wrote: written.written, decisions, nextStep })
+  return NextResponse.json({ ok: true, state: written.state, wrote: written.written, decisions, nextStep, proposals })
 }
 
 function toStrings(v: unknown): string[] {
