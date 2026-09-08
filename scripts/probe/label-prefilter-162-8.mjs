@@ -110,7 +110,9 @@ say((unknown.answer.items ?? []).some(i => /связ/i.test(String(i.from ?? "")
 
 // ── ОБЛАКО МЕТОК КАК ЗАПРОС ТРЕТЬЕГО УРОВНЯ ───────────────────────────────
 await call("write", { key: "person.city", what: "Зеленодольск", source: SOURCE })
-const deep3 = await timedRead({ query: "мой город", depth: 3 })
+// 🔒 С 162-4 ТРЕТИЙ УРОВЕНЬ ТРЕБУЕТ РАЗРЕШЕНИЯ ЧЕЛОВЕКА, И ПРИБОР ЕГО ДАЁТ ЯВНО.
+// Это смена условия, а не правила: облако меток проверяется там же и тем же.
+const deep3 = await timedRead({ query: "мой город", depth: 3, approved: true })
 const lvl3 = lvl(deep3.answer, 3)
 say(!!lvl3 && Array.isArray(lvl3.anchors) && lvl3.anchors.length > 0,
   `у третьего уровня есть облако меток: ${JSON.stringify(lvl3?.anchors)}`)
