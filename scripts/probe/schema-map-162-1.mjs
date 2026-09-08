@@ -84,6 +84,17 @@ say(Array.isArray(byKey.looked) && byKey.looked.length === 0,
 // 🔒 КАРТА ЕСТЬ И ПРИ ПРОМАХЕ — иначе пустой ответ неотличим от «искали не там».
 say(Array.isArray(city.looked), `карта возвращается независимо от того, нашлось ли значение`)
 
+// 🔒 ТРЕТИЙ НЕГАТИВНЫЙ КОНТРОЛЬ, ДОБАВЛЕН ПО НАХОДКЕ ПРИ ЗАКРЫТИИ 162-1:
+// выдуманный ключ обязан получить «такого признака нет», а не «значений пока
+// нет». Второе — уверенное умолчание: спросивший решает, что спросил верно, и
+// прекращает искать. Закон 144.
+const ghost = await read({ key: "person.nosuchkey_zzz" })
+say(/в реестре нет/.test(String(ghost.hint ?? "")),
+  `выдуманный ключ: «${ghost.hint}»`)
+const realEmpty = await read({ key: "person.occupation" })
+say(realEmpty.found === true || /значений/.test(String(realEmpty.hint ?? "")),
+  `существующий ключ отвечает иначе: «${realEmpty.hint ?? "нашлось значение"}»`)
+
 console.log(`${MARK}DONE`)
 console.log(`PROBE_RC=${bad === 0 ? 0 : 1}`)
 process.exit(bad === 0 ? 0 : 1)
