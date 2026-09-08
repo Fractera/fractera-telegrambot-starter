@@ -80,11 +80,15 @@ const whole = await door("/api/agent/close", {
 say(await chainCount(id) === afterStep, `после закрытия ЦЕЛИКОМ ступеней по-прежнему ${afterStep} — рода различаются`)
 
 // ── 143-7: предложение признака, реестр НЕ меняется ────────────────────────
-const factsBefore = Number((await sql(`SELECT COUNT(*) AS n FROM fact_registry`)).rows?.[0]?.n ?? -1)
+// 🔒 РЕЕСТР ОПРЕДЕЛЕНИЙ ЖИВЁТ В ФАЙЛЕ, А НЕ В ТАБЛИЦЕ (решение владельца
+// 2026-09-06). Счёт по `fact_registry` давал 0 и 0 — контроль был СЛЕПЫМ:
+// он подтвердил бы неизменность даже если бы мы дописали туда сто признаков.
+const countFacts = () => JSON.parse(readFileSync("REGISTRY-CONFIG/registry-config.json", "utf8")).facts.length
+const factsBefore = countFacts()
 const proposals = whole.json.proposals ?? []
 say(proposals.length > 0, `предложений признака: ${proposals.length} — «${proposals[0]?.said ?? ""}» → ${proposals[0]?.candidateKey ?? "—"}`)
-const factsAfter = Number((await sql(`SELECT COUNT(*) AS n FROM fact_registry`)).rows?.[0]?.n ?? -2)
-say(factsBefore === factsAfter && factsBefore >= 0,
+const factsAfter = countFacts()
+say(factsBefore === factsAfter && factsBefore > 0,
   `записей реестра до ${factsBefore}, после ${factsAfter} — ПРЕДЛАГАЕТ, НО НЕ ПРИМЕНЯЕТ`)
 
 // ── 143-6: отзыв просят один раз ───────────────────────────────────────────
@@ -93,7 +97,7 @@ say(askedFirst?.do === true, `отзыв спрошен: ${askedFirst?.why ?? "�
 
 const noVerdict = await door("/api/agent/feedback", { automation_id: id })
 say(noVerdict.status === 400, `пустой отзыв отвергнут: HTTP ${noVerdict.status} (${noVerdict.json.error})`)
-const noAuth = await door("/api/agent/feedback", { automation_id: id, liked: "yes" }, "заведомо-негодный-секрет")
+const noAuth = await door("/api/agent/feedback", { automation_id: id, liked: "yes" }, "deliberately-wrong-secret")
 say(noAuth.status === 401, `отзыв без секрета: HTTP ${noAuth.status}`)
 
 const fb = await door("/api/agent/feedback", { automation_id: id, liked: "yes", note: "быстро" })

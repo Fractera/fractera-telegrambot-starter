@@ -1,6 +1,6 @@
 // @api отзыв о работе автоматизации: вердикт человека ложится в её запись
 import { NextResponse } from "next/server"
-import { readAutomationRow, setAutomationFields, type Verdict } from "@/lib/automations/store"
+import { ensureAutomationsTable, readAutomationRow, setAutomationFields, type Verdict } from "@/lib/automations/store"
 import { machineEnv } from "@/lib/fractera/machine-env"
 
 // ДВЕРЬ ОТЗЫВА (143-6).
@@ -54,6 +54,17 @@ export async function POST(request: Request) {
     // а ответа человека в базе не было бы. Молчание — не отзыв.
     return NextResponse.json({ ok: false, error: "no-verdict" }, { status: 400 })
   }
+
+  // 🔒 ЛЕСТНИЦА КОЛОНОК ПОДНИМАЕТСЯ ПЕРЕД ЧТЕНИЕМ, А НЕ ТОЛЬКО ПРИ СОЗДАНИИ.
+  // ✗ НАЙДЕНО ПРИБОРОМ 2026-09-08, И ЭТО БЫЛ НАСТОЯЩИЙ ДЕФЕКТ, А НЕ ОШИБКА
+  // ПРИБОРА: 143-6 добавил колонку `feedback_note` в образец, читаем мы
+  // ПОИМЁННО — и `SELECT ... feedback_note` на живой таблице, где колонки ещё
+  // нет, падает целиком. Наружу это выглядело как `404 not-found`: будто
+  // автоматизации не существует. Лестницу звала только дверь сепарации.
+  // 🔒 ЗАКОН ОБЩИЙ: «КОЛОНКА — НЕ ТАБЛИЦА». `CREATE TABLE IF NOT EXISTS` на
+  // существующей таблице не делает НИЧЕГО, и новая колонка не приезжает туда
+  // никогда — пока кто-нибудь не исполнит `ALTER`.
+  await ensureAutomationsTable()
 
   const row = await readAutomationRow(id)
   if (!row) {

@@ -3,8 +3,9 @@ import { NextResponse } from "next/server"
 import { decideClosing, type RunFacts } from "@/lib/automations/closing"
 import { planNextStep, type NextStepResult } from "@/lib/automations/chain"
 import { proposeFacts, type FactProposal } from "@/lib/automations/fact-proposal"
+import { ensureAutomationRowsTable } from "@/lib/automations/rows"
 import { runFactsFromRows } from "@/lib/automations/run-facts"
-import { closeAutomation, readAutomationRow, setAutomationFields } from "@/lib/automations/store"
+import { ensureAutomationsTable, closeAutomation, readAutomationRow, setAutomationFields } from "@/lib/automations/store"
 import { machineEnv } from "@/lib/fractera/machine-env"
 
 // ДВЕРЬ ЗАКРЫТИЯ (155-6).
@@ -48,6 +49,21 @@ export async function POST(request: Request) {
     // оборвёт цепочку; автоматизация, закрытая как шаг, никогда не спросит отзыв.
     return NextResponse.json({ ok: false, error: "no-closing-kind" }, { status: 400 })
   }
+
+  // 🔒 ЛЕСТНИЦА КОЛОНОК ПОДНИМАЕТСЯ ПЕРЕД ЧТЕНИЕМ, А НЕ ТОЛЬКО ПРИ СОЗДАНИИ.
+  // ✗ НАЙДЕНО ПРИБОРОМ 2026-09-08, И ЭТО БЫЛ НАСТОЯЩИЙ ДЕФЕКТ, А НЕ ОШИБКА
+  // ПРИБОРА: 143-6 добавил колонку `feedback_note` в образец, читаем мы
+  // ПОИМЁННО — и `SELECT ... feedback_note` на живой таблице, где колонки ещё
+  // нет, падает целиком. Наружу это выглядело как `404 not-found`: будто
+  // автоматизации не существует. Лестницу звала только дверь сепарации.
+  // 🔒 ЗАКОН ОБЩИЙ: «КОЛОНКА — НЕ ТАБЛИЦА». `CREATE TABLE IF NOT EXISTS` на
+  // существующей таблице не делает НИЧЕГО, и новая колонка не приезжает туда
+  // никогда — пока кто-нибудь не исполнит `ALTER`.
+  await ensureAutomationsTable()
+  // 🔒 И ТАБЛИЦУ ЛЕНТЫ ТОЖЕ: эта дверь её ЧИТАЕТ, а создаёт её сегодня только
+  // сепарация. Закрытие автоматизации, заведённой до 143-3, иначе читало бы
+  // отсутствующую таблицу — и получило бы «ничего не случилось» вместо отказа.
+  await ensureAutomationRowsTable()
 
   const row = await readAutomationRow(id)
   if (!row) {
