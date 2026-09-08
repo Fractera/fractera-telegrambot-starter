@@ -126,7 +126,11 @@ export async function write(input: MemoryWriteInput): Promise<MemoryWriteResult>
         hint: "назови имена, к которым относится находка: без якоря её потом не найти",
       }
     }
-    const text = composeResearch({ ...r, anchors: anchorsFor })
+    // 🛑 НОМЕР АВТОМАТИЗАЦИИ ЕДЕТ ОТДЕЛЬНЫМ ПОЛЕМ ЗАПРОСА, А НЕ ВНУТРИ БЛОКА, И
+    // ЕГО НАДО ПЕРЕДАТЬ ЯВНО. ✗ поймано первым прогоном прибора: блок собирался
+    // без номера и писал «в работе вне автоматизации» при переданном 124 —
+    // присланное молча ничего не делало (закон 143).
+    const text = composeResearch({ ...r, anchors: anchorsFor, automationId: input.automationId ?? null })
     // 🔒 ИСТОЧНИК ОТЛИЧАЕТСЯ ОТ ИСТОРИЙ (`memory/`) НАМЕРЕННО: `research/` — это
     // наш вывод, а не сказанное человеком, и забывать их надо по отдельности.
     const done = await learn({
