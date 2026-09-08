@@ -55,6 +55,12 @@ const FEEDBACK_URL =
 // адресом. Четыре адреса — четыре места, где разойдётся форма ответа.
 const REGISTRY_URL =
   process.env.REGISTRY_URL || "http://127.0.0.1:3600/api/agent/registry";
+// 🔒 ЯЩИК ПАМЯТИ — ОТДЕЛЬНАЯ ДВЕРЬ, А НЕ ПЯТЫЙ ПРИМИТИВ РЕЕСТРА (161-1). Реестр
+// отвечает про ОПРЕДЕЛЕНИЯ (что система умеет вынуть), ящик — про ПАМЯТЬ о
+// человеке (что известно, запиши, поправь, забудь). Другой предмет и другие
+// глаголы; закон 158-5а запрещает вторую дверь к ТОМУ ЖЕ вопросу, а не к другому.
+const MEMORY_URL =
+  process.env.MEMORY_URL || "http://127.0.0.1:3600/api/agent/memory";
 const MACHINE_ENV_FILE =
   process.env.FRACTERA_MACHINE_ENV || "/etc/fractera/secrets.env";
 
@@ -553,6 +559,72 @@ async function accessModule() {
   return ACCESS;
 }
 
+// ── ЯЩИК ПАМЯТИ: ЧЕТЫРЕ МЕТОДА У АГЕНТА (161-1, стандарт памяти §10) ────────
+//
+// 🔒 В `tools/list` УЕЗЖАЮТ ТОЛЬКО ПОСТРОЕННЫЕ (`state: "live"`). Инструмент,
+// который агент видит и не может использовать, хуже отсутствующего: он тратит
+// ход модели на вызов и ход на разбор отказа.
+//
+// ✗ ЧЕМ ОПЛАЧЕНА ЭТА РЕГИСТРАЦИЯ. Дверь знаний 160-6 работала сутки, а
+// инструмента `mcp__intake__knowledge`, который инструкция велела звать, здесь
+// НЕ БЫЛО ВОВСЕ — прибор был зелёным, потому что звал дверь напрямую.
+// 🔒 ПРИЁМ, КОТОРЫЙ ЭТО ЛОВИТ: спрашивать «кто её зовёт», а не «есть ли она», —
+// и задавать этот вопрос про саму дверь, а не только про функцию за ней.
+let MEMORY = null;
+async function memoryModule() {
+  if (!MEMORY) {
+    const { pathToFileURL } = require("node:url");
+    const path = require("node:path");
+    const href = pathToFileURL(
+      path.join(__dirname, "..", "..", "lib", "memory", "decl.mjs")
+    ).href;
+    const mod = await import(href);
+    const live = mod.liveFunctions();
+    MEMORY = {
+      decls: live,
+      tools: live.map(mod.mcpToolFrom),
+      validate: mod.validateArgs,
+    };
+  }
+  return MEMORY;
+}
+
+async function runMemory(name, args) {
+  const m = await memoryModule();
+  const decl = m.decls.find((d) => d.name === name);
+  if (!decl) {
+    return "Такого метода памяти нет: " + name;
+  }
+  const checked = m.validate(decl, args);
+  if (!checked.ok) {
+    return "Параметры не приняты:" + String.fromCharCode(10) +
+      checked.problems.map((p) => "  · " + p).join(String.fromCharCode(10));
+  }
+  const r = await postOwn(MEMORY_URL, { args: checked.args, fn: decl.fn });
+  if (!r || typeof r !== "object") {
+    return "Память не ответила.";
+  }
+  if (r.ok !== true) {
+    // 🔒 ОТКАЗ ПАМЯТИ ПЕРЕДАЁТСЯ СЛОВАМИ, А НЕ КОДОМ. Агент читает это как
+    // указание, что делать дальше: назвать ключ, назвать якорь, пересказать
+    // словами. Код ошибки ему сказать нечего.
+    const bits = ["Не записано."];
+    if (r.hint) bits.push(String(r.hint));
+    if (Array.isArray(r.problems) && r.problems.length) {
+      bits.push(r.problems.join("; "));
+    }
+    return bits.join(String.fromCharCode(10));
+  }
+  if (decl.fn === "write") {
+    const where = r.where === "surroundings"
+      ? "в знание об окружении"
+      : "в личную память человека";
+    const tail = r.hint ? String.fromCharCode(10) + r.hint : "";
+    return "Записано " + where + "." + tail;
+  }
+  return JSON.stringify(r, null, 2);
+}
+
 /** Указатель одной строкой: ключ, имя, теги — и чем совпало, если это поиск. */
 function pointerLine(p) {
   const bits = ["  " + p.key + " — " + p.name];
@@ -637,23 +709,31 @@ async function handle(m) {
     // а не перечисляются здесь: перечисление рядом с объявлением разошлось бы
     // с ним на первой правке параметра.
     const a = await accessModule();
+    const mem = await memoryModule();
     return ok(m.id, {
-      tools: [TOOL, TOOL_REQUEST, TOOL_SEPARATE, TOOL_CLOSE, TOOL_FEEDBACK].concat(a.tools),
+      tools: [TOOL, TOOL_REQUEST, TOOL_SEPARATE, TOOL_CLOSE, TOOL_FEEDBACK]
+        .concat(a.tools)
+        .concat(mem.tools),
     });
   }
   if (m.method === "tools/call") {
     const p = m.params || {};
     const access = await accessModule();
+    const memory = await memoryModule();
     const ACCESS_NAMES = access.tools.map((t) => t.name);
+    const MEMORY_NAMES = memory.tools.map((t) => t.name);
     const KNOWN = [TOOL.name, TOOL_REQUEST.name, TOOL_SEPARATE.name, TOOL_CLOSE.name, TOOL_FEEDBACK.name]
-      .concat(ACCESS_NAMES);
+      .concat(ACCESS_NAMES)
+      .concat(MEMORY_NAMES);
     if (!KNOWN.includes(p.name)) {
       return fail(m.id, `unknown tool: ${p.name}`);
     }
     inFlight += 1;
     try {
       const args = p.arguments || {};
-      const text = ACCESS_NAMES.includes(p.name)
+      const text = MEMORY_NAMES.includes(p.name)
+        ? await runMemory(p.name, args)
+        : ACCESS_NAMES.includes(p.name)
         ? await runAccess(p.name, args)
         : p.name === TOOL_REQUEST.name
           ? await runRequest(args)

@@ -49,7 +49,7 @@ say(r.status === 200 && r.json.ok === true, `простая строка зап�
 // Это «машина Миши» в чистом виде: атрибут чужой сущности внутри записи о человеке.
 r = await door({
   fn: "remember",
-  args: { key: "person.important-people", value: { name: "Миша", car: { model: "Honda Civic" } }, source: "прибор" },
+  args: { key: "person.important-people", value: { name: "Миша", car: { model: "Honda Civic" } }, source: "прибор 160" },
 })
 say(r.json.ok === false && r.json.error === "nested-object",
   `вложенный объект отвергнут: ${r.json.error} — «${String(r.json.hint ?? "").slice(0, 80)}»`)
@@ -58,7 +58,7 @@ say(r.json.ok === false && r.json.error === "nested-object",
 // Без него первый замер доказывал бы только, что объекты не принимаются вовсе.
 r = await door({
   fn: "remember",
-  args: { key: "person.important-people", value: { name: "Рада", role: "дочь", birthYear: 2010 }, source: "прибор" },
+  args: { key: "person.important-people", value: { name: "Рада", role: "дочь", birthYear: 2010 }, source: "прибор 160" },
 })
 say(r.status === 200 && r.json.ok === true,
   `плоский объект ПРОШЁЛ: ${r.json.table ?? r.json.error} — сторож отвергает глубину, а не объекты`)
@@ -66,7 +66,7 @@ say(r.status === 200 && r.json.ok === true,
 // ── 4. Массив отвергается: список сущностей — не одно значение ─────────────
 r = await door({
   fn: "remember",
-  args: { key: "person.important-people", value: ["Рада", "Миша"], source: "прибор" },
+  args: { key: "person.important-people", value: ["Рада", "Миша"], source: "прибор 160" },
 })
 say(r.json.ok === false && r.json.error === "not-an-object",
   `массив отвергнут: ${r.json.error}`)
@@ -106,14 +106,19 @@ r = await door({ fn: "remember_many", args: { facts: [] } })
 say(r.status === 400 && r.json.error === "no-facts", `пустой список: ${r.status} ${r.json.error}`)
 
 // ── Уборка ─────────────────────────────────────────────────────────────────
+//
+// 🔒 ТОЧЕЧНО, ПО СВОЕЙ МЕТКЕ, А НЕ `DELETE FROM <таблица>` (исправлено 161-1).
+// Здесь лежит память ЖИВОГО человека: прибор, стирающий таблицу целиком, стирает
+// заодно его имя, город и обращение — и снаружи это неотличимо от «памяти никогда
+// не было». Первая редакция этого прибора делала именно так.
 for (const t of [
   "fact_person_name", "fact_person_important_people", "fact_person_city",
   "fact_person_address_form", "fact_person_tone", "fact_person_currency", "fact_person_occupation",
 ]) {
-  await sql(`DELETE FROM ${t}`)
+  await sql(`DELETE FROM ${t} WHERE source = ?`, ["прибор 160"])
 }
-const left = await sql(`SELECT COUNT(*) AS n FROM fact_person_city`)
-say(Number(left.rows?.[0]?.n ?? 1) === 0, `после уборки строк в fact_person_city: ${left.rows?.[0]?.n}`)
+const left = await sql(`SELECT COUNT(*) AS n FROM fact_person_city WHERE source = ?`, ["прибор 160"])
+say(Number(left.rows?.[0]?.n ?? 1) === 0, `после уборки своих строк в fact_person_city: ${left.rows?.[0]?.n}`)
 
 console.log(`${MARK}DONE`)
 console.log(`PROBE_RC=${bad === 0 ? 0 : 1}`)
