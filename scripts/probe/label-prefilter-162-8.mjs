@@ -65,7 +65,7 @@ await clean()
 // голоса. Движок ищет подстроку: «Денис» ему не находит НИЧЕГО (измерено).
 // Наша нестрогость обязана свести их по общему началу.
 await call("write", { key: "person.important-people", what: "Денис", source: SOURCE })
-const near = await timedRead({ query: "что известно о моих друзьях", depth: 2 })
+const near = await timedRead({ query: "кто такой этот человек", depth: 2 })
 const nearAnchors = lvl(near.answer, 2)?.anchors ?? []
 say(nearAnchors.some(a => /Дени/i.test(String(a))),
   `«Денис» свёлся с меткой графа: ${JSON.stringify(nearAnchors)}`)
@@ -75,7 +75,7 @@ await clean()
 
 // 🔒 НЕГАТИВНЫЙ КОНТРОЛЬ: выдуманное имя не находит ничего, и это СКАЗАНО.
 await call("write", { key: "person.important-people", what: "Аркадий", source: SOURCE })
-const ghost = await timedRead({ query: "что известно о моих друзьях", depth: 2 })
+const ghost = await timedRead({ query: "кто такой этот человек", depth: 2 })
 const ghostNote = String(lvl(ghost.answer, 2)?.note ?? "")
 say(/не знают ни одного имени|отсеяны как незнакомые/.test(ghostNote),
   `незнакомое имя названо отсеянным: «${ghostNote}»`)
@@ -89,10 +89,10 @@ await clean()
 // Знакомое графу имя стоит своего запроса; незнакомое — не стоит ничего, кроме
 // проверки метки (41 мс). Разница обязана быть видна во времени.
 await call("write", { key: "person.city", what: "Зеленодольск", source: SOURCE })
-const known = await timedRead({ query: "что известно о моих местах", depth: 2 })
+const known = await timedRead({ query: "мой город", depth: 2 })
 await clean()
 await call("write", { key: "person.city", what: "Урюпинсквиль", source: SOURCE })
-const unknown = await timedRead({ query: "что известно о моих местах", depth: 2 })
+const unknown = await timedRead({ query: "мой город", depth: 2 })
 await clean()
 
 const knownAnchors = lvl(known.answer, 2)?.anchors ?? []
@@ -110,7 +110,7 @@ say((unknown.answer.items ?? []).some(i => /связ/i.test(String(i.from ?? "")
 
 // ── ОБЛАКО МЕТОК КАК ЗАПРОС ТРЕТЬЕГО УРОВНЯ ───────────────────────────────
 await call("write", { key: "person.city", what: "Зеленодольск", source: SOURCE })
-const deep3 = await timedRead({ query: "что известно о моих местах", depth: 3 })
+const deep3 = await timedRead({ query: "мой город", depth: 3 })
 const lvl3 = lvl(deep3.answer, 3)
 say(!!lvl3 && Array.isArray(lvl3.anchors) && lvl3.anchors.length > 0,
   `у третьего уровня есть облако меток: ${JSON.stringify(lvl3?.anchors)}`)
