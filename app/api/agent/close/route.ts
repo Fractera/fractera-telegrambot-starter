@@ -1,6 +1,7 @@
 // @api закрытие автоматизации: агент объявляет род закрытия, служба решает и записывает
 import { NextResponse } from "next/server"
 import { decideClosing, type RunFacts } from "@/lib/automations/closing"
+import { planNextStep, type NextStepResult } from "@/lib/automations/chain"
 import { runFactsFromRows } from "@/lib/automations/run-facts"
 import { closeAutomation, readAutomationRow, setAutomationFields } from "@/lib/automations/store"
 import { machineEnv } from "@/lib/fractera/machine-env"
@@ -82,6 +83,29 @@ export async function POST(request: Request) {
   const decisions = decideClosing(run, kind)
   const written = await closeAutomation(id, kind, `закрытие: ${kind}`)
 
+  // ── ИСПОЛНЕНИЕ ПЕРВОГО ИЗ ПЯТИ ДЕЙСТВИЙ: СЛЕДУЮЩАЯ СТУПЕНЬ (143-5) ────────
+  //
+  // 🔒 ПОРЯДОК ЗАКОНА 2 §3е СОБЛЮДЁН БУКВАЛЬНО: состояние записано СТРОКОЙ ВЫШЕ,
+  // и только теперь делаются побочные действия. Обрыв на середине оставил бы
+  // автоматизацию открытой при уже заведённой ступени — и на следующем сообщении
+  // её закрыли бы второй раз, поставив вторую.
+  //
+  // 🔒 ДЕЙСТВИЕ ДЕЛАЕТСЯ ТОЛЬКО ПО СВОЕМУ РЕШЕНИЮ. Решения считаются из ленты
+  // (143-4); «ступень» приходит с do: true лишь при закрытии ШАГА. Пять действий
+  // на каждом закрытии — назойливость, от которой способность умирает.
+  let nextStep: NextStepResult | null = null
+  if (decisions.some(d => d.action === "next-step" && d.do)) {
+    // 🔒 СРОК И СУТЬ СТУПЕНИ ПРИХОДЯТ СО СЛОВ — И ЭТО НЕ ПРОТИВОРЕЧИТ 143-4.
+    // Записи о том, чего человек ХОЧЕТ дальше, нет и быть не может: он только
+    // что это сказал. Из ленты берут то, что УЖЕ случилось, а не то, что просят.
+    nextStep = await planNextStep({
+      automationId: id,
+      what: typeof body.next_what === "string" ? body.next_what : "",
+      dueAt: typeof body.next_due_at === "string" ? body.next_due_at : "",
+      tz: typeof body.next_tz === "string" ? body.next_tz : "",
+    })
+  }
+
   const summary = typeof body.summary === "string" ? body.summary.trim() : ""
   // 🔒 ТЕГИ — ТОЖЕ ФАКТ ПРОГОНА, А НЕ СЛОВО АГЕНТА (143-4). Раньше они брались
   // из `body.fact_keys` рядом с саммари, и это было незаметное второе место, где
@@ -96,7 +120,10 @@ export async function POST(request: Request) {
     })
   }
 
-  return NextResponse.json({ ok: true, state: written.state, wrote: written.written, decisions })
+  // 🔒 ИСХОД ПОБОЧНОГО ДЕЙСТВИЯ НАЗЫВАЕТСЯ В ОТВЕТЕ, А НЕ МОЛЧИТ (158-5): агент
+  // обязан знать, заведена ступень или нет, — иначе он пообещает человеку
+  // напоминание, которого не существует.
+  return NextResponse.json({ ok: true, state: written.state, wrote: written.written, decisions, nextStep })
 }
 
 function toStrings(v: unknown): string[] {

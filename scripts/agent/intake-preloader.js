@@ -49,6 +49,8 @@ const SEPARATE_URL =
   process.env.SEPARATE_URL || "http://127.0.0.1:3600/api/agent/separate";
 const CLOSE_URL =
   process.env.CLOSE_URL || "http://127.0.0.1:3600/api/agent/close";
+const FEEDBACK_URL =
+  process.env.FEEDBACK_URL || "http://127.0.0.1:3600/api/agent/feedback";
 // 🔒 ОДНА ДВЕРЬ НА ЧЕТЫРЕ ПРИМИТИВА (157-5): имя примитива едет полем, а не
 // адресом. Четыре адреса — четыре места, где разойдётся форма ответа.
 const REGISTRY_URL =
@@ -389,24 +391,57 @@ const TOOL_CLOSE = {
   description:
     "Объявить, что работа закончена: род step (закрыт шаг цепочки) или whole (закрыта целиком). " +
     "Возвращает список решений с причинами — что система сделает и чего не станет делать. " +
-    "Закрытие не наступает само: молчание человека закрытием НЕ является.",
+    "Закрытие не наступает само: молчание человека закрытием НЕ является. " +
+    "О своей работе рассказывать НЕ НУЖНО: сколько было сообщений, какие признаки сработали и " +
+    "какие инструменты звались, система берёт из СВОИХ записей о прогоне, а не с твоих слов (143-4).",
   inputSchema: {
     properties: {
       automation_id: { description: "Номер автоматизации", type: "number" },
-      fact_keys: { description: "Ключи сработавших признаков реестра", type: "array" },
-      from_media: { description: "Было ли извлечение из фото, голоса или видео", type: "boolean" },
       has_next_step: { description: "Объявлена ли следующая ступень цепочки", type: "boolean" },
       kind: { description: "step | whole", type: "string" },
-      messages: { description: "Сколько сообщений было в цепочке", type: "number" },
-      missing_facts: { description: "Каких признаков не хватило при разборе", type: "array" },
+      next_due_at: { description: "Когда должна случиться следующая ступень, ISO. Называет человек", type: "string" },
+      next_tz: { description: "Часовой пояс ступени. Не сказан — вспомним сами, и только потом спросим", type: "string" },
+      next_what: { description: "Что должно случиться на следующей ступени — словами человека", type: "string" },
       summary: { description: "Короткий пересказ работы своими словами", type: "string" },
-      tools: { description: "Какие инструменты звались", type: "array" },
     },
     required: ["automation_id", "kind"],
     type: "object",
   },
   name: "close",
 };
+
+// 🔒 ОТЗЫВ — ОТДЕЛЬНЫЙ ИНСТРУМЕНТ, А НЕ ПОЛЕ ЗАКРЫТИЯ (143-6). Закрытие лишь
+// РЕШАЕТ, что отзыв уместен; спрашивает человека агент словами, и ответ
+// приходит позже — иногда через несколько сообщений. Поле в закрытии заставило
+// бы предсказать ответ до вопроса.
+const TOOL_FEEDBACK = {
+  description:
+    "Записать отзыв человека о работе автоматизации: понравилось (liked) и/или нужно доработать " +
+    "(needs_work), значения yes|no. Спрашивать отзыв нужно ТОЛЬКО когда закрытие вернуло решение " +
+    "ask-feedback ДА. Второй раз за тот же номер не спрашивают: система это помнит.",
+  inputSchema: {
+    properties: {
+      automation_id: { description: "Номер автоматизации", type: "number" },
+      liked: { description: "Понравилось: yes | no", type: "string" },
+      needs_work: { description: "Нужно доработать: yes | no", type: "string" },
+      note: { description: "Слова человека к вердикту, если он их сказал", type: "string" },
+    },
+    required: ["automation_id"],
+    type: "object",
+  },
+  name: "feedback",
+};
+
+async function runFeedback(a) {
+  const r = await postOwn(FEEDBACK_URL, a);
+  if (r?.ok !== true) {
+    return 'Отзыв НЕ записан: ' + String(r?.error || 'нет ответа');
+  }
+  // 🔒 ГОВОРИМ ВСЛУХ, ЧТО ВОПРОС ЗАКРЫТ: иначе агент спросит ещё раз из вежливости.
+  return 'Отзыв записан по автоматизации № ' + r.automationId +
+    '. Понравилось: ' + String(r.liked ?? '—') + ', нужно доработать: ' + String(r.needsWork ?? '—') +
+    '. Повторно спрашивать не нужно.';
+}
 
 async function runSeparate(a) {
   const r = await postOwn(SEPARATE_URL, {
@@ -446,6 +481,14 @@ async function runClose(a) {
   const lines = ['Состояние: ' + r.state + '.'];
   for (const d of r.decisions || []) {
     lines.push((d.do ? 'ДА  ' : 'нет ') + d.action + ' — ' + d.why);
+  }
+  // 🔒 ИСХОД ПОБОЧНОГО ДЕЙСТВИЯ ПРОИЗНОСИТСЯ, А НЕ МОЛЧИТ (143-5). Решение «ДА
+  // next-step» и заведённая ступень — разные утверждения: между ними стоит
+  // часовой пояс, которого может не быть.
+  if (r.nextStep) {
+    lines.push(r.nextStep.id
+      ? 'Следующая ступень № ' + r.nextStep.id + ' — ' + r.nextStep.why
+      : 'Следующая ступень НЕ заведена: ' + r.nextStep.why);
   }
   return lines.join(String.fromCharCode(10));
 }
@@ -587,14 +630,14 @@ async function handle(m) {
     // с ним на первой правке параметра.
     const a = await accessModule();
     return ok(m.id, {
-      tools: [TOOL, TOOL_REQUEST, TOOL_SEPARATE, TOOL_CLOSE].concat(a.tools),
+      tools: [TOOL, TOOL_REQUEST, TOOL_SEPARATE, TOOL_CLOSE, TOOL_FEEDBACK].concat(a.tools),
     });
   }
   if (m.method === "tools/call") {
     const p = m.params || {};
     const access = await accessModule();
     const ACCESS_NAMES = access.tools.map((t) => t.name);
-    const KNOWN = [TOOL.name, TOOL_REQUEST.name, TOOL_SEPARATE.name, TOOL_CLOSE.name]
+    const KNOWN = [TOOL.name, TOOL_REQUEST.name, TOOL_SEPARATE.name, TOOL_CLOSE.name, TOOL_FEEDBACK.name]
       .concat(ACCESS_NAMES);
     if (!KNOWN.includes(p.name)) {
       return fail(m.id, `unknown tool: ${p.name}`);
@@ -610,7 +653,9 @@ async function handle(m) {
             ? await runSeparate(args)
             : p.name === TOOL_CLOSE.name
               ? await runClose(args)
-              : await runIntake(args);
+              : p.name === TOOL_FEEDBACK.name
+                ? await runFeedback(args)
+                  : await runIntake(args);
       ok(m.id, { content: [{ text, type: "text" }] });
     } catch (e) {
       ok(m.id, {

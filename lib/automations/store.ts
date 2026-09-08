@@ -261,6 +261,8 @@ export type AutomationFields = {
   needsWork?: Verdict | null
   reusable?: boolean | null
   publicContract?: string | null
+  /** Слова человека к вердикту (143-6). Пусто — законно. */
+  feedbackNote?: string | null
 }
 
 const COLUMN_OF: Record<keyof AutomationFields, string> = {
@@ -271,6 +273,7 @@ const COLUMN_OF: Record<keyof AutomationFields, string> = {
   needsWork: "verdict_needs_work",
   reusable: "reusable",
   publicContract: "public_contract",
+  feedbackNote: "feedback_note",
 }
 
 function toCell(field: keyof AutomationFields, value: unknown): string | null {

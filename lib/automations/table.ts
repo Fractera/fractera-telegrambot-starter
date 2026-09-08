@@ -91,6 +91,9 @@ export const AUTOMATIONS_LATE_COLUMNS: readonly string[] = [
   "reusable",
   // Имя публичного договора (§3д). Пусто — наружу не отвечает.
   "public_contract",
+  // Слова человека к вердикту (143-6). Пусто — сказал только «да/нет», и это
+  // законно: заставлять объяснять оценку значит не получить её вовсе.
+  "feedback_note",
 ]
 
 export function automationsTableAlters(): string[] {
@@ -118,6 +121,7 @@ export const AUTOMATIONS_TABLE_COLUMNS = [
   "verdict_needs_work",
   "reusable",
   "public_contract",
+  "feedback_note",
 ] as const
 
 
