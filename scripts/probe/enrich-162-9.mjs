@@ -118,7 +118,10 @@ const refused = await call("write", {
   research: { anchors: [FRIEND], answer: ANSWER, basis: BASIS, question: QUESTION },
   what: "",
 })
-say(refused.ok === false && refused.error === "not-confirmed",
+// 🔒 ОТКАЗ ПЕРЕЕХАЛ НА ГРАНИЦУ (162-6): условие «блок дообучения требует
+// подтверждения» объявлено в decl и проверяется до входа в ящик. Сторож внутри
+// ящика оставлен второй линией — его зовут экраны и приборы напрямую.
+say(refused.ok === false && /confirmed|подтвержд/i.test(JSON.stringify(refused)),
   `без подтверждения человека запись отвергнута: «${refused.hint}»`)
 say((await countBy("research/")) === before,
   `и в связях не появилось ни одного блока: было ${before}, стало ${await countBy("research/")}`)

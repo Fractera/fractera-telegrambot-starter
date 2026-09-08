@@ -123,7 +123,7 @@ const stillAsks = await call("write", {
   research: { anchors: [WHO], answer: "ещё один вывод", question: QUESTION },
   what: "",
 })
-say(stillAsks.ok === false && stillAsks.error === "not-confirmed",
+say(stillAsks.ok === false && /confirmed|подтвержд/i.test(JSON.stringify(stillAsks)),
   `положительное дообучение по-прежнему требует подтверждения: «${stillAsks.hint?.slice(0, 60)}…»`)
 
 // 🔒 ТРЕТИЙ: ОПРОВЕРЖЕНИЕ БЕЗ «КАК НА САМОМ ДЕЛЕ» — ЭТО ЖАЛОБА, А НЕ ЗНАНИЕ.
