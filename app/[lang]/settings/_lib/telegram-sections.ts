@@ -128,7 +128,13 @@ export function hrefOfTelegramSection(
 // сейчас, как работает память делай новую вкладку»).
 // 🔒 ТЕМ ЖЕ ПРИЁМОМ, ЧТО ВИДЫ «ЛОГОВ»: свойство `tabs` у раскладки. Своя полоса
 // вкладок здесь была бы второй копией готового — и разошлась бы с первой.
-export const TELEGRAM_ABOUT_VIEWS = ["bot", "memory"] as const;
+// 🔒 ТРЕТИЙ ВИД — ОБЗОР ПАМЯТИ (2026-09-08, слово владельца: «сюда добавь третью
+// секцию, новое описание, и положи туда этот документ»).
+// 🛑 ЭТО ДРУГОЙ ДОКУМЕНТ, А НЕ ДРУГОЙ ВИД ТОГО ЖЕ. `memory` показывает стандарт —
+// он написан для того, кто строит, и отвечает «почему нельзя иначе». `overview`
+// показывает описание для того, кто пользуется, и отвечает «что это и зачем».
+// Слить их в один вид значило бы снова получить документ, который не читает никто.
+export const TELEGRAM_ABOUT_VIEWS = ["bot", "memory", "overview"] as const;
 export type TelegramAboutView = (typeof TELEGRAM_ABOUT_VIEWS)[number];
 
 export function isTelegramAboutView(raw: unknown): raw is TelegramAboutView {

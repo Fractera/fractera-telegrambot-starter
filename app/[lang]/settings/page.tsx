@@ -132,13 +132,21 @@ async function BotSettingsGate({
   // Файл на диске, а не строка в коде: правка документа видна без пересборки
   // (закон 159), и человек читает ровно то, что лежит в репозитории.
   const aboutView = readTelegramAboutView(sp.about);
+  // 🔒 ДВА ДОКУМЕНТА, ДВА ВИДА, И ЭТО РАЗНЫЕ ЧИТАТЕЛИ (2026-09-08). Стандарт
+  // отвечает строящему «почему нельзя иначе»; обзор отвечает пользующемуся «что
+  // это и зачем». Один файл на две роли уже был — и владелец сказал прямо, что
+  // не понял из него ни строчки.
+  // 🔒 ЧИТАЕТСЯ ОДНИМ ПУТЁМ ДЛЯ ОБОИХ: имя файла зависит от вида, всё остальное
+  // общее. Вторая ветка чтения разошлась бы с первой на первой правке.
+  const ABOUT_DOCS: Partial<Record<typeof aboutView, string>> = {
+    memory: "MEMORY-STANDARD.md",
+    overview: "MEMORY.md",
+  };
   let memoryDoc = "";
-  if (active === "about" && aboutView === "memory") {
+  const docFile = active === "about" ? ABOUT_DOCS[aboutView] : undefined;
+  if (docFile) {
     try {
-      memoryDoc = await readFile(
-        join(process.cwd(), "development-docs", "MEMORY-STANDARD.md"),
-        "utf8"
-      );
+      memoryDoc = await readFile(join(process.cwd(), "development-docs", docFile), "utf8");
     } catch {
       memoryDoc = "";
     }
@@ -353,16 +361,18 @@ async function BotSettingsGate({
               </>
             )}
 
-            {active === "about" && aboutView === "memory" &&
+            {docFile &&
               (memoryDoc ? (
                 // 🔒 ТОТ ЖЕ РЕНДЕРЕР, ЧТО У ПАСПОРТА. Второй способ показывать разметку
                 // разошёлся бы с первым на первой правке стиля таблиц.
                 <PassportBody text={memoryDoc} />
               ) : (
+                // 🛑 ОТСУТСТВУЮЩИЙ ФАЙЛ НАЗЫВАЕТСЯ ПОИМЁННО. «Документ не найден»
+                // без имени не даёт человеку ни одного следующего шага.
                 <div className="rounded-md border border-muted-foreground/30 border-dashed p-6 text-[length:var(--fs-small)] text-muted-foreground">
                   {lang === "ru"
-                    ? "Стандарт памяти лежит файлом development-docs/MEMORY-STANDARD.md в самом проекте. Файла нет — значит его удалили или проект собран без него."
-                    : "The memory standard lives as development-docs/MEMORY-STANDARD.md in the project itself. No file means it was removed, or the project was built without it."}
+                    ? `Документ лежит файлом development-docs/${docFile} в самом проекте. Файла нет — значит его удалили или проект собран без него.`
+                    : `This document lives as development-docs/${docFile} in the project itself. No file means it was removed, or the project was built without it.`}
                 </div>
               ))}
 

@@ -481,7 +481,7 @@ export type TelegramUi = {
   };
 
   about: {
-    views: { bot: string; memory: string },
+    views: { bot: string; memory: string; overview: string },
     /**
      * ПЕРВЫЙ АБЗАЦ ОПИСАНИЯ (77-10, 2026-09-01, заказ владельца).
      *
@@ -539,7 +539,7 @@ export type TelegramUi = {
 
 const EN: TelegramUi = {
   about: {
-    views: { bot: "How the bot works", memory: "How memory works" },
+    views: { bot: "How the bot works", memory: "How memory works", overview: "Memory overview" },
     arranged:
       "One service on this machine is the only reader of the bot. It listens, keeps what it heard, and hands every message to this project at once. Nothing about the bot lives in your repository except the screens you are looking at.",
     arrangedTitle: "How it is arranged.",
@@ -1027,7 +1027,7 @@ const EN: TelegramUi = {
 
 const RU: TelegramUi = {
   about: {
-    views: { bot: "Как работает бот", memory: "Как работает память" },
+    views: { bot: "Как работает бот", memory: "Как работает память", overview: "Память: обзор" },
     arranged:
       "На этой машине есть одна служба, и она единственный читатель бота. Она слушает, хранит услышанное и сразу передаёт каждое сообщение в этот проект. В вашем репозитории от бота нет ничего, кроме экранов, на которые вы сейчас смотрите.",
     arrangedTitle: "Как это устроено.",
