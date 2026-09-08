@@ -622,6 +622,35 @@ async function runMemory(name, args) {
     const tail = r.hint ? String.fromCharCode(10) + r.hint : "";
     return "Записано " + where + "." + tail;
   }
+  if (decl.fn === "read") {
+    // 🔒 ОТВЕТ ЧИТАЕТСЯ ГЛАЗАМИ, А НЕ РАЗБИРАЕТСЯ ИЗ JSON. Модель, получившая
+    // структуру, тратит ход на её пересказ себе; строка «ключ — значение (род)»
+    // готова к употреблению сразу.
+    const a = r.answer || {};
+    const NL = String.fromCharCode(10);
+    if (a.found !== true) {
+      const lines = ["Пока ничего об этом не записано."];
+      if (a.hint) lines.push(a.hint);
+      if (a.deeper && a.deeper.available) {
+        lines.push("Глубже: " + a.deeper.what + " — около " + a.deeper.cost_seconds + " с. " +
+          "Спроси человека, ждать ли, и позови ещё раз с budget=deep.");
+      }
+      return lines.join(NL);
+    }
+    const rows = (a.items || []).map((v) => {
+      // 🛑 РОД ЗАПИСИ ПЕЧАТАЕТСЯ ВСЕГДА, КОГДА ОН ЕСТЬ. Предположение, поданное
+      // как факт, — это ровно та ложь, ради устранения которой заведён 161-2.
+      const mark = v.claim === "guess"
+        ? " [предположение: " + (v.basis || "основание не названо") + "]"
+        : "";
+      return "  " + (v.title || v.key) + ": " + JSON.stringify(v.value) + mark;
+    });
+    const head = "Известно (" + a.total + "):";
+    const foot = a.deeper && a.deeper.available
+      ? NL + "Глубже: " + a.deeper.what + " — около " + a.deeper.cost_seconds + " с (budget=deep)."
+      : "";
+    return [head].concat(rows).join(NL) + foot;
+  }
   return JSON.stringify(r, null, 2);
 }
 

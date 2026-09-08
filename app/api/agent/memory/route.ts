@@ -1,7 +1,7 @@
 // @api чёрный ящик памяти: четыре метода за одной дверью
 import { NextResponse } from "next/server"
 import { MEMORY_FUNCTIONS, validateArgs } from "@/lib/memory/decl.mjs"
-import { write } from "@/lib/memory/box"
+import { read, write } from "@/lib/memory/box"
 import { machineEnv } from "@/lib/fractera/machine-env"
 
 // ДВЕРЬ ЯЩИКА ПАМЯТИ (161-1, стандарт памяти §10).
@@ -85,6 +85,19 @@ export async function POST(request: Request) {
       what: (args.what ?? "") as string | Record<string, unknown>,
     })
     return NextResponse.json({ ...result, fn: "write" }, { status: result.ok ? 200 : 400 })
+  }
+
+  if (decl.fn === "read") {
+    const answer = await read({
+      budget: args.budget as string | undefined,
+      key: args.key as string | undefined,
+      limit: args.limit as number | undefined,
+      query: args.query as string | undefined,
+      subject: args.subject as string | undefined,
+    })
+    // 🔒 ПРОМАХ — ЭТО `200` С `found: false`, А НЕ ОШИБКА. «Ничего не записано» —
+    // законное состояние памяти, и код ошибки на него сказал бы неправду о службе.
+    return NextResponse.json({ ok: true, fn: "read", answer })
   }
 
   // Сюда попасть нельзя: `live` без обработчика не бывает — список закрыт
