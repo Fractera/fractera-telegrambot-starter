@@ -1,5 +1,7 @@
+import { dataFetch } from "@/lib/fractera/data-service"
 import { valueToCell } from "@/lib/facts/depth-guard"
 import { allFacts } from "@/lib/facts/registry"
+import { factTableName } from "@/lib/facts/table"
 import { type FactClaim, writeFact } from "@/lib/facts/write"
 import { ask, learn } from "@/lib/fractera/knowledge"
 import { find, recall, recallSubject } from "@/lib/registry/access"
@@ -362,4 +364,163 @@ export async function read(input: {
     searched,
     subject,
   }
+}
+
+/**
+ * Изменяющий запрос к хранилищу.
+ *
+ * 🔒 ОТВЕТ ПРОВЕРЯЕТСЯ ДВАЖДЫ: код HTTP и поле `ok` в теле. Слой данных отвечает
+ * `200` и `{ok:false}` на отвергнутый SQL — проверка одного лишь кода объявила бы
+ * отказ успехом, и правка «прошла бы» молча.
+ * ✗ этот же класс оплачен в 143: проглоченный по закону отказ выглядел зелёным.
+ */
+async function change(sql: string, params: unknown[]): Promise<boolean> {
+  try {
+    const r = await dataFetch("/db/migrate", { method: "POST", body: JSON.stringify({ params, sql }) })
+    if (!r.ok) return false
+    const body = (await r.json()) as { ok?: boolean }
+    return body.ok !== false
+  } catch {
+    return false
+  }
+}
+
+// ── ПРАВКА: ИСТОРИЯ ВМЕСТО ПЕРЕЗАПИСИ (161-4) ──────────────────────────────
+//
+// 🔒 ЗАКОН 83 ДЕЙСТВУЕТ ЗДЕСЬ БЕЗ ИЗМЕНЕНИЙ: переход пишется НОВОЙ строкой, а
+// прежняя помечается прошедшей. Вопрос «когда человек переехал» без истории
+// ответа не имеет, а перезапись стирает его молча и навсегда.
+
+export type MemoryMutateResult =
+  | { ok: true; key: string; was: unknown; now: unknown; table: string }
+  | { ok: false; error: string; hint: string }
+
+export async function mutate(input: {
+  key: string
+  value: string | Record<string, unknown>
+  subject?: string
+  why?: string
+}): Promise<MemoryMutateResult> {
+  const key = String(input.key ?? "").trim().toLowerCase()
+  const subject = String(input.subject ?? "").trim() || "self"
+  const fact = allFacts().find(f => f.key === key)
+  if (!fact || fact.subject !== "self") {
+    return {
+      ok: false,
+      error: "not-a-person-fact",
+      hint: "по этому ключу память о человеке не ведётся",
+    }
+  }
+  const table = factTableName(key)
+  if (!table) {
+    return { ok: false, error: "bad-key", hint: "из ключа не собирается имя хранилища" }
+  }
+
+  // 🔒 ПРЕЖНЕЕ ЧИТАЕТСЯ ДО ПРАВКИ, И ЭТО НЕ ФОРМАЛЬНОСТЬ: ответ обязан показать,
+  // ЧТО именно заменено. Правка, не назвавшая прежнего, неотличима от новой
+  // записи — и человек не сможет сказать «нет, верни как было».
+  const current = await recall(key, { limit: 1, subject })
+  if (current.found !== true || current.items.length === 0) {
+    return {
+      ok: false,
+      error: "nothing-to-change",
+      // 🔒 ЭТО НЕ ОШИБКА ЧЕЛОВЕКА, А ДРУГАЯ ОПЕРАЦИЯ, И ОТКАЗ НАЗЫВАЕТ ЕЁ.
+      hint: "правого значения ещё нет — это запись, а не правка: запиши обычным способом",
+    }
+  }
+  const was = current.items[0].value
+  const wasId = current.items[0].id
+
+  // 🛑 КОЛОНКИ ПОИМЁННО, БЕЗ `SELECT *` И БЕЗ ПОЗИЦИЙ (закон 83).
+  const closed = await change(`UPDATE ${table} SET status = ? WHERE id = ?`, ["past", wasId])
+  if (!closed) {
+    return { ok: false, error: "close-failed", hint: "прежнее значение не удалось пометить прошедшим" }
+  }
+
+  // 🔒 ПРИЧИНА ПРАВКИ ЕДЕТ В `source`, А НЕ В `basis`. `basis` уже означает
+  // «на чём стоит ПРЕДПОЛОЖЕНИЕ» (161-2); дать ему второе значение — тот самый
+  // класс ошибки, от которого проект избавлялся трижды за три дня: одно слово,
+  // два смысла, и через месяц никто не помнит, какой из них здесь.
+  const why = String(input.why ?? "").trim()
+  const written = await writeFact({
+    key,
+    source: why ? `человек поправил: ${why}` : "человек поправил",
+    subject,
+    value: input.value,
+  })
+  if (!written.ok) {
+    // 🛑 ПРЕЖНЕЕ УЖЕ ПОМЕЧЕНО ПРОШЕДШИМ, А НОВОЕ НЕ ЛЕГЛО — ЭТО НАЗЫВАЕТСЯ ВСЛУХ.
+    // Молчаливый отказ здесь оставил бы человека вообще без значения, и он узнал
+    // бы об этом, спросив систему через неделю.
+    return {
+      ok: false,
+      error: written.error,
+      hint: `${written.hint}. Прежнее значение уже помечено прошедшим — запиши новое отдельно`,
+    }
+  }
+  return { ok: true, key, now: input.value, table, was }
+}
+
+// ── ЗАБЫТЬ: ПРАВО ЧЕЛОВЕКА, А НЕ ФУНКЦИЯ СИСТЕМЫ (161-5) ───────────────────
+//
+// 🔒 СИСТЕМА, У КОТОРОЙ ЕСТЬ ТОЛЬКО ЗАПИСЬ, ОДНАЖДЫ СТАНОВИТСЯ ТЕМ, ИЗ ЧЕГО
+// НЕЛЬЗЯ УЙТИ (§10.2). Поэтому удаление настоящее, а не пометка: «удалено, но
+// лежит» есть ложь о выполненном требовании человека.
+//
+// 🛑 УДАЛЯЕТСЯ ЗНАЧЕНИЕ, НО НИКОГДА ОПРЕДЕЛЕНИЕ. Определение принадлежит системе
+// и описывает, что она УМЕЕТ запоминать; удалив его, мы стёрли бы заодно чужие
+// данные того же рода (§3ж).
+
+export type MemoryForgetResult =
+  | { ok: true; key: string; removed: number; table: string; definitionKept: true }
+  | { ok: false; error: string; hint: string }
+
+export async function forget(input: {
+  key: string
+  subject?: string
+  id?: number
+}): Promise<MemoryForgetResult> {
+  const key = String(input.key ?? "").trim().toLowerCase()
+  const subject = String(input.subject ?? "").trim() || "self"
+  const fact = allFacts().find(f => f.key === key)
+  if (!fact) {
+    return {
+      ok: false,
+      error: "unknown-fact",
+      hint: "такого признака в реестре нет — забывать нечего",
+    }
+  }
+  if (fact.subject !== "self") {
+    return {
+      ok: false,
+      error: "not-a-person-fact",
+      hint: "по этому ключу память о человеке не ведётся",
+    }
+  }
+  const table = factTableName(key)
+  if (!table) {
+    return { ok: false, error: "bad-key", hint: "из ключа не собирается имя хранилища" }
+  }
+
+  const before = await recall(key, { limit: 50, subject })
+  const had = before.found === true ? before.items.length : 0
+  if (had === 0) {
+    return { ok: false, error: "nothing-to-forget", hint: "значений по этому ключу нет" }
+  }
+
+  const one = typeof input.id === "number" && Number.isInteger(input.id) ? input.id : null
+  const sql = one
+    ? `DELETE FROM ${table} WHERE id = ? AND subject_key = ?`
+    : `DELETE FROM ${table} WHERE subject_key = ?`
+  const params = one ? [one, subject] : [subject]
+  const done = await change(sql, params)
+  if (!done) {
+    return { ok: false, error: "delete-failed", hint: "хранилище не выполнило удаление" }
+  }
+
+  // 🔒 СЧИТАЕМ ПО ФАКТУ, А НЕ ПО ОБЕЩАНИЮ ХРАНИЛИЩА. «Удалено N» из ответа чужой
+  // службы — её слово о себе; разница «было минус осталось» — наше измерение.
+  const after = await recall(key, { limit: 50, subject })
+  const left = after.found === true ? after.items.length : 0
+  return { definitionKept: true, key, ok: true, removed: had - left, table }
 }
