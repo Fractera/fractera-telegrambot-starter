@@ -36,6 +36,11 @@ async function post(path, body) {
 }
 const sql = (text, params = []) => post("/db/migrate", { sql: text, params })
 
+// 🔒 ФОРМА ОТВЕТА СОСЕДНЕЙ СЛУЖБЫ ИЗМЕРЯЕТСЯ, А НЕ ВЫВОДИТСЯ ИЗ ЕЁ SQL.
+// ✗ первый прогон читал `ref_id` — так называется КОЛОНКА; наружу склад отдаёт
+// `refId`. Прибор показывал «не найдено» на исправном коде, и виноват был он.
+const refOf = x => Number(x?.refId ?? x?.ref_id ?? 0)
+
 console.log(MARK)
 
 // Кладём три саммари с заведомо большими номерами: прибор не смешивается с живыми.
@@ -52,15 +57,15 @@ await put(C, "Перевёл голосовое сообщение в текст
 
 // ── 1. Находится ДРУГИМИ словами — то, ради чего вектор и нужен ─────────────
 const found = await post("/vectors/search", { collection: COLLECTION, query: "надо не забыть машину в аэропорт", k: 5 })
-const hits = (found.json.results ?? []).filter(x => Number(x.ref_id) >= A && Number(x.ref_id) <= C)
+const hits = (found.json.results ?? []).filter(x => Number(refOf(x)) >= A && Number(refOf(x)) <= C)
 const top = hits[0]
-say(Boolean(top) && Number(top.ref_id) === A,
-  `«надо не забыть машину в аэропорт» → №${top?.ref_id} (ждём ${A}), близость ${Number(top?.score ?? 0).toFixed(3)}`)
+say(Boolean(top) && Number(refOf(top)) === A,
+  `«надо не забыть машину в аэропорт» → №${refOf(top)} (ждём ${A}), близость ${Number(top?.score ?? 0).toFixed(3)}`)
 
 // ── 2. НЕГАТИВНЫЙ КОНТРОЛЬ: постороннее не проходит порог ──────────────────
 const alien = await post("/vectors/search", { collection: COLLECTION, query: "правила игры в шахматы для начинающих", k: 5 })
 const alienHits = (alien.json.results ?? [])
-  .filter(x => Number(x.ref_id) >= A && Number(x.ref_id) <= C)
+  .filter(x => Number(refOf(x)) >= A && Number(refOf(x)) <= C)
   .filter(x => Number(x.score) >= THRESHOLD)
 say(alienHits.length === 0,
   `постороннее выше порога ${THRESHOLD}: ${alienHits.length} (ждём 0) — лучшее ${Number((alien.json.results ?? [])[0]?.score ?? 0).toFixed(3)}`)
@@ -68,7 +73,7 @@ say(alienHits.length === 0,
 // ── 3. Повторная запись ОБНОВЛЯЕТ, а не плодит вторую ──────────────────────
 await put(A, "Поставил напоминание вызвать такси до аэропорта, время уточнено на час раньше")
 const again = await post("/vectors/search", { collection: COLLECTION, query: "такси в аэропорт напоминание", k: 10 })
-const sameId = (again.json.results ?? []).filter(x => Number(x.ref_id) === A).length
+const sameId = (again.json.results ?? []).filter(x => Number(refOf(x)) === A).length
 say(sameId === 1, `записей с номером ${A} в складе: ${sameId} (ждём 1) — общий id обновляет`)
 
 // ── 4. Типизированное в вектор НЕ едет ─────────────────────────────────────
@@ -76,7 +81,7 @@ say(sameId === 1, `записей с номером ${A} в складе: ${same
 // туда попало бы, поиск нашёл бы его текстом — и мы получили бы вторую правду.
 const typed = await post("/vectors/search", { collection: COLLECTION, query: "geo.city=madrid verdict_liked closed", k: 5 })
 const typedHits = (typed.json.results ?? [])
-  .filter(x => Number(x.ref_id) >= A && Number(x.ref_id) <= C)
+  .filter(x => Number(refOf(x)) >= A && Number(refOf(x)) <= C)
   .filter(x => Number(x.score) >= THRESHOLD)
 say(typedHits.length === 0, `типизированное в складе не находится: ${typedHits.length} совпадений выше порога`)
 
@@ -85,7 +90,7 @@ for (const id of [A, B, C]) {
   await fetch(`${dataUrl}/vectors/automation-${id}`, { method: "DELETE", headers: { "X-Data-Secret": key } })
 }
 const left = await post("/vectors/search", { collection: COLLECTION, query: "такси в аэропорт напоминание", k: 10 })
-const still = (left.json.results ?? []).filter(x => Number(x.ref_id) >= A && Number(x.ref_id) <= C).length
+const still = (left.json.results ?? []).filter(x => Number(refOf(x)) >= A && Number(refOf(x)) <= C).length
 say(still === 0, `после уборки записей прибора в складе: ${still}`)
 
 console.log(`${MARK}DONE`)
