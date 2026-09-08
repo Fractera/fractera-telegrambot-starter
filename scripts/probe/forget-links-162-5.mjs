@@ -88,6 +88,29 @@ say(mine > 0 && neighbour0 > 0, `оба наших документа появи
 const before = await mineCount(`memory/${MINE}-`)
 say(before > 0, `до удаления история про «${MINE}» в связях есть: ${before} док.`)
 
+// 🔒 НЕГАТИВНЫЙ КОНТРОЛЬ ОТКАЗА, И ОН ЗДЕСЬ ГЛАВНЫЙ: ПОКА ДВИЖОК ОБРАБАТЫВАЕТ
+// СВЕЖИЙ ДОКУМЕНТ, ОН ОТВЕЧАЕТ `busy` — И ЭТО ОБЯЗАНО ДОЕХАТЬ ДО ЧЕЛОВЕКА.
+// ✗ оплачено сегодня: отказ хранилища проглатывался сборщиком, и наружу уходило
+// `ok:true, deleted:0` — «забыл» при живой истории.
+await call("write", { anchors: ["Занятов"], what: "Занятов ремонтирует лодки и держит причал" })
+const busy = await call("forget", { anchors: ["Занятов"] })
+say(busy.ok === false ? /НЕ забыта|не забыта/.test(String(busy.hint ?? "")) : true,
+  `отказ хранилища доезжает словами: ${busy.ok === false ? `«${busy.hint}»` : "движок успел освободиться — отказа не было"}`)
+
+// 🔒 ЖДЁМ ГОТОВНОСТИ ДОКУМЕНТА ПО ФАКТУ: удалять занятый движок отказывается.
+const ready = async prefix => {
+  for (let i = 0; i < 90; i += 1) {
+    const d = await docs()
+    const done = (d.statuses?.processed ?? []).some(x => String(x.file_path ?? "").startsWith(prefix))
+    const busyNow = Object.entries(d.statuses ?? {}).some(([st, g]) =>
+      st !== "processed" && Array.isArray(g) && g.length > 0)
+    if (done && !busyNow) return true
+    await sleep(1000)
+  }
+  return false
+}
+say(await ready(`memory/${MINE}-`), `документ дошёл до состояния «обработан», и очередь пуста`)
+
 const gone = await call("forget", { anchors: [MINE] })
 say(gone.ok === true && (gone.links?.deleted ?? 0) > 0,
   `забывание убрало документы: ${JSON.stringify(gone.links ?? gone)}`)
@@ -127,9 +150,10 @@ say(empty.ok === false && /не назван/.test(String(empty.hint ?? "")),
   `пустая просьба отвергнута словами: «${empty.hint}»`)
 
 // ── УБОРКА ЗА СОБОЙ: СОСЕДНЯЯ ИСТОРИЯ ТОЖЕ НАША ──────────────────────────
-const cleaned = await call("forget", { anchors: [NEIGHBOUR] })
+await ready(`memory/${NEIGHBOUR}-`)
+const cleaned = await call("forget", { anchors: [NEIGHBOUR, "Занятов"] })
 await sql("DELETE FROM fact_person_city WHERE source = ?", [SOURCE])
-say((cleaned.links?.deleted ?? 0) > 0, `прибор убрал за собой и вторую историю: ${cleaned.links?.deleted}`)
+say((cleaned.links?.deleted ?? 0) > 0, `прибор убрал за собой обе оставшиеся истории: ${cleaned.links?.deleted}`)
 
 console.log(`${MARK}DONE`)
 console.log(`PROBE_RC=${bad === 0 ? 0 : 1}`)

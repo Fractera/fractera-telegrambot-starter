@@ -938,7 +938,7 @@ export type MemoryForgetResult =
       table: string
       definitionKept: true
       /** Что забыто в связях: по каким именам искали и сколько документов убрано (162-5). */
-      links?: { anchors: string[]; deleted: number; looked: number }
+      links?: { anchors: string[]; deleted: number; looked: number; refused?: string }
     }
   | { ok: false; error: string; hint: string }
 
@@ -977,6 +977,18 @@ export async function forget(input: {
   // про Дениса»: такого признака в реестре нет и быть не должно.
   if (!key && asked.length > 0) {
     const gone = await forgetLinks(asked)
+    // 🛑 ОТКАЗ ХРАНИЛИЩА — ЭТО НЕ УСПЕХ С НУЛЁМ. Человек попросил забыть; если не
+    // забыто, он обязан узнать это словами и с дорогой, а не получить «готово».
+    if (gone.deleted === 0 && gone.refused) {
+      return {
+        ok: false,
+        error: gone.refused,
+        hint:
+          gone.refused === "busy"
+            ? "хранилище связей занято обработкой — история НЕ забыта, повтори через несколько секунд"
+            : "хранилище связей не выполнило удаление — история не забыта",
+      }
+    }
     return {
       definitionKept: true,
       key: "",
@@ -1034,7 +1046,7 @@ export async function forget(input: {
   // из того, что БЫЛО записано, — «забудь про важных людей» обязано убрать и
   // рассказы о них. 🛑 Имена названы в ответе поимённо: молчаливое удаление по
   // выведенному списку — худший вид удаления, потому что его нельзя обжаловать.
-  let links: { anchors: string[]; deleted: number; looked: number } | undefined
+  let links: { anchors: string[]; deleted: number; looked: number; refused?: string } | undefined
   if (deepForget) {
     const names = before.found === true
       ? before.items
@@ -1059,14 +1071,23 @@ async function forgetLinks(anchors: string[]): Promise<{
   anchors: string[]
   deleted: number
   looked: number
+  refused?: string
 }> {
   let deleted = 0
   let looked = 0
+  let refused: string | undefined
   for (const name of anchors.slice(0, 5)) {
     // 🔒 ПРЕФИКС ТОТ ЖЕ, ЧТО ПЕЧАТАЕТ ЗАПИСЬ: `memory/<якорь>-<время>`.
     const gone = await forgetDocuments(`memory/${name}-`)
     deleted += gone.deleted.length
     looked = Math.max(looked, gone.looked)
+    // 🛑 ОТКАЗ ХРАНИЛИЩА НЕ ПРОГЛАТЫВАЕТСЯ СБОРЩИКОМ, И ЭТО ОПЛАЧЕНО ЗДЕСЬ ЖЕ.
+    // ✗ ИЗМЕРЕНО 2026-09-08: пока движок обрабатывает свежий документ, он отвечает
+    // `{"status":"busy","message":"Cannot delete documents while pipeline is busy"}`.
+    // `forgetDocuments` возвращал это причиной, а сборщик считал только удалённые —
+    // и наружу уходило `ok: true, deleted: 0`, то есть «забыл» при живой истории.
+    // Ровно тот класс, которым проект платил в 143: отказ, проглоченный по дороге.
+    if (gone.error && !refused) refused = gone.error
   }
-  return { anchors, deleted, looked }
+  return { anchors, deleted, looked, refused }
 }
