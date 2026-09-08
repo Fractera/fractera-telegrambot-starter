@@ -93,10 +93,16 @@ say(proposals.length > 0 && Boolean(proposals[0]?.candidateKey),
 // 🔒 КАНДИДАТ ОБЯЗАН БЫТЬ ДВУСЕГМЕНТНЫМ, А НЕ СКЛЕЙКОЙ ВСЕЙ ФРАЗЫ. ✗ первый прогон
 // дал `misc.pogoda-za-oknom`: потерянный обратный слэш в образце разбиения — тот же
 // класс, что жил три дня в proxy.ts. Ключ-склейка выглядит рабочим и бесполезен.
-  const KEY_SHAPE = /^[a-z0-9]+\.[a-z0-9-]+$/
-  say(KEY_SHAPE.test(proposals[0]?.candidateKey ?? "") &&
-    !KEY_SHAPE.test("misc.pogoda-za-oknom-i-ewe"),
-    `кандидат двусегментный: «${proposals[0]?.candidateKey}»; негативный контроль образца пройден`)
+  // 🔒 ФОРМА КЛЮЧА: ровно одна точка, оба сегмента непусты.
+  const KEY_SHAPE = /^[a-z0-9-]+\.[a-z0-9-]+$/
+  // ✗ ПРЕДЫДУЩИЙ КОНТРПРИМЕР БЫЛ НЕВЕРЕН, И ПРИБОР ПОЙМАЛ САМ СЕБЯ: я взял
+  // `misc.pogoda-za-oknom-i-ewe` как «плохой», а он законно двусегментный — просто
+  // длинный. Контроль показывал ✗ на исправном коде.
+  // 🔒 НЕГАТИВНЫЙ КОНТРОЛЬ ОБЯЗАН ОТВЕРГАТЬ ТО, ЧТО ОБРАЗЕЦ ДЕЙСТВИТЕЛЬНО НЕ ДОЛЖЕН
+  // ПРИНИМАТЬ: здесь это строка БЕЗ точки и пустая строка.
+  const shapeBlind = KEY_SHAPE.test("pogodazaoknom") || KEY_SHAPE.test("")
+  say(KEY_SHAPE.test(proposals[0]?.candidateKey ?? "") && !shapeBlind,
+    `кандидат двусегментный: «${proposals[0]?.candidateKey}»; образец отвергает бесточечное и пустое`)
 const factsAfter = countFacts()
 say(factsBefore === factsAfter && factsBefore > 0,
   `записей реестра до ${factsBefore}, после ${factsAfter} — ПРЕДЛАГАЕТ, НО НЕ ПРИМЕНЯЕТ`)
