@@ -25,6 +25,35 @@ function secret(): string {
   return process.env.DATA_SECRET || machineEnv("DATA_SECRET") || ""
 }
 
+/**
+ * Разобрать блок дообучения, пришедший от агента (162-9).
+ *
+ * 🔒 ОБЪЯВЛЕНИЕ ПРИНИМАЕТ `value` — СТРОКУ ИЛИ ОБЪЕКТ, — И ЭТОГО МАЛО. Тип
+ * говорит «это объект», а нам нужны конкретные поля: вопрос человека и ответ,
+ * без них блок нечем ни собрать, ни найти. Разбор стоит здесь, у границы, а
+ * дальше внутрь едет уже проверенная форма.
+ * 🛑 ОТСУТСТВИЕ ВОПРОСА ИЛИ ОТВЕТА — ЭТО «БЛОКА НЕТ», А НЕ «БЛОК ПУСТОЙ»:
+ * молча собранный из половины полей, он через месяц читался бы как полноценная
+ * находка.
+ */
+function researchFrom(raw: unknown): {
+  question: string
+  answer: string
+  basis?: string
+  anchors: string[]
+} | undefined {
+  if (!raw || typeof raw !== "object") return undefined
+  const r = raw as Record<string, unknown>
+  const question = String(r.question ?? "").trim()
+  const answer = String(r.answer ?? "").trim()
+  if (!question || !answer) return undefined
+  const anchors = Array.isArray(r.anchors)
+    ? r.anchors.filter(a => typeof a === "string" && a.trim()).map(a => String(a).trim())
+    : []
+  const basis = String(r.basis ?? "").trim()
+  return { anchors, answer, basis: basis || undefined, question }
+}
+
 export async function POST(request: Request) {
   const expected = secret()
   if (!expected || (request.headers.get("x-data-secret") ?? "") !== expected) {
@@ -80,7 +109,13 @@ export async function POST(request: Request) {
           : null,
       basis: args.basis as string | undefined,
       claim: args.claim as string | undefined,
+      // 🔒 ПОДТВЕРЖДЕНИЕ ЧЕЛОВЕКА ЕДЕТ ОТДЕЛЬНЫМ ПОЛЕМ И ПРОВЕРЯЕТСЯ ЯЩИКОМ (162-9):
+      // блок дообучения без «да» не пишется вовсе.
+      confirmed: args.confirmed === true,
       key: args.key as string | undefined,
+      // 🛑 ФОРМА БЛОКА ПРОВЕРЯЕТСЯ ЗДЕСЬ, А НЕ ВНУТРИ: объявление принимает `value`,
+      // то есть что угодно объектом, и без разбора сюда доехал бы мусор.
+      research: researchFrom(args.research),
       source: args.source as string | undefined,
       what: (args.what ?? "") as string | Record<string, unknown>,
     })

@@ -6,6 +6,7 @@ import { factTableName } from "@/lib/facts/table"
 import { type FactClaim, writeFact } from "@/lib/facts/write"
 import { ask, forgetDocuments, labelSearch, learn } from "@/lib/fractera/knowledge"
 import { find, recall, recallSubject } from "@/lib/registry/access"
+import { composeResearch, offerToLearn, type ResearchInput } from "./research"
 import { candidates } from "./schema-map"
 
 // ВНУТРЕННОСТИ ЧЁРНОГО ЯЩИКА ПАМЯТИ (161-1, стандарт памяти §10).
@@ -29,6 +30,10 @@ export type MemoryWriteInput = {
   basis?: string
   source?: string
   automationId?: number | null
+  /** Блок дообучения: находка глубины, которую человек согласился зафиксировать (162-9). */
+  research?: ResearchInput
+  /** Человек сказал «да» на предложение зафиксировать. Без этого род `research` не пишется. */
+  confirmed?: boolean
 }
 
 export type MemoryWriteResult =
@@ -54,6 +59,14 @@ export async function write(input: MemoryWriteInput): Promise<MemoryWriteResult>
     .map(a => a.trim())
   const cell = valueToCell(input.what)
 
+  // 🔒 У БЛОКА ДООБУЧЕНИЯ СВОЙ ВХОД, И ПРОВЕРКА «ЗНАЧЕНИЕ ПУСТОЕ» К НЕМУ НЕ
+  // ОТНОСИТСЯ: его текст СОБИРАЕТСЯ из вопроса, ответа и основания, а не приходит
+  // полем `what`. Поставь я эту ветку после проверки — фиксация требовала бы
+  // лишнего аргумента, который никто не читает.
+  if (input.research) {
+    return writeResearch(input)
+  }
+
   if (!cell) {
     return { ok: false, error: "empty", hint: "нечего запоминать: значение пустое" }
   }
@@ -76,6 +89,62 @@ export async function write(input: MemoryWriteInput): Promise<MemoryWriteResult>
       error: "both-key-and-anchors",
       hint:
         "назови одно: `key` — если это факт о самом человеке, `anchors` — если это история о ком-то из его окружения",
+    }
+  }
+
+  // ── БЛОК ДООБУЧЕНИЯ: НАХОДКА ГЛУБИНЫ, ПОДТВЕРЖДЁННАЯ ЧЕЛОВЕКОМ (162-9) ────
+  //
+  // 🎯 СЛОВО ВЛАДЕЛЬЦА: «когда пользователь говорит да, мы формируем ответ,
+  // который явно должен указывать, что в автоматизации номер 124 было получено
+  // глубинное исследование… Примерно такой блок дообучения ложится в граф и
+  // запускается его процесс обработки, одновременно с этим этот объект хранится
+  // в векторной базе».
+  //
+  // 🛑 ПИШЕТСЯ ТОЛЬКО ПОСЛЕ «ДА» ЧЕЛОВЕКА, И ПРОВЕРЯЕТСЯ ЭТО ЗДЕСЬ, А НЕ В
+  // ИНСТРУКЦИИ АГЕНТА: правило, живущее в словах, исполняется настолько,
+  // насколько модель помнит его в этот ход. Без `confirmed: true` — отказ.
+  async function writeResearch(input: MemoryWriteInput): Promise<MemoryWriteResult> {
+    const anchors = (Array.isArray(input.anchors) ? input.anchors : [])
+      .filter(a => typeof a === "string" && a.trim())
+      .map(a => a.trim())
+    const r = input.research as ResearchInput
+    if (input.confirmed !== true) {
+      return {
+        ok: false,
+        error: "not-confirmed",
+        hint:
+          "находку глубины фиксируем только после «да» человека: спроси его словами из `learn.ask` " +
+          "и позови ещё раз с confirmed: true",
+      }
+    }
+    const anchorsFor = anchors.length > 0 ? anchors : r.anchors
+    if (anchorsFor.length === 0) {
+      // 🔒 БЕЗ ЯКОРЯ ЗАПИСЬ НЕ НАЙДЁТСЯ НИКОГДА — тот же закон, что у историй.
+      return {
+        ok: false,
+        error: "no-anchors",
+        hint: "назови имена, к которым относится находка: без якоря её потом не найти",
+      }
+    }
+    const text = composeResearch({ ...r, anchors: anchorsFor })
+    // 🔒 ИСТОЧНИК ОТЛИЧАЕТСЯ ОТ ИСТОРИЙ (`memory/`) НАМЕРЕННО: `research/` — это
+    // наш вывод, а не сказанное человеком, и забывать их надо по отдельности.
+    const done = await learn({
+      anchors: anchorsFor,
+      origin: "глубинное исследование памяти",
+      source: `research/${anchorsFor[0]}-${Date.now()}`,
+      text,
+    })
+    if (!done.accepted) {
+      return { ok: false, error: done.refused ?? "refused", hint: "блок дообучения не принят хранилищем" }
+    }
+    return {
+      ok: true,
+      where: "surroundings",
+      stored: text,
+      hint:
+        "блок дообучения записан: он ложится в граф, его обработка идёт в фоне, и тот же объект " +
+        "остаётся в векторе. Вывод остался предположением — произноси его теми же словами",
     }
   }
 
@@ -356,6 +425,40 @@ export type Missing = { key: string; title: string; where: string; why: string }
 export type Deeper = { available: boolean; cost_seconds: number; what: string }
 
 /**
+ * Предложение зафиксировать находку глубокого поиска (162-9).
+ *
+ * 🔒 ЭТО ВОПРОС ЧЕЛОВЕКУ, А НЕ ДЕЙСТВИЕ. Готовая фраза лежит в `ask` — её
+ * произносят как есть, на языке человека; `question` и `anchors` возвращаются
+ * обратно в `memory_write` с родом `research`, когда человек сказал «да».
+ */
+export type LearnOffer = {
+  ask: string
+  question: string
+  anchors: string[]
+  what: string
+}
+
+/**
+ * Язык человека — из его же признака, а не из букв вопроса.
+ *
+ * 🛑 УГАДЫВАТЬ ПО ВОПРОСУ НЕЛЬЗЯ: человек спрашивает по-английски, оставаясь
+ * русскоязычным, и наоборот. Признак пуст — отвечаем на русском по умолчанию
+ * службы, и это честнее, чем менять язык от фразы к фразе.
+ */
+async function personLanguage(subject: string): Promise<string | null> {
+  try {
+    const got = await recall("person.language", { limit: 1, subject })
+    if (got.found === true && got.items.length > 0) {
+      const v = got.items[0].value
+      return typeof v === "string" ? v : null
+    }
+  } catch {
+    /* язык неизвестен — законное состояние */
+  }
+  return null
+}
+
+/**
  * Куда память посмотрела и почему — карта поиска в ответе (162-1).
  *
  * 🎯 ТРЕБОВАНИЕ ВЛАДЕЛЬЦА: «сопоставить, с какими таблицами теоретически может
@@ -384,6 +487,8 @@ export type MemoryReadResult =
       missing?: Missing[]
       /** Что добавил каждый уровень лестницы и во что обошёлся (162-3). */
       levels?: LevelReport[]
+      /** Предложить человеку зафиксировать находку глубины (162-9). */
+      learn?: LearnOffer
     }
   | {
       found: false
@@ -782,11 +887,35 @@ export async function read(input: {
     })
   }
 
+  // ── ПРЕДЛОЖИТЬ ЗАФИКСИРОВАТЬ НАЙДЕННОЕ НА ГЛУБИНЕ (162-9) ────────────────
+  //
+  // 🎯 СЛОВО ВЛАДЕЛЬЦА: «после реализации ответа должен прямо спросить у
+  // пользователя: хотел бы ты зафиксировать результаты этого исследования в
+  // памяти верхнего уровня для быстрого доступа в следующий раз?»
+  //
+  // 🔒 ПРЕДЛОЖЕНИЕ ПОЯВЛЯЕТСЯ ТОЛЬКО ТАМ, ГДЕ БЫЛО ИССЛЕДОВАНИЕ. Ответ, целиком
+  // взятый из записанного, фиксировать не в чем: он уже наверху и уже мгновенный.
+  // Спрашивать про него значило бы приучить человека отвечать «нет» не глядя.
+  // 🛑 ЗАПИСЬ НЕ ДЕЛАЕТСЯ ЗДЕСЬ. Здесь только вопрос; пишет `write` с родом
+  // `research` — и только после «да». Молчание согласием не является.
+  let learnOffer: LearnOffer | undefined
+  const fromDepth = items.filter(i => i.about === "all-records" && i.claim === "guess")
+  if (query && fromDepth.length > 0) {
+    const language = await personLanguage(subject)
+    learnOffer = {
+      anchors: askedLabels.length > 0 ? askedLabels : [],
+      ask: offerToLearn(language),
+      question: query,
+      what: "зафиксировать находку глубокого поиска в памяти верхнего уровня",
+    }
+  }
+
   if (items.length > 0) {
     return {
       deeper: depth >= MAX_DEPTH ? noDeeper : offer,
       found: true,
       items,
+      learn: learnOffer,
       levels,
       looked,
       missing,
@@ -1077,17 +1206,22 @@ async function forgetLinks(anchors: string[]): Promise<{
   let looked = 0
   let refused: string | undefined
   for (const name of anchors.slice(0, 5)) {
-    // 🔒 ПРЕФИКС ТОТ ЖЕ, ЧТО ПЕЧАТАЕТ ЗАПИСЬ: `memory/<якорь>-<время>`.
-    const gone = await forgetDocuments(`memory/${name}-`)
-    deleted += gone.deleted.length
-    looked = Math.max(looked, gone.looked)
+    // 🔒 ОБА НАШИХ ПРЕФИКСА, А НЕ ОДИН (162-9): `memory/` — истории, сказанные
+    // человеком, `research/` — блоки дообучения, выведенные системой о том же
+    // имени. 🛑 «Забудь про Дениса», оставившее НАШ вывод о Денисе, — это отказ
+    // выполнить просьбу, замаскированный под успех.
     // 🛑 ОТКАЗ ХРАНИЛИЩА НЕ ПРОГЛАТЫВАЕТСЯ СБОРЩИКОМ, И ЭТО ОПЛАЧЕНО ЗДЕСЬ ЖЕ.
     // ✗ ИЗМЕРЕНО 2026-09-08: пока движок обрабатывает свежий документ, он отвечает
     // `{"status":"busy","message":"Cannot delete documents while pipeline is busy"}`.
     // `forgetDocuments` возвращал это причиной, а сборщик считал только удалённые —
     // и наружу уходило `ok: true, deleted: 0`, то есть «забыл» при живой истории.
     // Ровно тот класс, которым проект платил в 143: отказ, проглоченный по дороге.
-    if (gone.error && !refused) refused = gone.error
+    for (const prefix of [`memory/${name}-`, `research/${name}-`]) {
+      const one = await forgetDocuments(prefix)
+      deleted += one.deleted.length
+      looked = Math.max(looked, one.looked)
+      if (one.error && !refused) refused = one.error
+    }
   }
   return { anchors, deleted, looked, refused }
 }
