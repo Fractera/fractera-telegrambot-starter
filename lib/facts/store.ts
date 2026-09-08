@@ -20,7 +20,8 @@ import type {
   FactSubject,
   FactValueType,
 } from "./types"
-import file from "../../REGISTRY-CONFIG/registry-config.json"
+import baked from "../../REGISTRY-CONFIG/registry-config.json"
+import { readLiveConfig } from "@/lib/registry/live-config"
 
 // ЧИТАТЕЛЬ РЕЕСТРА — ЕДИНСТВЕННЫЙ ИСТОЧНИК ЗАПИСЕЙ (2026-09-06).
 //
@@ -177,6 +178,11 @@ function fromFile(r: FileFact): Fact | null {
  * видно тем, что описанного признака на экране нет.
  */
 export function storedFacts(): Fact[] {
+  // 🔒 ЧИТАЕМ С ДИСКА, А НЕ ИЗ БАНДЛА (159). Запечённый импорт остаётся
+  // запасом: файла может не быть рядом. ✗ до этой правки признак, заведённый
+  // человеком через бота, не действовал до ПЕРЕСБОРКИ — и это было измерено
+  // живьём на его просьбе «запомни мою национальность».
+  const { data: file } = readLiveConfig("REGISTRY-CONFIG/registry-config.json", baked)
   const list = Array.isArray(file?.facts) ? (file.facts as FileFact[]) : []
   const seen = new Set<string>()
   const out: Fact[] = []

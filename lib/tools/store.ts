@@ -1,4 +1,5 @@
-import file from "../../TOOLS-CONFIG/tools-config.json";
+import baked from "../../TOOLS-CONFIG/tools-config.json";
+import { readLiveConfig } from "@/lib/registry/live-config";
 
 // ЧИТАТЕЛЬ РЕЕСТРА ИНСТРУМЕНТОВ — ЕДИНСТВЕННЫЙ ИСТОЧНИК (2026-09-06).
 //
@@ -67,6 +68,9 @@ const strings = (v: unknown): string[] =>
  * не как «настоящий»: ошибка в эту сторону видна сразу, в обратную — молчит.
  */
 export function allTools(): Tool[] {
+  // 🔒 С ДИСКА, А НЕ ИЗ БАНДЛА (159) — та же причина, что у реестра признаков:
+  // новый инструмент обязан действовать без пересборки. Запечённое — запас.
+  const { data: file } = readLiveConfig("TOOLS-CONFIG/tools-config.json", baked);
   const list = Array.isArray(file?.tools) ? (file.tools as FileTool[]) : [];
   const seen = new Set<string>();
   const out: Tool[] = [];
