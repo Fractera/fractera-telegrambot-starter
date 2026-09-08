@@ -541,6 +541,16 @@ function fail(id, message) {
 // 🔒 ЗАГРУЗКА ЛЕНИВАЯ, ЧЕРЕЗ `import()`: объявление — модуль ESM, а этот файл
 // CommonJS. Переписать объявление под CommonJS значило бы либо потерять
 // потребителя на TypeScript, либо завести вторую копию.
+// 🔒 ТРИ ПРИМИТИВА РЕЕСТРА АГЕНТУ БОЛЬШЕ НЕ ПОКАЗЫВАЮТСЯ (161-6). Они живы и
+// работают: их зовут экраны, приборы и разработка через дверь напрямую. Но у
+// АГЕНТА к памяти остаётся один путь — четыре метода ящика.
+// 🔒 ПРИЧИНА НЕ В ЧИСТОТЕ СПИСКА, А В ЦЕНЕ ВЫБОРА. Два пути к одному делу — это
+// ход модели на решение «каким», причём решение с молчаливой ошибкой: записал
+// старым способом — данные легли, но без рода записи и без маршрутизации.
+// 🛑 ЭТО НЕ УДАЛЕНИЕ СПОСОБНОСТИ. Способность за дверью цела, и это проверяется
+// приборами 161-2 и 161-4-5, которые зовут `registry_recall` и `registry_describe`.
+const MEMORY_SUPERSEDED = ["registry_recall", "registry_remember", "registry_remember_many"];
+
 let ACCESS = null;
 async function accessModule() {
   if (!ACCESS) {
@@ -550,9 +560,10 @@ async function accessModule() {
       path.join(__dirname, "..", "..", "lib", "registry", "access-decl.mjs")
     ).href;
     const mod = await import(href);
+    const shown = mod.ACCESS_FUNCTIONS.filter((d) => !MEMORY_SUPERSEDED.includes(d.name));
     ACCESS = {
       decls: mod.ACCESS_FUNCTIONS,
-      tools: mod.ACCESS_FUNCTIONS.map(mod.mcpToolFrom),
+      tools: shown.map(mod.mcpToolFrom),
       validate: mod.validateArgs,
     };
   }
