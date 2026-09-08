@@ -1,4 +1,4 @@
-// @api единый вход в реестры: четыре примитива за одной дверью
+// @api единый вход в реестры: пять примитивов за одной дверью
 import { NextResponse } from "next/server"
 import { ACCESS_FUNCTIONS, validateArgs } from "@/lib/registry/access-decl.mjs"
 import { describe, find, isCorpus, list, recall, recallSubject, rememberMiss } from "@/lib/registry/access"
@@ -8,7 +8,7 @@ import { machineEnv } from "@/lib/fractera/machine-env"
 
 // ДВЕРЬ ЕДИНОГО ВХОДА (157-5, паспорт §3о).
 //
-// 🔒 ОДНА ДВЕРЬ НА ЧЕТЫРЕ ПРИМИТИВА, А НЕ ЧЕТЫРЕ ДВЕРИ. Четыре адреса — четыре
+// 🔒 ОДНА ДВЕРЬ НА ПЯТЬ ПРИМИТИВОВ, А НЕ ПЯТЬ ДВЕРЕЙ. Пять адресов — пять
 // места, где однажды разойдётся форма ответа и проверка права. Имя примитива
 // приходит полем, и список имён закрыт объявлением.
 //
