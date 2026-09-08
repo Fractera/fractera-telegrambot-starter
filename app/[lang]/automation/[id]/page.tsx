@@ -105,7 +105,12 @@ async function AutomationBody({
             <Field label={ui.nameLabel} mark="name" value={item.name} />
             <Field label={ui.atLabel} mark="at" value={item.at} />
             <Field label={ui.stepsLabel} mark="steps" value={String(item.steps)} />
-            <Field label={ui.fileLabel} mark="file" mono value={item.file} />
+            {/* 🛑 «ФАЙЛ» ПОКАЗЫВАЕТСЯ ТОЛЬКО У ОБРАЗЦА, ГДЕ ФАЙЛ ДЕЙСТВИТЕЛЬНО
+                ЕСТЬ. ✗ найдено владельцем 2026-09-09 на живой карточке: строка
+                «Файл: №47» — подпись про файл при значении, которое файлом не
+                является. Живая автоматизация лежит записью в базе, и у неё нет
+                имени файла; строка про него — ложь подписью, а не пустота. */}
+            {item.demo && <Field label={ui.fileLabel} mark="file" mono value={item.file} />}
           </dl>
         </>
       ) : (
