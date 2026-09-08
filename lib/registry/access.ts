@@ -414,6 +414,16 @@ export type Value = {
   scope: string | null
   status: string | null
   at: string | null
+  /**
+   * Сказано человеком (`fact`) или выведено системой (`guess`) — 161-2.
+   *
+   * 🔒 ПУСТО ЗНАЧИТ «РОД НЕ НАЗВАН», А НЕ «СКАЗАНО ЧЕЛОВЕКОМ». Уверенное
+   * умолчание дороже отсутствующего значения (закон 144): `fact` по умолчанию
+   * превратил бы каждую старую строку в свидетельство человека.
+   */
+  claim: string | null
+  /** На чём стоит предположение. */
+  basis: string | null
 }
 
 export type Recalled =
@@ -594,7 +604,7 @@ export async function recall(
   const sql = column
     ? `SELECT id, ${column} AS value_text, created_at FROM ${table}${clause} ` +
       `ORDER BY id DESC LIMIT ${limit + 1}`
-    : `SELECT id, value_text, value_num, subject_key, scope_key, status, created_at ` +
+    : `SELECT id, value_text, value_num, subject_key, scope_key, status, claim, basis, created_at ` +
       `FROM ${table}${clause} ORDER BY id DESC LIMIT ${limit + 1}`
   let rows: Record<string, unknown>[] = []
   try {
@@ -663,6 +673,8 @@ export async function recall(
     scope: (r.scope_key as string | null) ?? null,
     status: (r.status as string | null) ?? null,
     at: (r.created_at as string | null) ?? null,
+    claim: (r.claim as string | null) ?? null,
+    basis: (r.basis as string | null) ?? null,
   }))
   return { found: true, key: wanted, table, total, truncated, items }
 }

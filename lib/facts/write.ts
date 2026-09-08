@@ -51,7 +51,22 @@ export type WriteFact = {
    * номер N»; у такого факта ответа на этот вопрос попросту нет.
    */
   automationId?: number | null
+  /**
+   * Род записи: сказано человеком (`fact`) или выведено системой (`guess`).
+   *
+   * 🔒 НЕОБЯЗАТЕЛЕН, И ЭТО РЕШЕНИЕ, А НЕ ПОСЛАБЛЕНИЕ (161-2). Объявив его
+   * обязательным, мы сделали бы негодным каждый существующий вызов — тот же
+   * довод, которым необязательны все восемь настроек второго слоя реестра (83).
+   * Пусто читается как «род не назван», а не как «сказано человеком».
+   */
+  claim?: FactClaim | null
+  /** На чём стоит предположение. У `guess` обязательно. */
+  basis?: string | null
 }
+
+/** Что это за утверждение. Список закрыт: третьего рода не бывает. */
+export const FACT_CLAIMS = ["fact", "guess"] as const
+export type FactClaim = (typeof FACT_CLAIMS)[number]
 
 export type WriteResult =
   | { ok: true; table: string; created: boolean }
@@ -105,6 +120,45 @@ export async function writeFact(input: WriteFact): Promise<WriteResult> {
     return { ok: false, error: verdict.reason, hint: verdict.hint }
   }
 
+  // ── СТОРОЖ РОДА ЗАПИСИ (161-2) ───────────────────────────────────────────
+  //
+  // 🔒 СТОИТ ЗДЕСЬ ЖЕ, ГДЕ И СТОРОЖ ГЛУБИНЫ, ПО ТОЙ ЖЕ ПРИЧИНЕ: это единственное
+  // место, где значение ложится в таблицу. Проверка у двери пропустила бы запись
+  // из соседнего кода, а запрет, который можно обойти, — не запрет.
+  //
+  // 🔒 ПРЕДПОЛОЖЕНИЕ БЕЗ ОСНОВАНИЯ НЕ ПИШЕТСЯ, И ЭТО ГЛАВНОЕ ПРАВИЛО СЛОЯ.
+  // Догадка, у которой не спросили «из чего», через неделю неотличима от
+  // сказанного человеком: обе строки одинаково уверенны. §8.3 стандарта памяти
+  // называет это платой третьей — точность убывает с глубиной, — и единственная
+  // защита от неё в том, чтобы вывод носил своё происхождение с собой.
+  const claim = input.claim ?? null
+  if (claim !== null && !(FACT_CLAIMS as readonly string[]).includes(claim)) {
+    return {
+      ok: false,
+      error: "bad-claim",
+      hint: `род записи бывает только ${FACT_CLAIMS.join(" или ")}, а пришло «${String(claim)}»`,
+    }
+  }
+  const basis = String(input.basis ?? "").trim()
+  if (claim === "guess" && !basis) {
+    return {
+      ok: false,
+      error: "guess-without-basis",
+      hint: "предположение записывается только с основанием: из чего оно выведено",
+    }
+  }
+  // 🛑 ОСНОВАНИЕ БЕЗ ПРЕДПОЛОЖЕНИЯ — ТОЖЕ ОТКАЗ, И ЭТО НЕ СИММЕТРИЯ РАДИ
+  // СИММЕТРИИ. Присланное поле, которое молча ничего не значит, — отдельный класс
+  // дефекта (закон 143): вызывающий уверен, что объяснил происхождение, а в
+  // таблице лежит уверенное утверждение без пометки.
+  if (claim !== "guess" && basis) {
+    return {
+      ok: false,
+      error: "basis-without-guess",
+      hint: "основание объясняет предположение; для сказанного человеком оно не нужно — есть source",
+    }
+  }
+
   // 🛑 ИМЯ ТАБЛИЦЫ СОБИРАЕТСЯ БЕЛЫМ СПИСКОМ, А НЕ ИЗ КЛЮЧА КАК ЕСТЬ (закон 81-2).
   // Ключ рождается из свободного описания человека через модель; попав в
   // `CREATE TABLE` без проверки, он перестаёт быть именем и становится SQL.
@@ -132,8 +186,8 @@ export async function writeFact(input: WriteFact): Promise<WriteResult> {
   // машине и путает значения на обновлённой лестницей — то есть ломается ТОЛЬКО
   // у того, у кого система уже поработала (закон 83).
   const sql =
-    `INSERT INTO ${table} (message_id, value_text, source, subject_key, scope_key, status) ` +
-    "VALUES (?, ?, ?, ?, ?, ?)"
+    `INSERT INTO ${table} (message_id, value_text, source, subject_key, scope_key, status, claim, basis) ` +
+    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
   const params = [
     input.messageId ?? null,
     value,
@@ -141,6 +195,8 @@ export async function writeFact(input: WriteFact): Promise<WriteResult> {
     input.subject ?? null,
     input.scope ?? null,
     "current",
+    claim,
+    basis || null,
   ]
 
   // 🔒 ID СТРОКИ НУЖЕН УКАЗАТЕЛЮ, И БЕРЁТСЯ ОН ОТДЕЛЬНЫМ ЗАПРОСОМ ПОСЛЕ ВСТАВКИ.

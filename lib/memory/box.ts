@@ -1,6 +1,6 @@
 import { valueToCell } from "@/lib/facts/depth-guard"
 import { allFacts } from "@/lib/facts/registry"
-import { writeFact } from "@/lib/facts/write"
+import { type FactClaim, writeFact } from "@/lib/facts/write"
 import { learn } from "@/lib/fractera/knowledge"
 import { find } from "@/lib/registry/access"
 
@@ -54,20 +54,12 @@ export async function write(input: MemoryWriteInput): Promise<MemoryWriteResult>
     return { ok: false, error: "empty", hint: "нечего запоминать: значение пустое" }
   }
 
-  // ── РОД ЗАПИСИ ────────────────────────────────────────────────────────────
+  // ── РОД ЗАПИСИ (161-2) ────────────────────────────────────────────────────
   //
-  // 🛑 ПРИСЛАННОЕ, КОТОРОЕ МОЛЧА НИЧЕГО НЕ ДЕЛАЕТ, — ОТДЕЛЬНЫЙ КЛАСС ДЕФЕКТА
-  // (закон 143). Пометка рода записи объявлена в договоре и будет храниться с
-  // 161-2; принять её сейчас и потерять по дороге значило бы соврать вызывающему.
-  // Поэтому пока — честный отказ с названной причиной, а не тихое игнорирование.
+  // 🔒 ЯЩИК ПРОПУСКАЕТ РОД К ПИСАТЕЛЮ, А ПРОВЕРЯЕТ ЕГО ПИСАТЕЛЬ. Проверка здесь
+  // означала бы вторую границу рядом с первой: обойти писателя нельзя, обойти
+  // ящик — можно, и слабейшая проверка стала бы настоящей.
   const claim = String(input.claim ?? "").trim()
-  if (claim || input.basis) {
-    return {
-      ok: false,
-      error: "claim-not-built",
-      hint: "пометка «сказано / выведено» ещё не хранится — она появится следующим подшагом (161-2)",
-    }
-  }
 
   // ── ОДНО ИЗ ДВУХ, А НЕ ОБА ────────────────────────────────────────────────
   //
@@ -149,6 +141,8 @@ export async function write(input: MemoryWriteInput): Promise<MemoryWriteResult>
 
   const written = await writeFact({
     automationId: input.automationId ?? null,
+    basis: input.basis ?? null,
+    claim: (claim || null) as FactClaim | null,
     key,
     source: input.source ?? "сказано человеком в переписке",
     subject: "self",
