@@ -113,9 +113,21 @@ const replies = await mcp([
 const listed = replies.find(r => r.id === 2)?.result?.tools ?? []
 const names = listed.map(t => t.name)
 say(names.includes("memory_write"), `агент ВИДИТ memory_write среди ${names.length} инструментов`)
-// 🔒 НЕГАТИВНЫЙ КОНТРОЛЬ СОСТОЯНИЯ: непостроенное не показывается вовсе.
-say(!names.includes("memory_read") && !names.includes("memory_forget"),
-  `непостроенные методы агенту НЕ показаны: ${names.filter(n => n.startsWith("memory_")).join(", ")}`)
+// 🔒 ЗАМЕР ПЕРЕНАЦЕЛЕН 161-6, И ЭТО НЕ ПОДГОНКА ПОД РЕЗУЛЬТАТ. Здесь стояло
+// «непостроенные методы агенту НЕ показаны» — верное утверждение того часа, когда
+// построен был один метод из четырёх. Состояние изменилось ЗАКОННО: 161-2…161-5
+// построили остальные три. Закон при этом прежний — агент видит только `live`, —
+// и проверяется он теперь тем, что видны ровно четыре и ни одного лишнего.
+// 🛑 ПРИЗНАК, ПО КОТОРОМУ ТАКОЕ ОТЛИЧАЮТ ОТ ПОДГОНКИ: изменилось УТВЕРЖДЕНИЕ О
+// СОСТОЯНИИ, а не правило. Правило, подогнанное под результат, звучало бы как
+// «показываем что-нибудь из памяти».
+const mem = names.filter(n => n.startsWith("memory_")).sort()
+say(mem.length === 4 && mem.join(",") === "memory_forget,memory_mutate,memory_read,memory_write",
+  `агенту показаны ровно четыре глагола памяти: ${mem.join(", ")}`)
+// 🔒 НЕГАТИВНЫЙ КОНТРОЛЬ ЕДИНСТВЕННОГО ПУТИ (161-6): прежние примитивы записи и
+// чтения памяти агенту не видны, хотя за дверью живы — их зовут приборы ниже.
+const superseded = ["registry_recall", "registry_remember", "registry_remember_many"].filter(n => names.includes(n))
+say(superseded.length === 0, `устаревших путей к памяти у агента нет: ${superseded.join(", ") || "ни одного"}`)
 const called = replies.find(r => r.id === 3)?.result?.content?.[0]?.text ?? ""
 say(/неизвестный параметр/i.test(called), `опечатка в имени параметра отвергнута словами: «${called.slice(0, 80).replace(/\n/g, " ")}»`)
 
@@ -124,13 +136,15 @@ say(/неизвестный параметр/i.test(called), `опечатка �
   const r = await fetch(`${app}/api/agent/memory`)
   const j = await r.json().catch(() => ({}))
   const live = (j.methods ?? []).filter(m => m.state === "live").length
-  say((j.methods ?? []).length === 4 && live === 1, `дверь объявляет 4 метода, построен ${live}`)
+  // 🔒 ТО ЖЕ ПЕРЕНАЦЕЛИВАНИЕ, ЧТО ВЫШЕ: «построен один» было состоянием часа, а
+  // законом было «дверь объявляет договор ЦЕЛИКОМ». Договор — четыре метода.
+  say((j.methods ?? []).length === 4 && live === 4, `дверь объявляет 4 метода, построено ${live}`)
 }
 
-// «Ещё не построено» и «такого не бывает» — разные ответы.
-let r = await door({ fn: "read", args: { query: "что ты знаешь обо мне" } })
-say(r.status === 501 && r.json.error === "not-built", `непостроенный метод: ${r.status} ${r.json.error}`)
-r = await door({ fn: "vspomni", args: {} })
+// 🔒 «ТАКОГО НЕ БЫВАЕТ» ОСТАЁТСЯ ОТДЕЛЬНЫМ ОТВЕТОМ. Проверка на `not-built`
+// снята вместе с последним непостроенным методом — утверждать её теперь не о чем;
+// сам механизм состояния жив в объявлении и понадобится следующему методу.
+let r = await door({ fn: "vspomni", args: {} })
 say(r.status === 400 && r.json.error === "unknown-fn", `выдуманный метод: ${r.status} ${r.json.error}`)
 
 // Факт о человеке — ложится в личную память.
