@@ -93,6 +93,17 @@ const city = await read({ key: "person.city" })
 say(city.found === false || (city.items ?? [])[0]?.about === "self",
   `личный признак остался личным: ${(city.items ?? [])[0]?.about ?? "значений нет — " + city.hint}`)
 
+// 🔒 ЛЕСТНИЦА КОЛОНОК У ЧИТАЮЩЕГО (найдено этим же подшагом).
+// ✗ ДО ПРАВКИ: шесть из девяти личных таблиц остались старой формы, потому что
+// лестницу звал только писатель. `SELECT … claim, basis …` падал целиком, и
+// признак отвечал «слой данных не ответил» — то есть поломкой службы.
+for (const k of ["person.nationality", "person.name", "person.tone"]) {
+  const r = await read({ key: k })
+  const hint = String(r.hint ?? "")
+  say(!/слой данных не ответил/.test(hint),
+    `${k}: «${r.found === true ? "есть значение" : hint}»`)
+}
+
 console.log(`${MARK}DONE`)
 console.log(`PROBE_RC=${bad === 0 ? 0 : 1}`)
 process.exit(bad === 0 ? 0 : 1)

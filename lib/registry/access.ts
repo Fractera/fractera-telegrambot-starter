@@ -2,7 +2,7 @@ import factsIndex from "../../REGISTRY-CONFIG/index.json"
 import toolsIndex from "../../TOOLS-CONFIG/index.json"
 import { dataFetch } from "@/lib/fractera/data-service"
 import { allFacts } from "@/lib/facts/registry"
-import { existingFactTables } from "@/lib/facts/ensure"
+import { ensureLateColumns, existingFactTables } from "@/lib/facts/ensure"
 import { placementOf } from "@/lib/facts/placement"
 import { allTools } from "@/lib/tools/store"
 import { stems } from "./text.mjs"
@@ -565,6 +565,10 @@ export async function recall(
         hint: "признак описан, но значений у него ещё не было — таблица появится с первой записью",
       }
     }
+    // 🔒 ЧИТАЮЩИЙ ПОИМЁННО ОБЯЗАН ПРОВЕСТИ ТАБЛИЦУ ПО ЛЕСТНИЦЕ (162-2). Иначе
+    // таблица старой формы роняет весь `SELECT` («no such column: claim»), и
+    // отказ выглядит как поломка слоя данных. Один раз на процесс — см. `ensure`.
+    await ensureLateColumns(table)
   }
   const limit = cap(opts.limit)
   const where: string[] = []
