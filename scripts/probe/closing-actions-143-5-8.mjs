@@ -89,7 +89,12 @@ const countFacts = () => JSON.parse(readFileSync("REGISTRY-CONFIG/registry-confi
 const factsBefore = countFacts()
 const proposals = whole.json.proposals ?? []
 say(proposals.length > 0 && Boolean(proposals[0]?.candidateKey),
-  `предложений признака: ${proposals.length} — «${proposals[0]?.said ?? ""}» → ключ-кандидат «${proposals[0]?.candidateKey ?? ""}» (пустой = бесполезен)`)
+  `предложений признака: ${proposals.length} — «${proposals[0]?.said ?? ""}» → ключ-кандидат «${proposals[0]?.candidateKey ?? ""}» `)
+// 🔒 КАНДИДАТ ОБЯЗАН БЫТЬ ДВУСЕГМЕНТНЫМ, А НЕ СКЛЕЙКОЙ ВСЕЙ ФРАЗЫ. ✗ первый прогон
+// дал `misc.pogoda-za-oknom`: потерянный обратный слэш в образце разбиения — тот же
+// класс, что жил три дня в proxy.ts. Ключ-склейка выглядит рабочим и бесполезен.
+say(/^[a-z0-9]+.[a-z0-9-]+$/.test(proposals[0]?.candidateKey ?? ""),
+  `кандидат двусегментный: «${proposals[0]?.candidateKey}»`)
 const factsAfter = countFacts()
 say(factsBefore === factsAfter && factsBefore > 0,
   `записей реестра до ${factsBefore}, после ${factsAfter} — ПРЕДЛАГАЕТ, НО НЕ ПРИМЕНЯЕТ`)
