@@ -4,7 +4,9 @@ import { useCallback, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { KNOWN_PER_PAGE, type KnownPage, type KnownQuery, type KnownRow } from "../_lib/known";
+// 🔒 ТОЛЬКО ИЗ ОБЩЕГО ФАЙЛА: серверный `known.ts` тянет чтение реестра и `node:fs`,
+// а клиентский бандл внешних модулей не принимает — сборка падает целиком.
+import { KNOWN_PER_PAGE, type KnownPage, type KnownQuery, type KnownRow } from "../_lib/known-shared";
 
 // ТАБЛИЦА «ЧТО Я ЗНАЮ О ВАС» — ПОИСК СВЕРХУ, СТРАНИЦЫ СНИЗУ (2026-09-08).
 //

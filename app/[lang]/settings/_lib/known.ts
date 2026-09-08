@@ -24,48 +24,18 @@ import type { Fact } from "@/lib/facts/types"
 // автоматизаций (`q`, `page`, `per`); возьми мы те же имена — поиск по знаниям
 // листал бы автоматизации, и наоборот. Столкновение было бы молчаливым.
 
-export const KNOWN_PER_PAGE = [10, 25, 50] as const
-export type KnownPerPage = (typeof KNOWN_PER_PAGE)[number]
+// 🔒 ТИПЫ И КОНСТАНТЫ — В ОБЩЕМ ФАЙЛЕ БЕЗ СЕРВЕРНЫХ ЗАВИСИМОСТЕЙ.
+// ✗ оплачено падением сборки 2026-09-08: клиентский островок импортировал
+// константу отсюда и утащил в браузерный бандл `node:fs`.
+export {
+  KNOWN_PER_PAGE,
+  type KnownPage,
+  type KnownPerPage,
+  type KnownQuery,
+  type KnownRow,
+} from "./known-shared"
 
-export type KnownQuery = {
-  /** Поиск по названию, ключу и меткам. */
-  q: string
-  /** Только заполненные · только пустые · всё равно. */
-  filled: "any" | "yes" | "no"
-  page: number
-  per: KnownPerPage
-}
-
-export type KnownRow = {
-  key: string
-  title: string
-  what: string
-  example: string | null
-  tags: string[]
-  value: string | null
-  at: string | null
-  /**
-   * Три состояния, различимые на вид (закон 158-5):
-   * `known` — значение есть · `empty` — ещё не говорили · `down` — база молчит.
-   * 🛑 Слив второе с третьим, экран показал бы норму вместо аварии.
-   */
-  state: "known" | "empty" | "down"
-  hint: string | null
-}
-
-export type KnownPage = {
-  rows: KnownRow[]
-  /** Сколько строк прошло отбор — всего, а не на этой странице. */
-  total: number
-  /** Страниц всего. Ноль строк — одна пустая страница, а не ноль страниц. */
-  pages: number
-  page: number
-  per: KnownPerPage
-  /** Сколько всего заполнено — это число человек видит как «что вы обо мне знаете». */
-  filled: number
-  /** Отказала ли база: тогда пустота значит поломку, а не «ещё не говорили». */
-  down: boolean
-}
+import { KNOWN_PER_PAGE, type KnownPage, type KnownPerPage, type KnownQuery, type KnownRow } from "./known-shared"
 
 export function readKnownQuery(raw: Record<string, string | undefined>): KnownQuery {
   const per = Number(raw.kper)
