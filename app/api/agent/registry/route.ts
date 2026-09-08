@@ -64,9 +64,12 @@ export async function POST(request: Request) {
   }
   const args = checked.args as Record<string, unknown>
 
+  // 🔒 ПИСАТЕЛЯМ КОРПУС НЕ НУЖЕН: они всегда пишут в реестр признаков. ✗ найдено
+  // прибором 160: новый примитив падал с `unknown-corpus` — проверка, добавленная
+  // для читателей, молча распространилась на писателя, которого тогда не было.
   // Корпус проверяется отдельно: объявление знает, что это строка, и не знает,
   // какая именно. Закрытый список живёт рядом с примитивами.
-  if (decl.fn !== "recall" && decl.fn !== "remember" && !isCorpus(args.corpus)) {
+  if (decl.fn !== "recall" && decl.fn !== "remember" && decl.fn !== "remember_many" && !isCorpus(args.corpus)) {
     return NextResponse.json(
       { ok: false, error: "unknown-corpus", got: args.corpus, known: ["facts", "tools"] },
       { status: 400 }
