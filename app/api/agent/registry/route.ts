@@ -125,6 +125,13 @@ export async function POST(request: Request) {
       value: String(args.value ?? ""),
       subject: "self",
       source: String(args.source ?? "сказано человеком в переписке"),
+      // 🔒 УКАЗАТЕЛЬ ПОЛУЧАЕТ ПИСАТЕЛЯ ЗДЕСЬ (145). Номер приходит от агента, и
+      // он необязателен: без него `indexFact` честно пропускает запись — факт о
+      // человеке живёт вне автоматизаций. С номером видно, В ХОДЕ ЧЕГО узнали.
+      automationId:
+        typeof args.automation_id === "number" && Number.isInteger(args.automation_id)
+          ? args.automation_id
+          : null,
     })
     return NextResponse.json(
       written.ok

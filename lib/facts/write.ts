@@ -1,3 +1,4 @@
+import { indexFact } from "./index-table"
 import { dataFetch } from "@/lib/fractera/data-service"
 import { allFacts } from "./registry"
 import { ensureFactTables } from "./ensure"
@@ -33,6 +34,15 @@ export type WriteFact = {
   source?: string | null
   /** Сообщение, из которого добыт. */
   messageId?: string | null
+  /**
+   * Номер автоматизации, в прогоне которой признак сработал (145).
+   *
+   * 🔒 НЕОБЯЗАТЕЛЕН, И ЭТО СОДЕРЖАТЕЛЬНО. Факт о человеке — часовой пояс, имя —
+   * верен всегда и ничьим прогоном не порождён: у него нет автоматизации, и
+   * выдумывать её нельзя. Указатель отвечает на вопрос «что было в прогоне
+   * номер N»; у такого факта ответа на этот вопрос попросту нет.
+   */
+  automationId?: number | null
 }
 
 export type WriteResult =
@@ -100,6 +110,12 @@ export async function writeFact(input: WriteFact): Promise<WriteResult> {
     "current",
   ]
 
+  // 🔒 ID СТРОКИ НУЖЕН УКАЗАТЕЛЮ, И БЕРЁТСЯ ОН ОТДЕЛЬНЫМ ЗАПРОСОМ ПОСЛЕ ВСТАВКИ.
+  // `last_insert_rowid()` в SQLite относится к соединению; слой данных держит
+  // одно, и второй запрос подряд возвращает нужное. Не сошлось — пишем `null`:
+  // строка указателя без id всё равно отвечает на «какие признаки были».
+  let insertedId: number | null = null
+
   try {
     const r = await dataFetch("/db/migrate", {
       method: "POST",
@@ -112,9 +128,32 @@ export async function writeFact(input: WriteFact): Promise<WriteResult> {
     if (body.ok === false) {
       return { ok: false, error: body.error ?? "refused", hint: "слой данных отверг запись" }
     }
+    const back = await dataFetch("/db/migrate", {
+      method: "POST",
+      body: JSON.stringify({ sql: "SELECT last_insert_rowid() AS id", params: [] }),
+    })
+    if (back.ok) {
+      const got = (await back.json()) as { rows?: { id?: unknown }[] }
+      const raw = got.rows?.[0]?.id
+      insertedId = typeof raw === "number" ? raw : Number(raw ?? Number.NaN) || null
+    }
   } catch {
     return { ok: false, error: "unreachable", hint: "слой данных недоступен" }
   }
+
+  // ── УКАЗАТЕЛЬ: ГДЕ ЛЕЖИТ ЭТО ЗНАЧЕНИЕ (145) ────────────────────────────
+  //
+  // 🔒 ПИШЕТСЯ ЗДЕСЬ, А НЕ У ВЫЗЫВАЮЩЕГО, ПОТОМУ ЧТО ЗДЕСЬ ЕДИНСТВЕННОЕ МЕСТО,
+  // ГДЕ ЗНАЧЕНИЕ ЛОЖИТСЯ В ТАБЛИЦУ. Указатель, заполняемый вызывающими, отстал
+  // бы от данных на первом же новом потребителе — и молча.
+  // 🔒 ОТКАЗ УКАЗАТЕЛЯ НЕ ОТМЕНЯЕТ ЗАПИСЬ ФАКТА: значение человека важнее
+  // нашего оглавления. Мост можно построить заново, данные — нет.
+  await indexFact({
+    automationId: input.automationId ?? null,
+    factKey: key,
+    table,
+    rowId: insertedId,
+  })
 
   return { ok: true, table, created: ensured.created.includes(table) }
 }
