@@ -68,6 +68,18 @@ export type TelegramUi = {
   /** Слова раздела «Что я знаю о вас» (158-5). */
   /** Слова редактора SOUL.md — характер агента (158-5в). */
   /** Чья лента и как часто обновляется (147-5, 147-6). */
+  /** Журнал промахов поиска (158-7). */
+  missesWords: {
+    title: string;
+    lead: string;
+    howTo: string;
+    empty: string;
+    down: string;
+    times: string;
+    drop: string;
+    loading: string;
+    failed: string;
+  };
   liveWords: {
     every: string;
     liveSubjectLatest: string;
@@ -778,6 +790,17 @@ const EN: TelegramUi = {
     title: "OpenAI key",
     valid: "The key is valid",
   },
+  missesWords: {
+    title: "What the bot did not understand",
+    lead: "Phrases that found nothing in the registry. Each one is a ready candidate for a trigger; the number says how often it came back.",
+    howTo: "To teach the bot a phrase, tell it in Telegram: «add «…» to the triggers of such-and-such feature». The registry is edited by the agent with a commit — this page only shows and clears noise.",
+    empty: "No misses — every phrase so far was understood.",
+    down: "Could not read the journal: the data layer did not answer. This is a failure, not an empty journal.",
+    times: "×",
+    drop: "Clear",
+    loading: "Reading…",
+    failed: "Could not read.",
+  },
   liveWords: {
     every: "Refreshes every {n} seconds — there is no event stream, the page asks on a timer.",
     liveSubjectLatest: "Showing the LATEST automation #{n}. Not «the current one»: message parsing into this feed does not exist yet.",
@@ -1237,6 +1260,17 @@ const RU: TelegramUi = {
     saving: "Сохраняю…",
     title: "Ключ OpenAI",
     valid: "Ключ верный",
+  },
+  missesWords: {
+    title: "Чего бот не понял",
+    lead: "Фразы, по которым в реестре ничего не нашлось. Каждая — готовый кандидат в триггеры; число говорит, сколько раз она повторялась.",
+    howTo: "Чтобы научить бота фразе, скажите ему в Telegram: «добавь «…» в триггеры такого-то признака». Реестр правит агент коммитом — эта страница только показывает и снимает шум.",
+    empty: "Промахов нет — всё сказанное до сих пор было понято.",
+    down: "Прочитать журнал не удалось: слой данных не ответил. Это отказ, а не пустой журнал.",
+    times: "×",
+    drop: "Снять",
+    loading: "Читаю…",
+    failed: "Прочитать не удалось.",
   },
   liveWords: {
     every: "Обновляется каждые {n} секунд — потока событий нет, страница спрашивает по таймеру.",

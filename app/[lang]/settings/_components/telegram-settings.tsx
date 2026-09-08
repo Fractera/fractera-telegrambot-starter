@@ -6,6 +6,7 @@ import { AnthropicKeySection } from "./anthropic-key"
 import { AgentChannelSection } from "./agent-channel"
 import { FactsRegistrySection } from "./facts-registry"
 import { ToolsRegistry } from "./tools-registry"
+import { SearchMisses } from "./search-misses.client"
 import { SoulEditor } from "./soul-editor.client"
 import { InProgress } from "./in-progress"
 import { SettingsCard } from "./settings-card"
@@ -152,6 +153,20 @@ function TelegramTail({
           🛑 ЗДЕСЬ БУДЕТ ТЕКСТ, КОТОРЫЙ ЕДЕТ В ИНСТРУКЦИЮ БОТА ДОБАВКОЙ к его
           собственным правилам — а значит это поле влияет на поведение продукта,
           и его ТЗ (77-19) отдельно называет, что оно НЕ отменяет. */}
+      {/* 🔒 ЖУРНАЛ ПРОМАХОВ СТОИТ РЯДОМ С РЕЕСТРОМ, ПОТОМУ ЧТО ОН О НЁМ.
+          Каждая строка — фраза, которой не хватило в `triggers`. */}
+      <div className="rounded-lg border border-border">
+        <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
+          <span className="flex flex-1 items-center gap-2">
+            <ScrollText className="size-4 text-muted-foreground" />
+            <H4 variant="ui">{ui.missesWords.title}</H4>
+          </span>
+        </div>
+        <div className="p-3">
+          <SearchMisses words={ui.missesWords} />
+        </div>
+      </div>
+
       <div className="rounded-lg border border-border">
         <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
           <span className="flex flex-1 items-center gap-2">

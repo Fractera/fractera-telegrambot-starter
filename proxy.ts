@@ -194,7 +194,8 @@ export async function proxy(request: NextRequest) {
   if (
     pathname === "/api/fractera/known" ||
     pathname === "/api/fractera/soul" ||
-    pathname === "/api/fractera/pty-ticket"
+    pathname === "/api/fractera/pty-ticket" ||
+    pathname === "/api/fractera/misses"
   ) {
     return NextResponse.next();
   }
