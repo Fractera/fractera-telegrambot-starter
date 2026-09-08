@@ -17,7 +17,7 @@
 // 🛑 ЧЕГО СТОРОЖ НЕ ДЕЛАЕТ И ДЕЛАТЬ НЕ ДОЛЖЕН: он не проверяет, ЧТО написано про
 // метод. Смысл словами машине недоступен; равенство имён — доступно, и его
 // достаточно, чтобы «инструкция отстала от кода» перестало быть возможным.
-import { readFileSync } from "node:fs"
+import { readdirSync, readFileSync } from "node:fs"
 
 const INSTRUCTION = "CLAUDE.md"
 
@@ -27,6 +27,15 @@ const EXCEPTIONS = new Map([
   // ["memory_example", "почему этот метод не обязан быть в инструкции"],
 ])
 
+// 🛑 ИМЕНА, СОВПАДАЮЩИЕ ПО ФОРМЕ С МЕТОДОМ, НО МЕТОДАМИ НЕ ЯВЛЯЮЩИЕСЯ.
+// ✗ найдено первым же расширенным прогоном (163-1): `registry_search_misses` —
+// это ТАБЛИЦА журнала промахов, и сторож объявил её несуществующим методом.
+// 🔒 Список закрытый и с причиной у каждого: «оно не метод» — это утверждение,
+// которое кто-то один раз проверил, а не молчаливое исключение из правила.
+const NOT_METHODS = new Map([
+  ["registry_search_misses", "таблица журнала промахов, а не метод (lib/registry/access.ts)"],
+])
+
 const { MEMORY_FUNCTIONS } = await import("../lib/memory/decl.mjs")
 const { ACCESS_FUNCTIONS } = await import("../lib/registry/access-decl.mjs")
 
@@ -34,6 +43,36 @@ const declared = new Set(
   [...MEMORY_FUNCTIONS, ...(ACCESS_FUNCTIONS ?? [])].map(f => f.name),
 )
 const live = [...MEMORY_FUNCTIONS, ...(ACCESS_FUNCTIONS ?? [])].filter(f => f.state === "live")
+
+// ── СЛЕПАЯ ЗОНА, НАЙДЕННАЯ ЧЕРЕЗ ЧАС ПОСЛЕ ПОСТРОЙКИ СТОРОЖА (163-1) ─────────
+//
+// ✗ ПЕРВАЯ РЕДАКЦИЯ ЧИТАЛА ТОЛЬКО `CLAUDE.md`. Навык `first-acquaintance` при
+// этом звал `registry_recall` и `registry_list` — договор, отменённый шагом 161:
+// агент, открывший навык ради знакомства, получил бы указание звать то, чем
+// память больше не отвечает. Сторож против отставания инструкции сам имел
+// отставание в слепой зоне.
+// 🔒 НАВЫК — ЭТО ТА ЖЕ ИНСТРУКЦИЯ, ПРОСТО ЗАГРУЖАЕМАЯ ПО ТРЕБОВАНИЮ. Правило
+// одно: где агенту называют имя инструмента, там имя обязано существовать.
+const SKILLS_DIR = ".claude/skills"
+
+function skillFiles() {
+  const out = []
+  let names = []
+  try {
+    names = readdirSync(SKILLS_DIR)
+  } catch {
+    return out
+  }
+  for (const name of names) {
+    const file = `${SKILLS_DIR}/${name}/SKILL.md`
+    try {
+      out.push({ file, text: readFileSync(file, "utf8") })
+    } catch {
+      // Навык без SKILL.md — не наша забота: это другой сторож.
+    }
+  }
+  return out
+}
 
 const text = readFileSync(INSTRUCTION, "utf8")
 const problems = []
@@ -52,8 +91,19 @@ for (const f of live) {
 // нет, получает отказ инструмента и не понимает, что виновата инструкция.
 for (const m of text.matchAll(/\b(memory_[a-z_]+|registry_[a-z_]+)\b/g)) {
   const name = m[1]
-  if (!declared.has(name)) {
+  if (!declared.has(name) && !NOT_METHODS.has(name)) {
     problems.push(`в ${INSTRUCTION} названо \`${name}\`, а такого метода в объявлении НЕТ`)
+  }
+}
+
+// 🛑 В НАВЫКАХ ПРОВЕРЯЕТСЯ ТОЛЬКО ОДНА СТОРОНА РАВЕНСТВА — «НАЗВАННОЕ СУЩЕСТВУЕТ».
+// Требовать от каждого навыка упоминания всех методов бессмысленно: навык узкий
+// по устройству, и такое правило заставило бы дописывать имена ради сторожа.
+for (const s of skillFiles()) {
+  for (const m of s.text.matchAll(/\b(memory_[a-z_]+|registry_[a-z_]+)\b/g)) {
+    if (!declared.has(m[1]) && !NOT_METHODS.has(m[1])) {
+      problems.push(`в ${s.file} названо \`${m[1]}\`, а такого метода в объявлении НЕТ`)
+    }
   }
 }
 
@@ -64,4 +114,4 @@ if (unique.length > 0) {
   for (const p of unique) console.error(`  · ${p}`)
   process.exit(1)
 }
-console.log(`✓ инструкция знает все ${live.length} живых методов, и лишних имён в ней нет`)
+console.log(`✓ инструкция знает все ${live.length} живых методов; в ней и в ${skillFiles().length} навыках лишних имён нет`)
