@@ -56,14 +56,16 @@ say(id > 0, `автоматизация заведена: №${id}`)
 // 🔒 Это не пропуск, а закон: факт о человеке верен всегда и ничьим прогоном не
 // порождён. Указатель отвечает на вопрос «что было в прогоне N» — у него нет N.
 const before = (await idxRows({ sql: "WHERE fact_key = ?", params: ["person.timezone"] })).length
-const noId = await remember({ fn: "remember", key: "person.timezone", value: "Atlantic/Canary", source: "прибор 145" })
-say(noId.status === 200 && noId.json.ok === true, `запись без номера принята: ${noId.json.table ?? noId.json.error}`)
+const noId = await remember({ fn: "remember", args: { key: "person.timezone", value: "Atlantic/Canary", source: "прибор 145" } })
+say(noId.status === 200 && noId.json.ok === true,
+  `запись без номера: ${noId.json.ok ? noId.json.table : JSON.stringify(noId.json).slice(0, 160)}`)
 const afterNoId = (await idxRows({ sql: "WHERE fact_key = ?", params: ["person.timezone"] })).length
 say(afterNoId === before, `строк указателя по этому ключу: было ${before}, стало ${afterNoId} — БЕЗ номера не индексируется`)
 
 // ── 2. Факт С номером попадает ─────────────────────────────────────────────
-const withId = await remember({ fn: "remember", key: "person.city", value: "Мадрид", source: "прибор 145", automation_id: id })
-say(withId.status === 200 && withId.json.ok === true, `запись с номером принята: ${withId.json.table ?? withId.json.error}`)
+const withId = await remember({ fn: "remember", args: { key: "person.city", value: "Мадрид", source: "прибор 145", automation_id: id } })
+say(withId.status === 200 && withId.json.ok === true,
+  `запись с номером: ${withId.json.ok ? withId.json.table : JSON.stringify(withId.json).slice(0, 160)}`)
 
 // ── 3. ПЕРВЫЙ ВОПРОС: что было у этого номера ──────────────────────────────
 const byAutomation = await idxRows({ sql: "WHERE automation_id = ?", params: [id] })
@@ -81,8 +83,9 @@ say(byFact.some(r => Number(r.automation_id) === id),
 // 🔒 Второе место, где лежит значение, — вторая правда: одну поправят, вторую
 // забудут, и разойдутся они молча.
 const cols = (await sql(`SELECT name FROM pragma_table_info('automation_facts')`)).rows?.map(r => String(r.name)) ?? []
-say(!cols.includes("value") && !cols.includes("value_text"),
-  `колонок значения в указателе нет: [${cols.join(", ")}]`)
+say(cols.length >= 5 && !cols.includes("value") && !cols.includes("value_text"),
+  `колонок в указателе ${cols.length}, значения среди них нет: [${cols.join(", ")}]` +
+  (cols.length === 0 ? " — ПУСТО значит таблицы нет, а не что она верна" : ""))
 
 // ── 6. Ссылка ведёт к настоящей строке ─────────────────────────────────────
 const t = byAutomation[0]?.table_name
