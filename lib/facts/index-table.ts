@@ -41,7 +41,7 @@ export function factIndexTableSql(): string {
       table_name TEXT NOT NULL,
       -- Какая именно строка. Ноль значит «строку записать не удалось».
       row_id INTEGER,
-      created_at TEXT NOT NULL DEFAULT (strftime(%Y-%m-%dT%H:%M:%SZ,now))
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
     );
     CREATE INDEX IF NOT EXISTS ${FACT_INDEX_TABLE}_owner ON ${FACT_INDEX_TABLE} (automation_id, id);
     CREATE INDEX IF NOT EXISTS ${FACT_INDEX_TABLE}_key ON ${FACT_INDEX_TABLE} (fact_key, id);

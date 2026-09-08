@@ -142,6 +142,16 @@ export const AUTOMATIONS_TABLE_COLUMNS = [
 // времени в базе печатает СЕКУНДЫ, и два перехода внутри одной секунды дали бы
 // одинаковую метку — «последним» стал бы случайный.
 
+// ✗ ЗДЕСЬ ТРИЖДЫ ТЕРЯЛИСЬ КАВЫЧКИ В `strftime`, И ОТКАЗ БЫЛ НЕМЫМ (найдено 2026-09-08).
+// Форма времени БЕЗ одинарных кавычек вокруг образца и вокруг «now» — невалидный
+// SQL: `CREATE TABLE` отвергается целиком, создание возвращает отказ, а вызывающий
+// «отказ указателя не отменяет запись факта» идёт дальше. Снаружи всё зелено.
+// 🛑 ПОЧЕМУ ЭТО НЕ ЗАМЕТИЛИ РАНЬШЕ: таблицы были созданы ПРИБОРАМИ, которые пишут
+// свой SQL — с кавычками. То есть код создания таблиц не работал НИ РАЗУ, а система
+// выглядела исправной, потому что таблицы уже существовали.
+// 🔒 ЭТО ЛОМАЛОСЬ БЫ ТОЛЬКО НА ЧИСТОЙ МАШИНЕ — у нового человека в его первый день.
+// Сторож `scripts/check-table-sql.mjs` ловит этот образец в сборке.
+
 export const AUTOMATION_STATES_TABLE = "automation_states"
 
 /**
@@ -177,7 +187,7 @@ export function automationStatesTableSql(): string {
       closing_kind TEXT,
       -- Почему перешли. Пусто — законно: причина известна не всегда.
       reason TEXT,
-      created_at TEXT NOT NULL DEFAULT (strftime(%Y-%m-%dT%H:%M:%SZ,now))
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
     );
     CREATE INDEX IF NOT EXISTS ${AUTOMATION_STATES_TABLE}_owner ON ${AUTOMATION_STATES_TABLE} (automation_id, id);
   `
@@ -237,7 +247,7 @@ export function automationRowsTableSql(): string {
       fact TEXT,
       -- Строка целиком, как её видит экран: payload, phrase, next, rejected.
       payload TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT (strftime(%Y-%m-%dT%H:%M:%SZ,now))
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
     );
     CREATE INDEX IF NOT EXISTS ${AUTOMATION_ROWS_TABLE}_owner ON ${AUTOMATION_ROWS_TABLE} (automation_id, id);
   `

@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbo",
-    "build": "node scripts/check-registry.mjs && node scripts/check-tools.mjs && node scripts/check-value-types.mjs && node scripts/build-registry-index.mjs --check && next build",
+    "build": "node scripts/check-registry.mjs && node scripts/check-tools.mjs && node scripts/check-value-types.mjs && node scripts/check-table-sql.mjs && node scripts/build-registry-index.mjs --check && next build",
     "start": "node server.mjs",
     "check": "ultracite check",
     "fix": "ultracite fix",
@@ -13,7 +13,8 @@
     "check:tools": "node scripts/check-tools.mjs",
     "build:index": "node scripts/build-registry-index.mjs",
     "check:index": "node scripts/build-registry-index.mjs --check",
-    "check:types": "node scripts/check-value-types.mjs"
+    "check:types": "node scripts/check-value-types.mjs",
+    "check:sql": "node scripts/check-table-sql.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai": "^4.0.57",
