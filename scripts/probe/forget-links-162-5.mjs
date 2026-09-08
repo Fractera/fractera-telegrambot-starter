@@ -85,7 +85,15 @@ const gone = await call("forget", { anchors: [MINE] })
 say(gone.ok === true && (gone.links?.deleted ?? 0) > 0,
   `забывание убрало документы: ${JSON.stringify(gone.links ?? gone)}`)
 
-const after = await mineCount(`memory/${MINE}-`)
+// 🔒 УДАЛЕНИЕ У ДВИЖКА ФОНОВОЕ — ЖДЁМ ПО ФАКТУ, А НЕ ПРОВЕРЯЕМ СРАЗУ.
+// ✗ ИЗМЕРЕНО 2026-09-08: ответ `{"status":"deletion_started"}`, документ уходит
+// из списка за секунды. Проверка в тот же миг показывала его на месте и
+// выглядела как отказ удаления — тот же класс, что «связи строятся в фоне».
+let after = await mineCount(`memory/${MINE}-`)
+for (let i = 0; i < 30 && after > 0; i += 1) {
+  await sleep(1000)
+  after = await mineCount(`memory/${MINE}-`)
+}
 say(after === 0, `после удаления историй про «${MINE}» не осталось: ${after}`)
 
 // 🔒 ГЛАВНЫЙ НЕГАТИВНЫЙ КОНТРОЛЬ: СОСЕДНЯЯ ИСТОРИЯ ЦЕЛА. Без него «удалил» и

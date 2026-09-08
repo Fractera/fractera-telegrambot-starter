@@ -139,6 +139,8 @@ export async function forgetDocuments(prefix: string): Promise<{
   deleted: string[];
   looked: number;
   error?: string;
+  /** Удаление принято в фоновую очередь: список опустеет через секунды, а не сразу. */
+  background?: boolean;
 }> {
   const head = String(prefix ?? "").trim();
   if (!head) return { deleted: [], looked: 0, error: "empty-prefix" };
@@ -160,11 +162,20 @@ export async function forgetDocuments(prefix: string): Promise<{
     .filter(Boolean);
   if (mine.length === 0) return { deleted: [], looked: docs.length };
   try {
-    await dataJson<unknown>("/service/rag/documents/delete_document", {
-      method: "DELETE",
-      body: JSON.stringify({ doc_ids: mine, delete_file: false }),
-    });
-    return { deleted: mine, looked: docs.length };
+    // 🔒 ОТВЕТ ЧИТАЕТСЯ ЦЕЛИКОМ, А НЕ ПО КОДУ HTTP, И ЗДЕСЬ ЭТО НЕ ФОРМАЛЬНОСТЬ.
+    // Измерено 2026-09-08: движок отвечает `{"status":"deletion_started",…}` —
+    // **удаление фоновое**. Документ исчезает из списка за секунды, а не в тот
+    // же миг; проверка «сразу после вызова» показывает его на месте и выглядит
+    // как отказ удаления. Тот же класс, что «связи строятся в фоне» у записи.
+    const body = await dataJson<{ status?: string; message?: string }>(
+      "/service/rag/documents/delete_document",
+      { method: "DELETE", body: JSON.stringify({ doc_ids: mine, delete_file: false }) },
+    );
+    const status = String(body.status ?? "");
+    if (status && !/start|success|ok|delet/i.test(status)) {
+      return { deleted: [], looked: docs.length, error: status };
+    }
+    return { deleted: mine, looked: docs.length, background: true };
   } catch {
     return { deleted: [], looked: docs.length, error: "refused" };
   }

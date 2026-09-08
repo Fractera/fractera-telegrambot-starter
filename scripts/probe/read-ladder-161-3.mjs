@@ -70,7 +70,20 @@ say(r.json.answer?.found === true && all.length >= 2 && r.ms < 3000,
 // 🔒 ГЛАВНЫЙ ЗАМЕР БЮДЖЕТА: незнакомый вопрос при `fast` НЕ идёт в связи —
 // значит и не стоит секунд. Порог 1500 мс взят с запасом к измеренным 30 мс базы;
 // обращение к связям измерено в 885–5016 мс и в него не укладывается.
+// 🛑 ИСТОРИЮ ДЛЯ ЭТОГО ЗАМЕРА ПРИБОР СЕЕТ САМ (162-5), И ЭТО ПОЧИНКА СКРЫТОЙ
+// ЗАВИСИМОСТИ, А НЕ УДОБСТВО. ✗ до этого он опирался на документ `memory/
+// Ратмиров-…`, положенный чьей-то давней сессией: прибор был зелёным, пока
+// чужие данные случайно лежали на месте, и покраснел в тот час, когда их убрали.
+// 🔒 Забыть свой посев стало чем — забывание построено этим же шагом.
 const unknown = "что известно о человеке по фамилии Ратмиров"
+const STORY = "Ратмиров держит пасеку и возит мёд на ярмарку"
+await memory("write", { anchors: ["Ратмиров"], what: STORY })
+// 🔒 СВЯЗИ СТРОЯТСЯ В ФОНЕ — ЖДЁМ ПОЯВЛЕНИЯ ПО ФАКТУ, А НЕ ПАУЗОЙ.
+for (let i = 0; i < 60; i += 1) {
+  const seen = await memory("read", { query: "Ратмиров", depth: 2 })
+  if (/пасек|мёд|мед|ярмарк|beehive|honey|bee/i.test(JSON.stringify(seen.json.answer ?? {}))) break
+  await new Promise(r => setTimeout(r, 1000))
+}
 r = await memory("read", { query: unknown })
 const fastMs = r.ms
 // 🪦 ПЕРЕНАЦЕЛЕНО 2026-09-08 ШАГОМ 162-2, И ЭТО СМЕНА УТВЕРЖДЕНИЯ О СОСТОЯНИИ,
@@ -140,6 +153,9 @@ say(r.status === 200 && r.json.answer?.found === false,
   `пустой признак: ${r.status}, found=false, «${String(r.json.answer?.hint ?? "").slice(0, 50)}»`)
 
 // ── УБОРКА ПО СВОЕЙ МЕТКЕ ─────────────────────────────────────────────────
+// 🔒 УБИРАЕТСЯ И ПОСЕВ В СВЯЗЯХ: история, положенная прибором, — тоже его след,
+// и оставленная жить она станет чужой опорой для следующего прибора.
+await memory("forget", { anchors: ["Ратмиров"] })
 await sql("DELETE FROM fact_person_occupation WHERE source = ?", [TAG])
 await sql("DELETE FROM fact_person_currency WHERE source = ?", [TAG])
 const left = await sql("SELECT COUNT(*) AS n FROM fact_person_currency WHERE source = ?", [TAG])
