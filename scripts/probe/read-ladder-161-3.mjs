@@ -81,7 +81,11 @@ say(r.json.answer?.deeper?.available === true && r.json.answer?.deeper?.cost_sec
 r = await memory("read", { query: unknown, budget: "deep" })
 const deepMs = r.ms
 const deepItem = (r.json.answer?.items ?? [])[0]
-say(r.json.answer?.found === true && /пасек|мёд|мед|ярмарк/i.test(String(deepItem?.value ?? "")),
+// 🛑 ОБРАЗЕЦ ТЕРПИТ ОБА ЯЗЫКА, И ЭТО НЕ ПОБЛАЖКА, А ИСПРАВЛЕНИЕ СЛЕПОТЫ.
+// ✗ измерено 161-3: на строчный вопрос граф отвечает ПО-АНГЛИЙСКИ («is a person
+// who has been maintaining a beehive»), и русский образец объявил это отказом —
+// прибор врал о живой находке. Негативный контроль сам нуждается в проверке.
+say(r.json.answer?.found === true && /пасек|мёд|мед|ярмарк|beehive|honey|bee/i.test(String(deepItem?.value ?? "")),
   `deep нашёл в связях за ${deepMs} мс: «${String(deepItem?.value ?? "").slice(0, 80).replace(/\n/g, " ")}…»`)
 // 🔒 РАЗНИЦА ВО ВРЕМЕНИ И ЕСТЬ ДОКАЗАТЕЛЬСТВО, ЧТО БЮДЖЕТ РАБОТАЕТ, А НЕ ЧИСЛИТСЯ.
 say(deepMs > fastMs * 2, `глубина дороже быстрого пути: ${deepMs} мс против ${fastMs} мс`)
