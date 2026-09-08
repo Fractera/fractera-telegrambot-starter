@@ -88,11 +88,26 @@ await clean()
 //
 // Знакомое графу имя стоит своего запроса; незнакомое — не стоит ничего, кроме
 // проверки метки (41 мс). Разница обязана быть видна во времени.
-await call("write", { key: "person.city", what: "Зеленодольск", source: SOURCE })
-const known = await timedRead({ query: "мой город", depth: 2 })
-await clean()
-await call("write", { key: "person.city", what: "Урюпинсквиль", source: SOURCE })
-const unknown = await timedRead({ query: "мой город", depth: 2 })
+// 🔒 ЗАМЕР БЕРЁТСЯ ДВАЖДЫ, И СЧИТАЕТСЯ ЛУЧШИЙ ИЗ ДВУХ — ЭТО НЕ СМЯГЧЕНИЕ, А
+// ИСПРАВЛЕНИЕ ИЗМЕРЕНИЯ. ✗ оплачено 2026-09-08: прибор был зелёным в одиночку и
+// красным сразу после соседа 162-5, который сеет и удаляет документы: пока
+// движок разбирает свою фоновую очередь, ЛЮБОЙ запрос к связям дорожает. Разница
+// «спросили одно имя против двух» при этом никуда не девается — тонет в шуме.
+// 🔒 Правило шире случая: у воспроизводимого замера есть не только команда, но и
+// СОСТОЯНИЕ СОСЕДА (закон 157-3 про момент замера).
+async function twice(seed) {
+  let best = Infinity
+  let last = null
+  for (let i = 0; i < 2; i += 1) {
+    await clean()
+    await call("write", { key: "person.city", what: seed, source: SOURCE })
+    const r = await timedRead({ query: "мой город", depth: 2 })
+    if (r.ms < best) { best = r.ms; last = r }
+  }
+  return { answer: last.answer, ms: best }
+}
+const known = await twice("Зеленодольск")
+const unknown = await twice("Урюпинсквиль")
 await clean()
 
 const knownAnchors = lvl(known.answer, 2)?.anchors ?? []
