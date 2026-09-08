@@ -70,7 +70,7 @@ const lvl2 = (two.levels ?? []).find(l => l.level === 2)
 say(!!lvl2, `глубина 2 отчитывается уровнем 2: ${JSON.stringify((two.levels ?? []).map(l => l.level))}`)
 say(Array.isArray(lvl2?.anchors) && lvl2.anchors.includes("Зеленодольск"),
   `связи спрошены ИМЕНЕМ ИЗ УРОВНЯ 1: ${JSON.stringify(lvl2?.anchors)}`)
-say(/уровн[ея] 1/.test(String(lvl2?.note ?? "")),
+say(/уровне 1/.test(String(lvl2?.note ?? "")) && /словами человека/.test(String(lvl2?.note ?? "")),
   `сказано, чем спрашивали: «${lvl2?.note}»`)
 
 // 🔒 НЕГАТИВНЫЙ КОНТРОЛЬ ПЛОСКОСТИ 1: якорей нет — это СКАЗАНО.
