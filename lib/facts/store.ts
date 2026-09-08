@@ -71,6 +71,7 @@ type FileFact = {
   valueType?: unknown
   howToFind?: unknown
   storedIn?: unknown
+  askOrder?: unknown
   onMissing?: unknown
   fn?: unknown
   builtin?: unknown
@@ -130,6 +131,9 @@ function fromFile(r: FileFact): Fact | null {
     howToFind: str(r.howToFind),
     storedIn: opt(r.storedIn) ?? factTableName(key) ?? "",
     onMissing: fromList<FactOnMissing>(r.onMissing, FACT_ON_MISSING) ?? "silent",
+    // 🔒 ПОРЯДОК ЗНАКОМСТВА ЖИВЁТ В РЕЕСТРЕ (163-2): чем меньше число, тем раньше
+    // спрашивают. Нет числа — признак в знакомстве не участвует, и это законно.
+    askOrder: typeof r.askOrder === "number" && r.askOrder > 0 ? r.askOrder : undefined,
     // Описание внешнего вызова едет как есть: разбирает его исполнитель,
     // а читателю реестра знать его форму незачем.
     fn: opt(r.fn),

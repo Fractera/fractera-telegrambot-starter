@@ -13,6 +13,7 @@ import {
   offerToLearn,
   type ResearchInput,
 } from "./research"
+import { type Acquaint, nextQuestion } from "./acquaint"
 import { candidates } from "./schema-map"
 
 // ВНУТРЕННОСТИ ЧЁРНОГО ЯЩИКА ПАМЯТИ (161-1, стандарт памяти §10).
@@ -557,6 +558,8 @@ export type MemoryReadResult =
       levels?: LevelReport[]
       /** Предложить человеку зафиксировать находку глубины (162-9). */
       learn?: LearnOffer
+      /** Чего о человеке ещё не знаем и что спросить следующим (163-2). */
+      acquaint?: Acquaint
     }
   | {
       found: false
@@ -567,6 +570,7 @@ export type MemoryReadResult =
       looked: LookedAt[]
       missing?: Missing[]
       levels?: LevelReport[]
+      acquaint?: Acquaint
     }
 
 function capLimit(v: unknown): number {
@@ -966,6 +970,24 @@ export async function read(input: {
   // Спрашивать про него значило бы приучить человека отвечать «нет» не глядя.
   // 🛑 ЗАПИСЬ НЕ ДЕЛАЕТСЯ ЗДЕСЬ. Здесь только вопрос; пишет `write` с родом
   // `research` — и только после «да». Молчание согласием не является.
+  // ── ЗНАКОМСТВО: ПАМЯТЬ САМА ГОВОРИТ, ЧЕГО О ЧЕЛОВЕКЕ НЕ ЗНАЕТ (163-2) ────
+  //
+  // 🎯 ВОПРОС ВЛАДЕЛЬЦА: «моё первое общение запускает инструкцию первого
+  // знакомства — или такого нет?» Такого не было: навык открывался, только если
+  // модель о нём вспомнит. Теперь предложение приходит В ОТВЕТЕ памяти.
+  //
+  // 🔒 СЧИТАЕТСЯ ТОЛЬКО ТАМ, ГДЕ О ЧЕЛОВЕКЕ НИЧЕГО НЕ НАШЛОСЬ, И СТОИТ ОДНОГО
+  // ЧТЕНИЯ. Спрашивать «что известно» на каждом ответе значило бы платить за
+  // знакомство в разговоре, где оно давно состоялось.
+  // 🛑 И ОНО ИСЧЕЗАЕТ САМО: как только человек назвал признак, следующий вопрос
+  // становится другим, а когда названы все — предложения нет вовсе.
+  let acquaint: Acquaint | undefined
+  if (subject === "self" && items.every(i => i.about !== "self")) {
+    const mine = await recallSubject(subject, { limit: 50 })
+    const known = new Set(mine.found === true ? mine.items.map(v => v.key) : [])
+    acquaint = nextQuestion(known, await personLanguage(subject)) ?? undefined
+  }
+
   let learnOffer: LearnOffer | undefined
   const fromDepth = items.filter(i => i.about === "all-records" && i.claim === "guess")
   if (query && fromDepth.length > 0) {
@@ -982,6 +1004,7 @@ export async function read(input: {
     return {
       deeper: depth >= MAX_DEPTH ? noDeeper : offer,
       found: true,
+      acquaint,
       items,
       learn: learnOffer,
       levels,
@@ -1003,6 +1026,7 @@ export async function read(input: {
   // дороже отсутствующего значения.
   const known = key ? allFacts().some(f => f.key === key) : false
   return {
+    acquaint,
     deeper: depth >= MAX_DEPTH ? noDeeper : offer,
     found: false,
     levels,

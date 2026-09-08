@@ -646,6 +646,9 @@ async function runMemory(name, args) {
       // здесь это важнее, чем при находке: пустой ответ без этой строки агент
       // перескажет человеку как «я нигде ничего не нашёл».
       const heldMiss = (a.levels || []).filter((l) => /нужно согласие человека/.test(String(l.note || "")));
+      if (a.acquaint) {
+        lines.push("СПРОСИ У ЧЕЛОВЕКА (одно, не список): " + a.acquaint.ask + " — " + a.acquaint.why);
+      }
       if (heldMiss.length > 0) {
         lines.push("НЕ СДЕЛАНО: " + heldMiss[0].note);
       } else if (a.deeper && a.deeper.available) {
@@ -657,6 +660,13 @@ async function runMemory(name, args) {
     // 🔒 НЕСДЕЛАННОЕ ПЕЧАТАЕТСЯ СЛОВАМИ, ГОТОВЫМИ К ПЕРЕСКАЗУ ЧЕЛОВЕКУ (162-4).
     // Уровень, не выполненный без разрешения, обязан быть виден в ответе: иначе
     // агент решит, что искали везде, и скажет человеку «больше ничего нет».
+    // 🔒 ЗНАКОМСТВО ПРИХОДИТ В ОТВЕТЕ ПАМЯТИ, А НЕ ИЗ ПАМЯТИ МОДЕЛИ (163-2).
+    // Строка печатается ГОТОВОЙ К ПРОИЗНЕСЕНИЮ: агенту остаётся спросить, а не
+    // решать, стоит ли открывать навык ради одного вопроса.
+    const ask = a.acquaint
+      ? NL + "СПРОСИ У ЧЕЛОВЕКА (одно, не список): " + a.acquaint.ask +
+        " — " + a.acquaint.why + " [" + a.acquaint.key + ", осталось " + a.acquaint.left + "]"
+      : "";
     const held = (a.levels || []).filter((l) => /нужно согласие человека/.test(String(l.note || "")));
     const askLine = held.length > 0 ? NL + "НЕ СДЕЛАНО: " + held[0].note : "";
     const rows = (a.items || []).map((v) => {
@@ -671,7 +681,7 @@ async function runMemory(name, args) {
     const foot = a.deeper && a.deeper.available
       ? NL + "Глубже: " + a.deeper.what + " — около " + a.deeper.cost_seconds + " с (budget=deep)."
       : "";
-    return [head].concat(rows).join(NL) + askLine + foot;
+    return [head].concat(rows).join(NL) + askLine + ask + foot;
   }
   return JSON.stringify(r, null, 2);
 }
