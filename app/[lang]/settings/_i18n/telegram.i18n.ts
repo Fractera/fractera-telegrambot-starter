@@ -33,6 +33,7 @@ export type TelegramUi = {
     sortOld: string
     status: { any: string; done: string; running: string }
     calendar: { any: string; yes: string; no: string }
+    verdict: { liked: string; needsWork: string }
     map: { any: string; yes: string; no: string }
     perPage: string
     shown: string
@@ -735,6 +736,7 @@ const EN: TelegramUi = {
   },
   automations: {
     calendar: { any: "Calendar: any", no: "No calendar", yes: "On a timer" },
+    verdict: { liked: "Liked", needsWork: "Needs work" },
     demo: "Demo records: real chains will come from the logs at the next step.",
     sourceDb: "Real records from the project database.",
     sourceEmpty: "No automations yet — message parsing is not built, so there are no numbers to assign. The rows below are a demo of how it will look.",
@@ -1206,6 +1208,7 @@ const RU: TelegramUi = {
   },
   automations: {
     calendar: { any: "Календарь: всё равно", no: "Без календаря", yes: "По таймеру" },
+    verdict: { liked: "Понравилось", needsWork: "Нужно доработать" },
     demo: "Выдуманные записи: настоящие цепочки придут из логов следующим шагом.",
     sourceDb: "Настоящие записи из базы проекта.",
     sourceEmpty: "Автоматизаций пока нет: разбор сообщений не построен, номера присваивать нечему. Записи ниже — образец того, как это будет выглядеть.",

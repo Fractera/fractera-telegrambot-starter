@@ -1,4 +1,4 @@
-import { listAutomationRows, type AutomationRow } from "@/lib/automations/store"
+import { listForScreen, type ScreenAutomation } from "@/lib/automations/screen"
 
 // АВТОМАТИЗАЦИЯ — ОДНА СВЯЗАННАЯ ЦЕПОЧКА ЗАПРОСОВ, И У НЕЁ ЕСТЬ СВОЯ СТРАНИЦА.
 //
@@ -44,6 +44,16 @@ export type Automation = {
   map: boolean
   /** Свободные метки: по ним же идёт поиск. */
   tags: string[]
+  /**
+   * Вердикт человека: понравилось.
+   *
+   * 🔒 ТРИ СОСТОЯНИЯ, А НЕ ДВА: `yes` · `no` · **`null` — не спрашивали**.
+   * Молчание не равно одобрению; слив «неизвестно» с «нет», мы наполнили бы
+   * память отзывами, которых человек не давал.
+   */
+  liked: "yes" | "no" | null
+  /** Вердикт человека: нужно доработать. Те же три состояния. */
+  needsWork: "yes" | "no" | null
   /** Выдуманная запись, а не настоящая. */
   demo: boolean
 }
@@ -76,7 +86,10 @@ export function parseAutomationFile(file: string): {
   }
 }
 
-type Demo = Omit<Automation, "at" | "atUnix" | "id" | "name" | "demo">
+// 🔒 У ВЫДУМАННОЙ ЗАПИСИ ВЕРДИКТА НЕТ ПО ОПРЕДЕЛЕНИЮ: его даёт человек, а этих
+// автоматизаций не было. Подставить "понравилось" образцу значило бы показать
+// отзыв, которого никто не оставлял.
+type Demo = Omit<Automation, "at" | "atUnix" | "id" | "name" | "demo" | "liked" | "needsWork">
 
 const DEMO: Demo[] = [
   { calendar: false, file: "06-09-2026_14-32-10_zakaz-taksi-do-aeroporta.md", map: true, status: "running", steps: 4, tags: ["поездка", "деньги"] },
@@ -95,7 +108,7 @@ const DEMO: Demo[] = [
 
 /** Все автоматизации, без отбора. Сегодня выдуманные — см. оговорку в шапке. */
 export function listAutomations(): Automation[] {
-  return DEMO.map((d) => ({ ...d, ...parseAutomationFile(d.file), demo: true }))
+  return DEMO.map((d) => ({ ...d, ...parseAutomationFile(d.file), demo: true, liked: null, needsWork: null }))
 }
 
 /** Одна автоматизация по адресному ключу. Пусто — такой нет. */
@@ -192,14 +205,25 @@ const matchTri = (flag: boolean, want: Tri) => want === "any" || (want === "yes"
  * работе системы.
  */
 export async function queryAutomationsLive(query: AutomationQuery): Promise<AutomationPage & { source: "db" | "empty" | "down" }> {
-  const { ok, rows } = await listAutomationRows()
+  const { ok, rows } = await listForScreen()
   if (!ok) return { ...queryAutomations(query, []), source: "down" }
   if (rows.length === 0) return { ...queryAutomations(query), source: "empty" }
   return { ...queryAutomations(query, rows.map(fromRow)), source: "db" }
 }
 
 /** Строка базы — в запись перечня. Имя берётся из саммари, а его пока нет. */
-function fromRow(r: AutomationRow): Automation {
+/**
+ * Строка базы — в запись перечня.
+ *
+ * ✗ ЗДЕСЬ БЫЛИ ТРИ ЛЖИВЫХ ПОЛЯ, И ИСПРАВЛЕНЫ ОНИ ИЗМЕРЕНИЕМ 2026-09-08 (144):
+ *   `calendar` стоял `false` ВСЕГДА — при живых строках расписания;
+ *   `map` брался как `Boolean(scopeKey)`, то есть ОХВАТ выдавался за ГЕОМЕТКУ;
+ *   `status` брался из `confirm_state`, а состояние РАБОТЫ на экран не ехало;
+ *   `steps` стоял `0` при существующей ленте прогона.
+ * 🔒 РАЗНИЦА МЕЖДУ ПУСТЫМ И `false` — НЕ ПРИДИРКА: пустое человек читает как
+ * «пока нет», а `false` — как «проверено, нет», и второе останавливает поиск.
+ */
+function fromRow(r: ScreenAutomation): Automation {
   const at = r.createdAt.replace("T", " ").replace("Z", "")
   return {
     file: `№${r.id}`,
@@ -209,11 +233,20 @@ function fromRow(r: AutomationRow): Automation {
     at,
     atUnix: Date.parse(r.createdAt) || 0,
     id: String(r.id),
-    steps: 0,
-    status: r.confirmState === "confirmed" ? "done" : "running",
-    calendar: false,
-    map: Boolean(r.scopeKey),
+    // 🔒 СТРОКИ ЛЕНТЫ, А НЕ ВЫДУМАННЫЙ НОЛЬ. Сегодня их по одной на сообщение:
+    // разбор, пишущий `resolve`/`reveal`, — следующий слой (§3ж).
+    steps: r.rows,
+    // 🔒 СОСТОЯНИЕ РАБОТЫ (§3е), А НЕ ПОДТВЕРЖДЁННОСТЬ НОМЕРА. Это разные
+    // вопросы: «человек подтвердил номер» и «работа идёт или закончена».
+    status: r.state === "closed" ? "done" : "running",
+    calendar: r.calendar,
+    // 🛑 ГЕОМЕТКА, А НЕ ОХВАТ (§3к). «Я в Мадриде» задаёт охват разговора;
+    // отметку на карте даёт присланное МЕСТО. Прежний код зажигал карту на
+    // любом названном городе — у автоматизации, где карты не было вовсе.
+    map: r.geo,
     tags: r.tags,
+    liked: r.liked,
+    needsWork: r.needsWork,
     demo: false,
   }
 }

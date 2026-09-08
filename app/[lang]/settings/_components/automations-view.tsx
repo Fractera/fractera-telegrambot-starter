@@ -4,6 +4,8 @@ import {
   CircleDot,
   MapPin,
   Tag,
+  ThumbsUp,
+  Wrench,
 } from "lucide-react"
 import Link from "next/link"
 import {
@@ -53,6 +55,7 @@ type Words = {
   sortOld: string
   status: { any: string; done: string; running: string }
   calendar: { any: string; yes: string; no: string }
+  verdict: { liked: string; needsWork: string }
   map: { any: string; yes: string; no: string }
   perPage: string
   shown: string
@@ -171,6 +174,24 @@ function Marks({ item, words }: { item: Automation; words: Words }) {
         <span className={`${chip} border-border text-muted-foreground`} data-mark="map">
           <MapPin aria-hidden className="size-3" />
           {words.map.yes}
+        </span>
+      )}
+
+      {/* 🔒 ВЕРДИКТ ПОКАЗЫВАЕТСЯ, ТОЛЬКО ЕСЛИ ОН ЕСТЬ, И В ЭТОМ ВСЯ ТОЧНОСТЬ.
+          «Не спрашивали» — не то же самое, что «не понравилось»: первое значит,
+          что система молчала, второе — что человек ответил. Метка «нет отзыва»
+          на каждой карточке была бы шумом, а `false` вместо пустого — ложью. */}
+      {item.liked === "yes" && (
+        <span className={`${chip} border-border text-muted-foreground`} data-mark="liked">
+          <ThumbsUp aria-hidden className="size-3" />
+          {words.verdict.liked}
+        </span>
+      )}
+
+      {item.needsWork === "yes" && (
+        <span className={`${chip} border-border text-muted-foreground`} data-mark="needs-work">
+          <Wrench aria-hidden className="size-3" />
+          {words.verdict.needsWork}
         </span>
       )}
 
