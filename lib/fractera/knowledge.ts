@@ -74,6 +74,53 @@ export async function ask(
 }
 
 /**
+ * Метки графа — имена сущностей, которые он извлёк из документов (162-8).
+ *
+ * 🎯 ЭТО И ЕСТЬ «ОБЛАКО ТЕГОВ» ИЗ ЗАМЫСЛА ВЛАДЕЛЬЦА: «собирает облако тегов из
+ * всех найденных упоминаний и кидает его в векторную базу». Строить его не надо —
+ * движок держит список сам.
+ *
+ * 🔒 ЧТЕНИЕ МЕТОК НЕ ЗОВЁТ МОДЕЛЬ ВОВСЕ И СТОИТ СОТНИ МИЛЛИСЕКУНД: измерено
+ * 2026-09-08 — весь список (44 метки) 280 мс, поиск одной метки 41 мс. Для
+ * сравнения: один вопрос к связям — 551 мс за контекст и 7533 мс за прозу.
+ * Поэтому метки годятся в ПРЕДФИЛЬТР: спрашивать связи только о том, что граф
+ * вообще знает.
+ */
+export async function labels(): Promise<string[]> {
+  try {
+    const data = await dataJson<unknown>("/service/rag/graph/label/list", { method: "GET" });
+    return Array.isArray(data) ? data.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Поиск метки по части имени.
+ *
+ * 🔒 ЧТО УМЕЕТ САМ ДВИЖОК — ИЗМЕРЕНО, А НЕ ПРЕДПОЛОЖЕНО (2026-09-08):
+ * подстрока без учёта регистра. `зеленодольск` и `ЗЕЛЕНОДОЛЬСК` находят
+ * `Зеленодольск`; `Дени` находит `Дений Парадоксу`.
+ * 🛑 ЧЕГО ОН НЕ УМЕЕТ, И ЭТО ГЛАВНОЕ: падежей и искажений. `Зеленодольске` → [],
+ * `Денис` → [] при живой метке `Дений Парадоксу`. Человек в Telegram пишет
+ * падежами, а распознавание голоса калечит имена — значит нестрогость наша
+ * (см. `matchLabel` в `lib/memory/box.ts`), а не его.
+ */
+export async function labelSearch(q: string, limit = 10): Promise<string[]> {
+  const word = String(q ?? "").trim();
+  if (!word) return [];
+  try {
+    const data = await dataJson<unknown>(
+      `/service/rag/graph/label/search?q=${encodeURIComponent(word)}&limit=${limit}`,
+      { method: "GET" },
+    );
+    return Array.isArray(data) ? data.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Add a document. Returns as soon as it is accepted: the graph is built in the
  * background, so a question asked immediately may not see it yet.
  *

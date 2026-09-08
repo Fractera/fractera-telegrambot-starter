@@ -4,7 +4,7 @@ import { type Placement, placementOf } from "@/lib/facts/placement"
 import { allFacts } from "@/lib/facts/registry"
 import { factTableName } from "@/lib/facts/table"
 import { type FactClaim, writeFact } from "@/lib/facts/write"
-import { ask, learn } from "@/lib/fractera/knowledge"
+import { ask, labelSearch, learn } from "@/lib/fractera/knowledge"
 import { find, recall, recallSubject } from "@/lib/registry/access"
 import { candidates } from "./schema-map"
 
@@ -242,6 +242,36 @@ export type LevelReport = {
  * 🔒 ИМЯ ИЗ ОБЪЕКТА БЕРЁТСЯ ПОЛЕМ `name`: `person.important-people` хранится
  * структурой («Рада, дочь, 2010»), и якорем служит имя, а не весь объект.
  */
+/**
+ * Знает ли граф это имя — и под каким написанием (162-8).
+ *
+ * 🔒 ПРЕДФИЛЬТР ВМЕСТО ВЕЕРА. Спрашивать связи о каждом имени подряд стоит
+ * 551 мс за имя; спросить у графа, знает ли он его, — **41 мс**. Десять друзей:
+ * до шести секунд против полусекунды на всех.
+ *
+ * 🔒 НЕСТРОГОСТЬ — НАША, И ЭТО ИЗМЕРЕНО, А НЕ ПРЕДПОЛОЖЕНО. Движок ищет
+ * подстроку без учёта регистра и НЕ берёт падежи: `Зеленодольске` → пусто,
+ * `Денис` → пусто при живой метке `Дений Парадоксу`. Поэтому не нашлось целиком —
+ * пробуем НАЧАЛО имени: сходство считается общим началом (закон 83), приём
+ * грубый намеренно.
+ * 🛑 ПОРОГ В ЧЕТЫРЕ БУКВЫ НЕ ОТ БАЛДЫ: короче — и «Ден» начнёт совпадать с
+ * «Денежный», то есть предфильтр станет источником шума вместо экономии.
+ * 🔒 ВОЗВРАЩАЕТСЯ НАПИСАНИЕ ГРАФА, А НЕ ЧЕЛОВЕКА: связи ищут по своим именам, и
+ * спрашивать их надо тем словом, которое у них есть.
+ */
+const NAME_PREFIX = 4
+
+async function matchLabel(name: string): Promise<string | null> {
+  const word = String(name ?? "").trim()
+  if (word.length < NAME_PREFIX) return null
+  const exact = await labelSearch(word, 3)
+  if (exact.length > 0) return exact[0]
+  const head = word.slice(0, Math.max(NAME_PREFIX, Math.ceil(word.length * 0.6)))
+  if (head === word) return null
+  const near = await labelSearch(head, 3)
+  return near[0] ?? null
+}
+
 function anchorsFrom(items: MemoryItem[]): string[] {
   const out: string[] = []
   for (const it of items) {
@@ -389,6 +419,9 @@ export async function read(input: {
       ? 2
       : 1
   const levels: LevelReport[] = []
+  // 🔒 МЕТКИ, ПОДТВЕРЖДЁННЫЕ ГРАФОМ НА УРОВНЕ 2, — ОСНОВА ОБЛАКА ДЛЯ УРОВНЯ 3.
+  // Живут здесь, а не внутри уровня: это и есть передача находки дальше по цепочке.
+  const askedLabels: string[] = []
 
   // 🔒 ГЛУБЖЕ ИМЕЕТ СМЫСЛ ТОЛЬКО ПРИ СВОБОДНОМ ВОПРОСЕ. Знание об окружении
   // отвечает словами человека, а не ключами признаков: предлагать углубление
@@ -591,7 +624,22 @@ export async function read(input: {
     // 🛑 ЧЕГО ЗДЕСЬ НЕТ И ПОЧЕМУ: отбора «а знает ли граф такое имя» — он стоит
     // одного чтения меток и строится подшагом 162-8. До него лишний якорь стоит
     // одного запроса, а не потерянного ответа.
-    const asking = [...new Set([...anchors, query])].slice(0, MAX_ANCHORS + 1)
+    // ── ПРЕДФИЛЬТР ПО МЕТКАМ ГРАФА (162-8) ─────────────────────────────────
+    //
+    // 🔒 СПРАШИВАЕМ СВЯЗИ ТОЛЬКО О ТОМ, ЧТО ГРАФ ЗНАЕТ. Проверка имени стоит
+    // 41 мс, вопрос о нём — 551 мс: у десяти имён это разница между полусекундой
+    // и шестью секундами. И имя приходит в написании ГРАФА, а не человека.
+    // 🛑 ВОПРОС ЧЕЛОВЕКА ПРЕДФИЛЬТР НЕ ПРОХОДИТ И ПРОХОДИТЬ НЕ ДОЛЖЕН: он идёт
+    // вектором, которому метки безразличны (закон 162-3, оплаченный потерей находки).
+    const known: string[] = []
+    const unknown: string[] = []
+    for (const a of anchors) {
+      const label = await matchLabel(a)
+      if (label) known.push(label)
+      else unknown.push(a)
+    }
+    askedLabels.push(...known)
+    const asking = [...new Set([...known, query])].slice(0, MAX_ANCHORS + 1)
     for (const q of asking) {
       // ── КАКИМ РЕЖИМОМ СПРАШИВАТЬ — ИЗМЕРЕНО (161-3) ────────────────────
       //
@@ -630,23 +678,41 @@ export async function read(input: {
       level: 2,
       ms: Date.now() - started,
       name: LEVELS[1].name,
+      // 🔒 ОТСЕЯННОЕ НАЗЫВАЕТСЯ ПОИМЁННО. «Про Дениса связи ничего не знают» —
+      // это ответ, с которым можно работать; молча пропущенное имя неотличимо от
+      // имени, которое мы не рассматривали.
       note:
-        anchors.length > 0
-          ? "спрошено именами, найденными на уровне 1, и словами человека"
-          : "имён на уровне 1 не нашлось — спрошено словами человека",
+        anchors.length === 0
+          ? "имён на уровне 1 не нашлось — спрошено словами человека"
+          : known.length === 0
+            ? `связи не знают ни одного имени с уровня 1 (${unknown.join(", ")}) — спрошено только словами человека`
+            : unknown.length > 0
+              ? `спрошено именами, которые связи знают, и словами человека; отсеяны как незнакомые: ${unknown.join(", ")}`
+              : "спрошено именами, найденными на уровне 1, и словами человека",
     })
   }
 
-  // ── УРОВЕНЬ 3: ПОХОЖЕЕ ПО СМЫСЛУ ─────────────────────────────────────────
+  // ── УРОВЕНЬ 3: ПОХОЖЕЕ ПО СМЫСЛУ, СПРОШЕННОЕ ОБЛАКОМ МЕТОК (162-8) ────────
   //
-  // 🛑 ВТОРОЙ СТЫК ЦЕПОЧКИ ЗДЕСЬ ЕЩЁ НЕ ПОСТРОЕН, И ЭТО СКАЗАНО В ОТВЕТЕ, А НЕ
-  // УМОЛЧАНО. По замыслу владельца уровень 3 спрашивается ОБЛАКОМ МЕТОК,
-  // собранным из находок уровня 2; облако — подшаг 162-8. До него спрашиваем
-  // словами человека, и `note` говорит именно это.
+  // 🎯 ВТОРОЙ СТЫК ЦЕПОЧКИ, СЛОВАМИ ВЛАДЕЛЬЦА: «собирает облако тегов из всех
+  // найденных упоминаний и кидает его в классическую векторную базу».
+  //
+  // 🔒 ОБЛАКО СОБИРАЕТСЯ ИЗ ИМЁН, А НЕ ИЗ РАЗБОРА ЧУЖОГО ОТВЕТА. Метки, которые
+  // граф подтвердил на уровне 2, плюс метки, найденные по значимым словам самого
+  // вопроса. Разбирать формат чужого контекста было бы привязкой к чужой
+  // формулировке — она изменится молча, и разбор станет врать, не сломавшись.
+  // 🛑 ВОПРОС ЧЕЛОВЕКА ОСТАЁТСЯ В ЗАПРОСЕ: облако его дополняет. Замена вопроса
+  // найденным уже оплачена один раз в 162-3 — потерянной находкой.
   if (depth >= 3 && query) {
     const started = Date.now()
     const before = items.length
-    const answer = await ask(query, "naive", { context: true })
+    const cloud = [...askedLabels]
+    for (const w of query.split(/\s+/).filter(w => w.length >= NAME_PREFIX).slice(0, 3)) {
+      const found = await labelSearch(w, 2)
+      for (const l of found) if (!cloud.includes(l)) cloud.push(l)
+    }
+    const vectorQuery = cloud.length > 0 ? `${query} ${cloud.join(" ")}` : query
+    const answer = await ask(vectorQuery, "naive", { context: true })
     const text = String(answer.answer ?? "").trim()
     if (answer.available && text) {
       items.push({
@@ -663,10 +729,14 @@ export async function read(input: {
     }
     levels.push({
       added: items.length - before,
+      anchors: cloud,
       level: 3,
       ms: Date.now() - started,
       name: LEVELS[2].name,
-      note: "спрошено словами человека: облако меток из уровня 2 ещё не строится (162-8)",
+      note:
+        cloud.length > 0
+          ? "спрошено словами человека и облаком меток, подтверждённых графом"
+          : "облако меток пустое: граф не знает ни одного имени из вопроса — спрошено словами человека",
     })
   }
 
