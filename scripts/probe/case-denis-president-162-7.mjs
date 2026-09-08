@@ -103,7 +103,10 @@ const text1 = JSON.stringify(case1.items ?? [])
 const lvl2 = (case1.levels ?? []).find(l => l.level === 2)
 say(text1.includes(FRIEND), `в ответе есть имя друга`)
 say(/1994|1996|полк|башн|Кремл/i.test(text1), `в ответе есть его история: ${/1994/.test(text1) ? "годы" : ""}${/полк/i.test(text1) ? " полк" : ""}${/башн/i.test(text1) ? " башня" : ""}`)
-say(Array.isArray(lvl2?.anchors) && lvl2.anchors.some(a => /Ден/i.test(String(a))),
+// 🛑 СЛЕПОЙ ОБРАЗЕЦ, НАЙДЕННЫЙ ПЕРВЫМ ЖЕ ПРОГОНОМ: /Ден/i совпадало со словом
+// «презиДЕНтом» В САМОМ ВОПРОСЕ — проверка «якорь доехал» была зелёной, когда
+// якоря не было вовсе. Негативный контроль сам нуждается в негативном контроле.
+say(Array.isArray(lvl2?.anchors) && lvl2.anchors.includes(FRIEND),
   `связи спрошены ИМЕНЕМ ДРУГА, взятым с уровня 1: ${JSON.stringify(lvl2?.anchors)}`)
 say((case1.items ?? []).some(i => i.claim === "guess" && i.basis),
   `пришедшее из связей помечено предположением с основанием`)
