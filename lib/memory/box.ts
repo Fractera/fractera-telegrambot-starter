@@ -470,7 +470,7 @@ export async function read(input: {
     // первого уровня, чтобы обеспечить реактивную работу». Каждый кандидат — это
     // поход в слой данных; непрочитанные названы в `missing`, а не забыты.
     const LEVEL1_READS = 8
-    let reads = 0
+    const toRead: { key: string; title: string; address: string; byColumn: boolean }[] = []
     for (const hit of hits) {
       const fact = allFacts().find(f => f.key === hit.key)
       if (!fact) continue
@@ -481,7 +481,7 @@ export async function read(input: {
         missing.push({ key: hit.key, title: fact.title, where: address, why: placed.why })
         continue
       }
-      if (items.length >= limit || reads >= LEVEL1_READS) {
+      if (toRead.length >= Math.min(LEVEL1_READS, limit)) {
         missing.push({
           key: hit.key,
           title: fact.title,
@@ -490,30 +490,44 @@ export async function read(input: {
         })
         continue
       }
-      reads += 1
-      // 🔒 СУЖЕНИЕ ПО СУБЪЕКТУ — ТОЛЬКО ТАМ, ГДЕ ЕСТЬ ЧЕМ СУЖАТЬ.
-      const byColumn = placed.kind === "column"
-      const got = await recall(hit.key, byColumn ? { limit: 1 } : { subject, limit: 1 })
-      if (got.found === true && got.items.length > 0) {
-        const v = got.items[0]
+      toRead.push({ address, byColumn: placed.kind === "column", key: hit.key, title: fact.title })
+    }
+
+    // 🔒 ЧТЕНИЯ УРОВНЯ 1 ИДУТ ОДНОВРЕМЕННО, А НЕ ПО ОЧЕРЕДИ — И ЭТО ПРЯМОЕ
+    // ИСПОЛНЕНИЕ ЦЕЛИ ВЛАДЕЛЬЦА О РЕАКТИВНОСТИ, А НЕ УКРАШЕНИЕ.
+    // ✗ ИЗМЕРЕНО ПРИБОРОМ 161-3 В ТОТ ЖЕ ЧАС: последовательный обход восьми
+    // кандидатов стоил **1251 мс** — каждый признак это свой поход в слой данных,
+    // и они складывались. Уровень, объявленный «мгновенным», был секундой.
+    // 🔒 ПОРЯДОК ОТВЕТА ПРИ ЭТОМ СОХРАНЁН: одновременность меняет время, а не
+    // очерёдность — значения ложатся в том же порядке, в каком совпали с вопросом.
+    // 🛑 СУЖЕНИЕ ПО СУБЪЕКТУ — ТОЛЬКО ТАМ, ГДЕ ЕСТЬ ЧЕМ СУЖАТЬ: у чужой колонки
+    // такой колонки нет, и `recall` на сужение отвечает отказом по устройству.
+    const got = await Promise.all(
+      toRead.map(t => recall(t.key, t.byColumn ? { limit: 1 } : { subject, limit: 1 }))
+    )
+    for (let i = 0; i < toRead.length; i += 1) {
+      const t = toRead[i]
+      const r = got[i]
+      if (r.found === true && r.items.length > 0) {
+        const v = r.items[0]
         items.push({
           // 🛑 ЗНАЧЕНИЕ ИЗ ЧУЖОЙ ТАБЛИЦЫ НЕ ОБЪЯВЛЯЕТСЯ ФАКТОМ О ЧЕЛОВЕКЕ.
-          about: byColumn ? "all-records" : "self",
+          about: t.byColumn ? "all-records" : "self",
           at: v.at,
           basis: v.basis,
           claim: v.claim,
-          from: address,
-          key: hit.key,
+          from: t.address,
+          key: t.key,
           scope: v.scope,
-          title: fact.title,
+          title: t.title,
           value: v.value,
         })
       } else {
         missing.push({
-          key: hit.key,
-          title: fact.title,
-          where: address,
-          why: got.found === false ? got.hint ?? "значений нет" : "значений нет",
+          key: t.key,
+          title: t.title,
+          where: t.address,
+          why: r.found === false ? r.hint ?? "значений нет" : "значений нет",
         })
       }
     }

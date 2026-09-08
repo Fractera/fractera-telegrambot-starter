@@ -95,7 +95,10 @@ const deepMs = r.ms
 // именами из уровня 1 И словами человека, — поэтому «первый ответ из связей» и
 // «ответ из связей» перестали быть одним и тем же. Проверяем ЛЮБОЙ из них.
 const fromLinks = (r.json.answer?.items ?? []).filter(i => /связ/i.test(String(i.from ?? "")))
-const deepItem = { value: fromLinks.map(i => String(i.value ?? "")).join(" \n ") }
+const deepItem = {
+  claim: fromLinks[0]?.claim,
+  value: fromLinks.map(i => String(i.value ?? "")).join(" \n "),
+}
 // 🛑 ОБРАЗЕЦ ТЕРПИТ ОБА ЯЗЫКА, И ЭТО НЕ ПОБЛАЖКА, А ИСПРАВЛЕНИЕ СЛЕПОТЫ.
 // ✗ измерено 161-3: на строчный вопрос граф отвечает ПО-АНГЛИЙСКИ («is a person
 // who has been maintaining a beehive»), и русский образец объявил это отказом —
