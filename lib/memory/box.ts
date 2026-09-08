@@ -1285,7 +1285,18 @@ async function forgetLinks(anchors: string[]): Promise<{
     // и наружу уходило `ok: true, deleted: 0`, то есть «забыл» при живой истории.
     // Ровно тот класс, которым проект платил в 143: отказ, проглоченный по дороге.
     for (const prefix of [`memory/${name}-`, `research/${name}-`, `correction/${name}-`]) {
-      const one = await forgetDocuments(prefix)
+      // 🔒 УДАЛЕНИЯ ИДУТ ОДНО ЗА ДРУГИМ, А ДВИЖОК ПОСЛЕ ПЕРВОГО ЗАНЯТ — ЗНАЧИТ
+      // ЖДЁМ И ПОВТОРЯЕМ, А НЕ СЧИТАЕМ УДАЛЁННЫМ.
+      // ✗ ОПЛАЧЕНО ПРИБОРОМ 162-10 В ТОТ ЖЕ ЧАС: «забудь про N» убирало вывод и
+      // МОЛЧА не убирало опровержение — второй вызов приходил, пока первый ещё
+      // обрабатывался, получал `busy`, и наружу уходило «удалено 1» вместо двух.
+      // Тот же класс проглоченного отказа, что и в 162-5, только этажом выше:
+      // причина возвращалась, но частичный успех её перекрывал.
+      let one = await forgetDocuments(prefix)
+      for (let attempt = 0; attempt < 8 && one.error === "busy"; attempt += 1) {
+        await new Promise(r => setTimeout(r, 1000))
+        one = await forgetDocuments(prefix)
+      }
       deleted += one.deleted.length
       looked = Math.max(looked, one.looked)
       if (one.error && !refused) refused = one.error
