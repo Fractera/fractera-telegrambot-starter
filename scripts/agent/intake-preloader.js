@@ -642,12 +642,23 @@ async function runMemory(name, args) {
     if (a.found !== true) {
       const lines = ["Пока ничего об этом не записано."];
       if (a.hint) lines.push(a.hint);
-      if (a.deeper && a.deeper.available) {
+      // 🔒 «НЕ НАШЛОСЬ» И «НЕ ИСКАЛИ БЕЗ РАЗРЕШЕНИЯ» — РАЗНЫЕ ОТВЕТЫ (162-4), и
+      // здесь это важнее, чем при находке: пустой ответ без этой строки агент
+      // перескажет человеку как «я нигде ничего не нашёл».
+      const heldMiss = (a.levels || []).filter((l) => /нужно согласие человека/.test(String(l.note || "")));
+      if (heldMiss.length > 0) {
+        lines.push("НЕ СДЕЛАНО: " + heldMiss[0].note);
+      } else if (a.deeper && a.deeper.available) {
         lines.push("Глубже: " + a.deeper.what + " — около " + a.deeper.cost_seconds + " с. " +
-          "Спроси человека, ждать ли, и позови ещё раз с budget=deep.");
+          "Спроси человека, ждать ли, и позови ещё раз с depth на единицу больше.");
       }
       return lines.join(NL);
     }
+    // 🔒 НЕСДЕЛАННОЕ ПЕЧАТАЕТСЯ СЛОВАМИ, ГОТОВЫМИ К ПЕРЕСКАЗУ ЧЕЛОВЕКУ (162-4).
+    // Уровень, не выполненный без разрешения, обязан быть виден в ответе: иначе
+    // агент решит, что искали везде, и скажет человеку «больше ничего нет».
+    const held = (a.levels || []).filter((l) => /нужно согласие человека/.test(String(l.note || "")));
+    const askLine = held.length > 0 ? NL + "НЕ СДЕЛАНО: " + held[0].note : "";
     const rows = (a.items || []).map((v) => {
       // 🛑 РОД ЗАПИСИ ПЕЧАТАЕТСЯ ВСЕГДА, КОГДА ОН ЕСТЬ. Предположение, поданное
       // как факт, — это ровно та ложь, ради устранения которой заведён 161-2.
@@ -660,7 +671,7 @@ async function runMemory(name, args) {
     const foot = a.deeper && a.deeper.available
       ? NL + "Глубже: " + a.deeper.what + " — около " + a.deeper.cost_seconds + " с (budget=deep)."
       : "";
-    return [head].concat(rows).join(NL) + foot;
+    return [head].concat(rows).join(NL) + askLine + foot;
   }
   return JSON.stringify(r, null, 2);
 }

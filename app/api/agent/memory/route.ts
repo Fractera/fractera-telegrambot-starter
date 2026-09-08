@@ -89,6 +89,7 @@ export async function POST(request: Request) {
 
   if (decl.fn === "read") {
     const answer = await read({
+      approved: args.approved === true,
       budget: args.budget as string | undefined,
       depth: args.depth as number | undefined,
       key: args.key as string | undefined,

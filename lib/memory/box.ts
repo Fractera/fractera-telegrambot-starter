@@ -203,9 +203,25 @@ const DEEP_SECONDS = 5
 //
 // 🔒 ЦЕНЫ ИЗМЕРЕНЫ, А НЕ НАЗНАЧЕНЫ (закон 146), замер 2026-09-08 на сервере.
 const LEVELS = [
-  { level: 1, name: "записанное", what: "таблицы признаков по карте вопроса", ms: 30 },
-  { level: 2, name: "связи", what: "истории о людях и местах, по именам из уровня 1", ms: 600 },
-  { level: 3, name: "похожее по смыслу", what: "вектор по всему складу историй", ms: 2000 },
+  { level: 1, name: "записанное", what: "таблицы признаков по карте вопроса", ms: 50, needsApproval: false },
+  { level: 2, name: "связи", what: "истории о людях и местах, по именам из уровня 1", ms: 1300, needsApproval: false },
+  {
+    level: 3,
+    name: "похожее по смыслу",
+    what: "вектор по всему складу историй, облаком меток",
+    ms: 4000,
+    // 🔒 РАЗРЕШЕНИЕ ЧЕЛОВЕКА — УСЛОВИЕ ИСПОЛНЕНИЯ, А НЕ ПОЖЕЛАНИЕ (162-4).
+    //
+    // 🎯 СЛОВО ВЛАДЕЛЬЦА: «в случае, если недостаточно данных, спросил уточнение
+    // у архитектора: разрешает ли он углубиться в поиске данных, это может занять
+    // больше времени?» И там же: углубления идут «по согласованию с пользователем».
+    //
+    // 🛑 ЗАПРЕТ, КОТОРЫЙ МОЖНО ОБОЙТИ, — НЕ ЗАПРЕТ. Правило «спроси человека»,
+    // живущее в инструкции агента, исполняется ровно настолько, насколько модель
+    // помнит его в этот ход. Здесь оно живёт в коде: без `approved` уровень не
+    // выполняется вовсе.
+    needsApproval: true,
+  },
 ] as const
 
 const MAX_DEPTH = LEVELS.length
@@ -399,6 +415,7 @@ export async function read(input: {
   subject?: string
   budget?: string
   depth?: number
+  approved?: boolean
   limit?: number
 }): Promise<MemoryReadResult> {
   const subject = String(input.subject ?? "").trim() || "self"
@@ -418,6 +435,7 @@ export async function read(input: {
     : String(input.budget ?? "").trim() === "deep"
       ? 2
       : 1
+  const approved = input.approved === true
   const levels: LevelReport[] = []
   // 🔒 МЕТКИ, ПОДТВЕРЖДЁННЫЕ ГРАФОМ НА УРОВНЕ 2, — ОСНОВА ОБЛАКА ДЛЯ УРОВНЯ 3.
   // Живут здесь, а не внутри уровня: это и есть передача находки дальше по цепочке.
@@ -427,11 +445,17 @@ export async function read(input: {
   // отвечает словами человека, а не ключами признаков: предлагать углубление
   // там, где спросили конкретный ключ, значит обещать то, чего оно не умеет.
   const canDeepen = query.length > 0
+  // 🔒 ПРЕДЛОЖЕНИЕ НАЗЫВАЕТ ЦЕНУ СЛЕДУЮЩЕГО УРОВНЯ, А НЕ ОБЩУЮ (162-4). Одна
+  // цифра на все углубления была бы неправдой в обе стороны: связи дешевле, чем
+  // обещано, вектор с облаком дороже.
+  const next = LEVELS[Math.min(depth, MAX_DEPTH - 1)]
   const offer: Deeper = {
     available: canDeepen && depth < MAX_DEPTH,
-    cost_seconds: DEEP_SECONDS,
+    cost_seconds: Math.max(1, Math.round(next.ms / 1000)),
     what: canDeepen
-      ? `поискать глубже: ${LEVELS[Math.min(depth, MAX_DEPTH - 1)].what}`
+      ? next.needsApproval
+        ? `поискать глубже: ${next.what}. Дорогой уровень — сначала спроси человека и позови с approved: true`
+        : `поискать глубже: ${next.what}`
       : "глубже искать нечем: для этого нужен вопрос словами, а не ключ",
   }
   const noDeeper: Deeper = { available: false, cost_seconds: 0, what: "глубже идти уже некуда" }
@@ -703,7 +727,25 @@ export async function read(input: {
   // формулировке — она изменится молча, и разбор станет врать, не сломавшись.
   // 🛑 ВОПРОС ЧЕЛОВЕКА ОСТАЁТСЯ В ЗАПРОСЕ: облако его дополняет. Замена вопроса
   // найденным уже оплачена один раз в 162-3 — потерянной находкой.
-  if (depth >= 3 && query) {
+  // 🔒 ДОРОГОЙ УРОВЕНЬ НЕ НАЧИНАЕТСЯ БЕЗ РАЗРЕШЕНИЯ, А НЕ ВЫПОЛНЯЕТСЯ И
+  // ОТБРАСЫВАЕТСЯ (162-4). Отказ стоит десятки миллисекунд — человек не ждёт того,
+  // на что не соглашался.
+  const wantsExpensive = depth >= 3 && Boolean(query)
+  const blocked = wantsExpensive && LEVELS[2].needsApproval && !approved
+  if (blocked) {
+    levels.push({
+      added: 0,
+      level: 3,
+      ms: 0,
+      name: LEVELS[2].name,
+      // 🔒 ОТКАЗ НАЗЫВАЕТ ЦЕНУ И ЧТО ИМЕННО ДАСТ УГЛУБЛЕНИЕ. «Нельзя» без «а что
+      // за это будет» человек прочтёт как поломку, а спросить его будет уже не о чем.
+      note:
+        `не выполнен: нужно согласие человека. Это ${LEVELS[2].what}, около ` +
+        `${Math.round(LEVELS[2].ms / 1000)} с. Спроси его и позови ещё раз с approved: true`,
+    })
+  }
+  if (wantsExpensive && !blocked) {
     const started = Date.now()
     const before = items.length
     const cloud = [...askedLabels]
