@@ -66,7 +66,9 @@ async function quiet(prefix) {
 /** Один случай: заводим автоматизацию, читаем память, закрываем, меряем. */
 async function run(name, kind, readArgs, check) {
   const sep = await door("separate", { kind, lang: "ru", message_id: `${SOURCE}-${Date.now()}` })
-  const id = sep.automation_id ?? sep.answer?.automation_id ?? null
+  // 🛑 ПОЛЕ НАЗЫВАЕТСЯ `automationId`, А НЕ `automation_id`: первый прогон читал
+  // несуществующее имя, и номер в отчёте был пуст при исправной двери.
+  const id = typeof sep.automationId === "number" ? sep.automationId : null
   const started = Date.now()
   const got = await memory("read", readArgs)
   const ms = Date.now() - started
@@ -147,6 +149,34 @@ await run(
     }
   },
 )
+
+
+// ── СЛУЧАЙ 6: СВЕДЕНИЕ ПОМНИТ, В КАКОЙ РАБОТЕ ПОНАДОБИЛОСЬ ───────────────
+//
+// 🔒 ЭТО ЗАЯВЛЕНИЕ ДОКУМЕНТАЦИИ (§8.2), И ПЕРВЫЙ ПРОГОН ЕГО НЕ ПРОВЕРЯЛ.
+{
+  const sep = await door("separate", { kind: "automation-write", lang: "ru", message_id: `${SOURCE}-idx-${Date.now()}` })
+  const id = typeof sep.automationId === "number" ? sep.automationId : null
+  const started = Date.now()
+  await memory("write", { key: "person.city", what: "Проба-город-164", source: SOURCE, automation_id: id })
+  const link = await sql(
+    "SELECT automation_id, fact_key, table_name FROM automation_facts WHERE automation_id = ? ORDER BY id DESC LIMIT 1",
+    [id],
+  )
+  const ms = Date.now() - started
+  const row = (link.rows ?? [])[0]
+  const ok = !!row && String(row.fact_key) === "person.city"
+  if (!ok) bad += 1
+  if (id) await door("close", { automation_id: id, kind: "whole" })
+  rows.push({
+    automation: id ?? "—",
+    details: row ? `указатель: ${row.fact_key} → ${row.table_name}` : "связи в указателе нет",
+    ms,
+    name: "6. сведение помнит свою работу",
+    ok,
+  })
+  await sql("DELETE FROM fact_person_city WHERE source = ?", [SOURCE])
+}
 
 // ── УБОРКА ───────────────────────────────────────────────────────────────
 await quiet(`memory/${WHO}-`)
