@@ -45,11 +45,25 @@ const sql = (text, params = []) => fetch(`${dataUrl}/db/migrate`, {
   body: JSON.stringify({ sql: text, params }),
 }).then(r => r.json()).catch(() => ({ ok: false }))
 
-async function ask(question) {
+/**
+ * Вопрос к знанию об окружении.
+ *
+ * 🔒 РЕЖИМ `local`, А НЕ `hybrid`, И ЭТО ИЗМЕРЕНО, А НЕ ВЫБРАНО ПО ВКУСУ (161-1).
+ * Свежий документ, обработанный минуту назад, находится режимами `local` и
+ * `naive` и НЕ находится `hybrid`: тот подмешивает обобщения по всему корпусу, а
+ * они пересобираются медленнее. Замер 2026-09-08, один и тот же документ в одну
+ * минуту: `local` — «Ратмиров держит пасеку», `hybrid` — «недостаточно
+ * информации», при том что ССЫЛКА на документ в ответе `hybrid` присутствует.
+ * 🛑 ЗНАЧИТ «ССЫЛКА ЕСТЬ» И «ОТВЕТ ЕСТЬ» — РАЗНЫЕ УТВЕРЖДЕНИЯ, и первое проверку
+ * не проходит: документ найден поиском и не дошёл до ответа.
+ * ✗ ИМЕННО ЭТИМ ОБЪЯСНЯЕТСЯ, ПОЧЕМУ 160-6 БЫЛ ЗЕЛЁНЫМ НА `hybrid` ВЧЕРА: там
+ * ждали 45 секунд и попали в тот случай, когда обобщения уже успели.
+ */
+async function ask(question, mode = "local") {
   const r = await fetch(`${dataUrl}/service/rag/query`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "X-Data-Secret": key },
-    body: JSON.stringify({ query: question, mode: "hybrid" }),
+    body: JSON.stringify({ query: question, mode }),
   })
   const j = await r.json().catch(() => ({}))
   return String(j.response ?? j.result ?? "")
@@ -150,6 +164,11 @@ await new Promise(res => setTimeout(res, 45_000))
 const answer = await ask("Что известно о человеке по фамилии Ратмиров?")
 say(/ратмиров/i.test(answer) && /(пасек|мёд|мед|ярмарк|суздал)/i.test(answer),
   `вопрос по имени нашёл историю: «${answer.slice(0, 110).replace(/\n/g, " ")}…»`)
+
+// 🔒 НАБЛЮДЕНИЕ, А НЕ ПРОВЕРКА: догонит ли `hybrid`. Утверждать «не находит»
+// нельзя — через час найдёт, и прибор станет красным на исправной системе.
+const late = await ask("Что известно о человеке по фамилии Ратмиров?", "hybrid")
+console.log(`   наблюдение: hybrid ${/пасек|мёд|мед/i.test(late) ? "уже догнал" : "ещё не догнал"}`)
 
 // 🔒 НЕГАТИВНЫЙ КОНТРОЛЬ: имя, которого не клали, к нашей истории не приводит.
 const alien = await ask("Что известно о человеке по фамилии Незабудкин?")
