@@ -154,7 +154,12 @@ say(r.status === 200 && r.json.ok === true && r.json.where === "personal",
 
 // Ключ и якоря вместе — отказ, а не выбор за вызывающего.
 r = await door({ fn: "write", args: { key: "person.city", what: "Мадрид", anchors: ["Денис"], source: TAG } })
-say(r.status === 400 && r.json.error === "both-key-and-anchors", `ключ и якоря вместе: ${r.json.error}`)
+// 🪦 ПЕРЕНАЦЕЛЕНО 2026-09-08 ШАГОМ 162-6: ЗАПРЕТ ПЕРЕЕХАЛ НА ГРАНИЦУ. Раньше его
+// исполнял ящик (`both-key-and-anchors`), теперь — объявление полем `oneOf`, и
+// отказ приходит раньше, с перечислением допустимых родов. Правило то же:
+// род записи выбирается ОДИН, и выбирать за вызывающего нельзя.
+say(r.status === 400 && /назови ОДНО из|both-key-and-anchors/.test(JSON.stringify(r.json)),
+  `ключ и якоря вместе: ${JSON.stringify(r.json.problems ?? r.json.error)}`)
 
 // Глубина 2 — отказ, называющий ДОРОГУ.
 r = await door({ fn: "write", args: { key: "person.important-people", what: { name: "Миша", car: { model: "Civic" } }, source: TAG } })

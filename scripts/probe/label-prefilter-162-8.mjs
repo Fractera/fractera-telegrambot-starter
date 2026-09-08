@@ -95,9 +95,33 @@ await clean()
 // «спросили одно имя против двух» при этом никуда не девается — тонет в шуме.
 // 🔒 Правило шире случая: у воспроизводимого замера есть не только команда, но и
 // СОСТОЯНИЕ СОСЕДА (закон 157-3 про момент замера).
+/**
+ * Дождаться, пока движок связей ничего не обрабатывает.
+ *
+ * 🔒 У ВОСПРОИЗВОДИМОГО ЗАМЕРА ЕСТЬ НЕ ТОЛЬКО КОМАНДА, НО И СОСТОЯНИЕ СОСЕДА.
+ * ✗ оплачено дважды: прибор зелёный в одиночку и красный в пачке из тринадцати —
+ * пока движок разбирает чужую очередь, дорожает ЛЮБОЙ запрос к связям, и разница
+ * «одно имя против двух» тонет в шуме.
+ */
+const sleep = ms => new Promise(r => setTimeout(r, ms))
+const docs = () => fetch(`${dataUrl}/service/rag/documents`, { headers: { "X-Data-Secret": key } })
+  .then(r => r.json()).catch(() => ({}))
+
+async function idle() {
+  for (let i = 0; i < 90; i += 1) {
+    const d = await docs()
+    const busy = Object.entries(d.statuses ?? {}).some(([st, g]) =>
+      st !== "processed" && Array.isArray(g) && g.length > 0)
+    if (!busy) return true
+    await sleep(1000)
+  }
+  return false
+}
+
 async function twice(seed) {
   let best = Infinity
   let last = null
+  await idle()
   for (let i = 0; i < 2; i += 1) {
     await clean()
     await call("write", { key: "person.city", what: seed, source: SOURCE })
