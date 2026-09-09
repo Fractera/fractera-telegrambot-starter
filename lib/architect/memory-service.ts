@@ -1,4 +1,3 @@
-import { readChannels } from "./channels"
 import { machineEnv } from "@/lib/fractera/machine-env"
 
 // ЭКРАН СПРАШИВАЕТ ПАМЯТЬ ТАК ЖЕ, КАК АГЕНТ — ПО HTTP, ЧЕРЕЗ ДОГОВОР.
@@ -13,9 +12,13 @@ import { machineEnv } from "@/lib/fractera/machine-env"
 // отдельную службу, а страница осталась смотреть в прежние таблицы: показывала
 // не то, что бот на самом деле помнит.
 //
-// 🛑 КЛЮЧ ЧЕЛОВЕКА БЕРЁТСЯ ИЗ НАСТРОЕК КАНАЛА, А НЕ ПОДРАЗУМЕВАЕТСЯ. Старая
-// память знала одного «self»; новая ключует по человеку, и «единственный
-// человек» — это допущение, которое однажды окажется ложным.
+// 🛑 КЛЮЧ ЧЕЛОВЕКА СПРАШИВАЕТСЯ У САМОЙ ПАМЯТИ, А НЕ ВЫВОДИТСЯ.
+// ✗ ОПЛАЧЕНО ЖИВЬЁМ 2026-09-09: первая редакция брала его из настроек канала
+// (`readChannels().telegram.chatId`) — и получала `null` ВСЕГДА. Путь к агенту
+// идёт через плагин Anthropic, мимо службы :3500, и ключ живёт только в теге
+// сообщения Telegram. Экран показал «отказ» на живой и работающей памяти.
+// 🔒 ПРАВИЛО ШИРЕ СЛУЧАЯ: спрашивай о факте ТОГО, КТО ИМ ВЛАДЕЕТ. Ключ человека
+// принадлежит памяти — она одна знает, о ком у неё записи.
 
 const MEMORY = process.env.MEMORY_SERVICE_URL ?? "http://127.0.0.1:3700"
 
@@ -43,14 +46,35 @@ export type MemoryAnswer = {
 
 const EMPTY: MemoryAnswer = { known: [], not_yet_known: [], ok: false, trouble: null, who: null }
 
-/** Чей это человек — по настройкам канала. */
-export async function personKey(): Promise<string | null> {
+/** Общий вызов метода памяти. Тело читаем целиком: служба отвечает 200 и с ok:false. */
+async function call(method: string, body: unknown): Promise<Record<string, unknown> | null> {
+  const key = secret()
+  if (!key) return null
   try {
-    const ch = await readChannels()
-    return ch?.telegram?.chatId ? String(ch.telegram.chatId) : null
+    const res = await fetch(`${MEMORY}/v1/${method}`, {
+      body: JSON.stringify(body ?? {}),
+      cache: "no-store",
+      headers: { "Content-Type": "application/json", "x-data-secret": key },
+      method: "POST",
+    })
+    const parsed = (await res.json().catch(() => null)) as Record<string, unknown> | null
+    return parsed && parsed.ok === true ? parsed : null
   } catch {
     return null
   }
+}
+
+/**
+ * Чей это человек — спрашиваем у памяти.
+ *
+ * 🔒 ОДИН ЧЕЛОВЕК — ПОКАЗЫВАЕМ ЕГО. Несколько — берём первого и это допущение,
+ * которое однажды окажется ложным; когда окажется, экран получит выбор, а не
+ * молчаливую подмену.
+ */
+export async function personKey(): Promise<string | null> {
+  const answer = await call("people", {})
+  const list = Array.isArray(answer?.people) ? (answer!.people as { who: string }[]) : []
+  return list.length ? String(list[0].who) : null
 }
 
 /**
@@ -63,7 +87,15 @@ export async function personKey(): Promise<string | null> {
 export async function askMemory(): Promise<MemoryAnswer> {
   const who = await personKey()
   if (!who) {
-    return { ...EMPTY, trouble: "не настроен Telegram-канал: непонятно, о ком спрашивать" }
+    // 🔒 «ПАМЯТЬ ПУСТА» И «ПАМЯТЬ НЕ ОТВЕТИЛА» — РАЗНЫЕ СОСТОЯНИЯ. Первое честно
+    // говорит «пока никто ничего не рассказывал», второе — отказ.
+    const alive = await fetch(`${MEMORY}/v1/health`, { cache: "no-store" }).then(
+      (r) => r.ok,
+      () => false,
+    )
+    return alive
+      ? { ...EMPTY, ok: true, trouble: null }
+      : { ...EMPTY, trouble: "служба памяти не отвечает" }
   }
   const key = secret()
   if (!key) return { ...EMPTY, trouble: "нет ключа машины", who }
