@@ -117,6 +117,35 @@ function postOwn(url, payload) {
   });
 }
 
+/** Чтение по общему секрету машины — для договора службы памяти. */
+function getOwn(url) {
+  return new Promise((resolve) => {
+    const key = machineSecret();
+    if (!key) return resolve({ ok: false, error: "no-machine-secret" });
+    const u = new URL(url);
+    const lib = u.protocol === "https:" ? https : http;
+    const req = lib.request(
+      {
+        headers: { "x-data-secret": key },
+        hostname: u.hostname,
+        method: "GET",
+        path: u.pathname,
+        port: u.port || (u.protocol === "https:" ? 443 : 80),
+      },
+      (res) => {
+        let buf = "";
+        res.on("data", (d) => { buf += d; });
+        res.on("end", () => {
+          try { resolve(JSON.parse(buf)); }
+          catch { resolve({ ok: false, error: "bad-answer", status: res.statusCode }); }
+        });
+      },
+    );
+    req.on("error", (e) => resolve({ ok: false, error: String(e.message) }));
+    req.end();
+  });
+}
+
 /**
  * Секрет читается ИЗ ФАЙЛА, а не из окружения процесса.
  *
@@ -702,6 +731,77 @@ const MEMORY_SUPERSEDED = ["registry_recall", "registry_remember", "registry_rem
 // легли бы в хранилище, которое мы заменяем.
 const OLD_MEMORY_CONNECTED = false;
 
+// ═══ НОВАЯ ПАМЯТЬ: ИНСТРУМЕНТЫ ПОРОЖДАЮТСЯ ИЗ ДОГОВОРА ПО HTTP ══════════════
+//
+// 🔒 ЭТО ТРЕТЬЯ ГАРАНТИЯ ОТДЕЛЬНОСТИ, И ОНА ВАЖНЕЕ ДВУХ ПЕРВЫХ. Отдельный
+// процесс и сторож границы защищают от импорта; но пока СХЕМА инструмента
+// берётся из файла, отдельность есть договорённость, а не факт. Здесь схема
+// приходит с `GET /v1/contract` — то есть память может измениться, а этот файл
+// не тронут вовсе.
+//
+// ✗ ЧЕМ ОПЛАЧЕНО. Прежний путь делал `import(path.join(…,"lib","memory",
+// "decl.mjs"))`. Через этот шов внутренний псевдотип уехал в схему инструмента,
+// API её отверг, и запись в память была недостижима СУТКИ — при том, что
+// `tools/list` показывал все двенадцать, а дверь отвечала `ok:true`.
+//
+// 🛑 ПАМЯТЬ НЕДОСТУПНА — ИНСТРУМЕНТОВ НЕТ, И ЭТО СКАЗАНО В ЖУРНАЛ. Показать
+// инструмент, за которым никого нет, хуже, чем не показать: агент потратит ход
+// на вызов и ход на разбор отказа.
+const MEMORY_SERVICE =
+  process.env.MEMORY_SERVICE_URL || "http://127.0.0.1:3700";
+
+let MEMORY_TOOLS = null;
+
+/** Простые типы JSON Schema. Ничего сверх этого в схему не уедет. */
+const JSON_TYPES = new Set(["array", "boolean", "integer", "null", "number", "object", "string"]);
+
+async function memoryService() {
+  if (MEMORY_TOOLS) return MEMORY_TOOLS;
+  const contract = await getOwn(MEMORY_SERVICE + "/v1/contract");
+  if (!contract || contract.ok !== true || !Array.isArray(contract.methods)) {
+    process.stderr.write("память недоступна: инструментов не будет\n");
+    return { names: [], tools: [] };
+  }
+  const tools = [];
+  for (const m of contract.methods) {
+    const properties = {};
+    const required = [];
+    let bad = false;
+    for (const p of m.params || []) {
+      const list = Array.isArray(p.type) ? p.type : [p.type];
+      // 🔒 СХЕМУ ПРОВЕРЯЕМ МЫ, ХОТЯ ЕЁ УЖЕ ПРОВЕРИЛА ПАМЯТЬ. Две проверки одного
+      // здесь не роскошь: цена пропуска — молчаливо исключённый инструмент,
+      // и она уже заплачена однажды.
+      if (!list.every((t) => JSON_TYPES.has(t))) { bad = true; break; }
+      properties[p.name] = { description: p.about, type: p.type };
+      if (p.required) required.push(p.name);
+    }
+    if (bad) {
+      process.stderr.write("метод " + m.name + " пропущен: тип вне JSON Schema\n");
+      continue;
+    }
+    tools.push({
+      description: m.about + " Возвращает: " + m.returns + " Промах: " + m.onMiss,
+      inputSchema: { properties, required, type: "object" },
+      name: m.name,
+    });
+  }
+  MEMORY_TOOLS = { names: tools.map((t) => t.name), tools };
+  return MEMORY_TOOLS;
+}
+
+/** Вызов метода памяти. Имя уже проверено по договору. */
+async function runMemoryService(name, args) {
+  const r = await postOwn(MEMORY_SERVICE + "/v1/" + name, args || {});
+  if (!r || typeof r !== "object") return "Память не ответила.";
+  // 🔒 ОТКАЗ ПЕРЕДАЁТСЯ СЛОВАМИ, А НЕ КОДОМ: агент читает это как указание, что
+  // сказать человеку. Код ошибки ему сказать нечего.
+  if (r.ok !== true) {
+    return "Не получилось: " + String(r.what_happened || r.refusal || r.error || "причина не названа");
+  }
+  return JSON.stringify(r);
+}
+
 let ACCESS = null;
 async function accessModule() {
   if (!ACCESS) {
@@ -923,10 +1023,13 @@ async function handle(m) {
     // 🛑 СТАРАЯ ПАМЯТЬ И ЕЁ РЕЕСТР В СПИСОК НЕ ПОПАДАЮТ, ПОКА ВЫКЛЮЧАТЕЛЬ СНЯТ.
     const a = OLD_MEMORY_CONNECTED ? await accessModule() : { tools: [] };
     const mem = OLD_MEMORY_CONNECTED ? await memoryModule() : { tools: [] };
+    // 🔒 ИНСТРУМЕНТЫ НОВОЙ ПАМЯТИ ПРИХОДЯТ ИЗ ЕЁ ДОГОВОРА ПО HTTP.
+    const box = await memoryService();
     return ok(m.id, {
       tools: [TOOL, TOOL_REQUEST, TOOL_SEPARATE, TOOL_CLOSE, TOOL_FEEDBACK]
         .concat(a.tools)
-        .concat(mem.tools),
+        .concat(mem.tools)
+        .concat(box.tools),
     });
   }
   if (m.method === "tools/call") {
@@ -936,18 +1039,22 @@ async function handle(m) {
     // помнит имена из прошлых сессий и зовёт их по памяти.
     const access = OLD_MEMORY_CONNECTED ? await accessModule() : { tools: [] };
     const memory = OLD_MEMORY_CONNECTED ? await memoryModule() : { tools: [] };
+    const box = await memoryService();
     const ACCESS_NAMES = access.tools.map((t) => t.name);
     const MEMORY_NAMES = memory.tools.map((t) => t.name);
     const KNOWN = [TOOL.name, TOOL_REQUEST.name, TOOL_SEPARATE.name, TOOL_CLOSE.name, TOOL_FEEDBACK.name]
       .concat(ACCESS_NAMES)
-      .concat(MEMORY_NAMES);
+      .concat(MEMORY_NAMES)
+      .concat(box.names);
     if (!KNOWN.includes(p.name)) {
       return fail(m.id, `unknown tool: ${p.name}`);
     }
     inFlight += 1;
     try {
       const args = p.arguments || {};
-      const text = MEMORY_NAMES.includes(p.name)
+      const text = box.names.includes(p.name)
+        ? await runMemoryService(p.name, args)
+        : MEMORY_NAMES.includes(p.name)
         ? await runMemory(p.name, args)
         : ACCESS_NAMES.includes(p.name)
         ? await runAccess(p.name, args)
