@@ -1021,16 +1021,30 @@ async function handle(m) {
     // а не перечисляются здесь: перечисление рядом с объявлением разошлось бы
     // с ним на первой правке параметра.
     // 🛑 СТАРАЯ ПАМЯТЬ И ЕЁ РЕЕСТР В СПИСОК НЕ ПОПАДАЮТ, ПОКА ВЫКЛЮЧАТЕЛЬ СНЯТ.
-    const a = OLD_MEMORY_CONNECTED ? await accessModule() : { tools: [] };
-    const mem = OLD_MEMORY_CONNECTED ? await memoryModule() : { tools: [] };
-    // 🔒 ИНСТРУМЕНТЫ НОВОЙ ПАМЯТИ ПРИХОДЯТ ИЗ ЕЁ ДОГОВОРА ПО HTTP.
-    const box = await memoryService();
-    return ok(m.id, {
-      tools: [TOOL, TOOL_REQUEST, TOOL_SEPARATE, TOOL_CLOSE, TOOL_FEEDBACK]
-        .concat(a.tools)
-        .concat(mem.tools)
-        .concat(box.tools),
-    });
+    // 🔒 СЧЁТЧИК ЖИВЫХ ВЫЗОВОВ НУЖЕН И ЗДЕСЬ, А НЕ ТОЛЬКО У `tools/call`.
+    // ✗ ОПЛАЧЕНО ТУТ ЖЕ, 2026-09-09: список инструментов стал асинхронным —
+    // схемы памяти приходят по HTTP, — и сервер начал выходить по закрытию
+    // stdin, не дождавшись ответа. Снаружи это выглядело как «инструментов
+    // нет»: ни ошибки, ни строки в журнале.
+    // 🔒 УРОК ШИРЕ СЛУЧАЯ: сделав синхронный путь асинхронным, проверь, накрыт
+    // ли он защитой, построенной для соседнего. Защита ставилась под ТОТ путь,
+    // а не под этот, и молча его не покрывает.
+    inFlight += 1;
+    try {
+      const a = OLD_MEMORY_CONNECTED ? await accessModule() : { tools: [] };
+      const mem = OLD_MEMORY_CONNECTED ? await memoryModule() : { tools: [] };
+      // 🔒 ИНСТРУМЕНТЫ НОВОЙ ПАМЯТИ ПРИХОДЯТ ИЗ ЕЁ ДОГОВОРА ПО HTTP.
+      const box = await memoryService();
+      return ok(m.id, {
+        tools: [TOOL, TOOL_REQUEST, TOOL_SEPARATE, TOOL_CLOSE, TOOL_FEEDBACK]
+          .concat(a.tools)
+          .concat(mem.tools)
+          .concat(box.tools),
+      });
+    } finally {
+      inFlight -= 1;
+      maybeExit();
+    }
   }
   if (m.method === "tools/call") {
     const p = m.params || {};
