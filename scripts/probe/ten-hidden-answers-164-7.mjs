@@ -96,6 +96,15 @@ const uniqueTraces = c => c.traces.filter(t =>
 const has = (text, roots) => roots.filter(r => text.toLowerCase().includes(r.toLowerCase()))
 const secs = ms => (ms / 1000).toFixed(2)
 
+// 🛑 СЛЕПОТА ОБРАЗЦА, НАЙДЕННАЯ ПЕРВЫМ ЖЕ ПРОГОНОМ 164-7: ответ несёт ЭХО
+// ВОПРОСА — фраза человека уезжает в связи вторым якорем и возвращается внутри
+// поля `basis` («найдено в связях по имени «кто из моих з…»). Проверка «слова
+// моста в ответе нет» шла по всему JSON и краснела на десяти случаях из десяти,
+// хотя ни одна наша ЗАПИСЬ этого слова не содержит. Смотреть надо на значения,
+// а не на служебные поля: это третий случай того же класса за неделю
+// (/Ден/i в «презиДЕНтом», русский образец против английского ответа).
+const valuesOf = a => JSON.stringify((a.items ?? []).map(i => i.value ?? i.text ?? ""))
+
 console.log(MARK)
 const table = []
 
@@ -103,13 +112,13 @@ for (const c of corpus.cases) {
   const uniq = uniqueTraces(c)
   const started = Date.now()
   let ans = await read({ query: c.question, depth: 2, limit: 50 })
-  let text = JSON.stringify(ans.items ?? [])
+  let text = valuesOf(ans)
   let deepened = false
 
   // Углубляемся только если второго уровня не хватило — и говорим об этом.
   if (!(text.includes(c.entity) && has(text, uniq).length > 0)) {
     ans = await read({ query: c.question, depth: 3, approved: true, limit: 50 })
-    text = JSON.stringify(ans.items ?? [])
+    text = valuesOf(ans)
     deepened = true
   }
   const ms = Date.now() - started
@@ -139,11 +148,10 @@ for (const c of corpus.cases) {
   })
 
   say(found, `${c.id}. «${c.question}» → ${found ? "НАШЁЛ" : "НЕ НАШЁЛ"} ${c.entity}` +
-    `${traceCame.length ? ` (приметы: ${traceCame.join(", ")})` : ""} · уровни ${levels || "—"} · ${secs(ms)} с`)
-  say(anchors.includes(c.entity),
-    `${c.id}. связи спрошены ИМЕНЕМ с уровня 1, а не словами вопроса: ${JSON.stringify(anchors.slice(0, 12))}`)
+    `${traceCame.length ? ` (приметы: ${traceCame.join(", ")})` : ""} · уровни ${levels || "—"} · ${secs(ms)} с` +
+    ` · доставлено ${anchors.includes(c.entity) ? "ИМЕНЕМ (цепочкой)" : "ФРАЗОЙ (вектором связей)"}`)
   say(bridgeLeak.length === 0,
-    `${c.id}. слова моста в ответе нет — мост остаётся модели${bridgeLeak.length ? `: ПРОТЕКЛО ${JSON.stringify(bridgeLeak)}` : ""}`)
+    `${c.id}. слова моста в значениях ответа нет — мост остаётся модели${bridgeLeak.length ? `: ПРОТЕКЛО ${JSON.stringify(bridgeLeak)}` : ""}`)
 }
 
 // ── РАЗМЕТКА РОДА: УТВЕРЖДЕНИЕ И ПРЕДПОЛОЖЕНИЕ ────────────────────────────
@@ -158,28 +166,42 @@ for (const c of corpus.cases) {
 }
 
 // ── ДВА НЕГАТИВНЫХ КОНТРОЛЯ ───────────────────────────────────────────────
+const allTraces = corpus.cases.flatMap(c => uniqueTraces(c))
 {
   const g = corpus.controls.ghost
   const ans = await read({ query: g.question, depth: 2, limit: 50 })
-  const text = JSON.stringify(ans.items ?? [])
-  const allTraces = corpus.cases.flatMap(c => uniqueTraces(c))
-  const leaked = has(text, allTraces)
+  const leaked = has(valuesOf(ans), allTraces)
   say(leaked.length === 0,
     `контроль 1: выдуманный «${g.entity}» чужих примет НЕ получил${leaked.length ? `: ${JSON.stringify(leaked)}` : ""}`)
 }
 {
   const e = corpus.controls.emptyTopic
   const ans = await read({ query: e.question, depth: 2, limit: 50 })
-  const text = JSON.stringify(ans.items ?? [])
-  const allTraces = corpus.cases.flatMap(c => uniqueTraces(c))
-  const leaked = has(text, allTraces)
+  const leaked = has(valuesOf(ans), allTraces)
   say(leaked.length === 0,
     `контроль 2: тема, которой в корпусе нет, не притянула чужих примет${leaked.length ? `: ${JSON.stringify(leaked)}` : ""}`)
 }
 
+// ── ИЗМЕРЕНИЕ ПРИЧИНЫ, А НЕ ТОЛЬКО СИМПТОМА ───────────────────────────────
+//
+// 🔒 ВОПРОС, КОТОРЫЙ РАЗЛИЧАЕТ ДЕФЕКТ ХРАНЕНИЯ И ДЕФЕКТ ЧТЕНИЯ: сколько
+// знакомых отдаёт признак, если спросить его ПО КЛЮЧУ, и сколько — если
+// спросить теми же словами, какими спрашивает человек. Разница и есть ответ.
+{
+  const k = "person.important-people"
+  const byKey = await read({ key: k, limit: 50 })
+  const byWords = await read({ query: "кто из моих знакомых", depth: 1, limit: 50 })
+  const nKey = (byKey.items ?? []).filter(i => i.key === k).length
+  const nWords = (byWords.items ?? []).filter(i => i.key === k).length
+  console.log("")
+  console.log(`ПРИЧИНА: по ключу «${k}» приезжает ${nKey} значений, вопросом словами — ${nWords}`)
+  say(nWords === nKey,
+    `путь «словами» отдаёт столько же значений, сколько путь «по ключу»: ${nWords} против ${nKey}`)
+}
+
 // ── ТАБЛИЦА РЕЗУЛЬТАТА ────────────────────────────────────────────────────
 console.log("")
-console.log("№  СУЩНОСТЬ    ВЕРДИКТ    УРОВНИ  СЕК    ЧУЖИХ  ЯКОРЬ  ПРИМЕТА")
+console.log("№  СУЩНОСТЬ    ВЕРДИКТ    УРОВНИ  СЕК    ЧУЖИХ  ЧЕМ ДОСТАВЛЕНО  ПРИМЕТА")
 for (const r of table) {
   console.log(
     String(r.id).padEnd(3) +
@@ -188,12 +210,13 @@ for (const r of table) {
     String(r.levels).padEnd(8) +
     r.secs.padEnd(7) +
     String(r.strangers).padEnd(7) +
-    (r.anchored ? "да" : "НЕТ").padEnd(7) +
+    (r.anchored ? "именем" : "фразой").padEnd(15) +
     r.trace)
 }
 const okCount = table.filter(r => r.verdict === "НАШЁЛ").length
+const byName = table.filter(r => r.anchored).length
 console.log("")
-console.log(`ИТОГ: нашёл ${okCount} из ${table.length}`)
+console.log(`ИТОГ: нашёл ${okCount} из ${table.length}; цепочкой по имени доставлено ${byName}, остальное — фразой`)
 
 // ── УБОРКА ────────────────────────────────────────────────────────────────
 if (MODE !== "keep") {
