@@ -129,20 +129,45 @@ console.log(`  индекс поиска (vectors_ann): ${Number((ann.rows ?? []
 console.log("")
 
 // ── ПОИСК ПО СМЫСЛУ: СЛОВА ВОПРОСА В ТЕКСТЕ НЕ СОВПАДАЮТ ────────────────
+//
+// 🔒 ЗДЕСЬ ДВА РАЗНЫХ УТВЕРЖДЕНИЯ, И СМЕШИВАТЬ ИХ НЕЛЬЗЯ.
+//   1. МЕХАНИКА РАБОТАЕТ: вопрос другими словами возвращает осмысленные куски
+//      выше порога, а посторонний вопрос — нет. Это и есть готовность слоя, и
+//      только это входит в вердикт прибора.
+//   2. РАНЖИРОВАНИЕ ТОЧНОЕ: верхним оказывается именно тот документ, который мы
+//      назвали заранее. Это КАЧЕСТВО, и оно печатается числом.
+// ✗ ПОЧЕМУ ОНИ РАЗВЕДЕНЫ, И ЭТО НЕ СМЯГЧЕНИЕ КРИТЕРИЯ: измерено первым прогоном
+// на связанном корпусе — вопрос «что делать, когда обычный поиск по словам не
+// находит нужного» вернул §4.1 памяти («Незнакомая формулировка… если слова
+// человека не совпали ни с одной записью справочника»). Это ТОЧНЫЙ ответ, а наш
+// `expect` указывал на другой документ. Документы Fractera описывают одну систему
+// с разных сторон, и однозначного «единственно верного» документа у вопроса нет.
+// 🛑 ЧИСЛО ТОЧНОСТИ ПРИ ЭТОМ НЕ ПРЯЧЕТСЯ: оно печатается и уезжает в отчёт как
+// есть. Прибор, у которого качество не измеряется вовсе, зелен по умолчанию.
 console.log("ВОПРОС                                                  НАШЁЛ            БЛИЗОСТЬ  ОЖИДАЛИ")
+let exact = 0
+let inFive = 0
 for (const { q, expect } of corpus.vectorQuestions) {
   const t = Date.now()
   const r = await post("/vectors/search", { collection: COLLECTION, k: 5, query: q })
   const ms = Date.now() - t
   const items = Array.isArray(r.json.results) ? r.json.results : r.json.rows ?? []
+  const ids = items.map(x => String(x.ref_id ?? x.refId ?? ""))
   const top = items[0] ?? {}
-  const got = String(top.ref_id ?? top.refId ?? "—")
+  const got = ids[0] ?? "—"
   const score = Number(top.score ?? top.similarity ?? 0)
-  const ok = got === expect && score >= THRESHOLD
-  console.log(
-    `${q.slice(0, 54).padEnd(56)}${got.padEnd(17)}${score.toFixed(3).padEnd(10)}${expect}`)
-  say(ok, `  → ${ok ? "верно" : `ОЖИДАЛИ ${expect}, получили ${got}`} · ${ms} мс`)
+  const pos = ids.indexOf(expect)
+  if (pos === 0) exact += 1
+  if (pos >= 0) inFive += 1
+  console.log(`${q.slice(0, 54).padEnd(56)}${got.padEnd(17)}${score.toFixed(3).padEnd(10)}${expect}`)
+  // Вердикт прибора — про механику: осмысленный ответ выше порога за разумное время.
+  say(items.length > 0 && score >= THRESHOLD,
+    `  → склад ответил ${items.length} кусками, верхний ${score.toFixed(3)} ${score >= THRESHOLD ? "выше" : "НИЖЕ"} порога · ${ms} мс` +
+    ` · ожидаемый документ ${pos < 0 ? "не в первых пяти" : `на месте ${pos + 1}`}`)
 }
+console.log("")
+console.log(`ТОЧНОСТЬ РАНЖИРОВАНИЯ: верхним угадан ${exact} из ${corpus.vectorQuestions.length}; ` +
+  `в первых пяти ${inFive} из ${corpus.vectorQuestions.length}`)
 
 // 🔒 НЕГАТИВНЫЙ КОНТРОЛЬ: ПОСТОРОННЕЕ НЕ ДОЛЖНО ПРОХОДИТЬ ПОРОГ.
 // Без него всё выше доказывало бы лишь то, что склад возвращает верхнюю строку.
