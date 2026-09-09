@@ -119,6 +119,7 @@ function exchanges(entries) {
           rows: 0,
           tools: [],
           replied: false,
+          wroteText: false,
           думал: 0,
         }
         continue
@@ -131,8 +132,17 @@ function exchanges(entries) {
     cur.rows += 1
     cur.requests.add(e.requestId || "(без requestId)")
     cur.endedAt = Math.max(cur.endedAt, Date.parse(e.timestamp) || cur.endedAt)
-    for (const name of toolsOf(e)) cur.tools.push(name)
-    if (hasText(e)) cur.replied = true
+    for (const name of toolsOf(e)) {
+      cur.tools.push(name)
+      // 🔒 «ОТВЕТ ДОШЁЛ» — ЭТО ВЫЗОВ `reply`, А НЕ ТЕКСТ У МОДЕЛИ.
+      // ✗ ОПЛАЧЕНО 2026-09-09: прибор печатал «ответ дошёл: да» на обмене, где
+      // модель вывела `731` в терминал и `reply` НЕ ПОЗВАЛА. Владелец не получил
+      // в Telegram ничего, а прибор доложил об успехе. Текст на экране сервера и
+      // сообщение у человека — **разные утверждения**, и прибор обязан различать
+      // их так же строго, как их различает человек с телефоном в руке.
+      if (/(^|__)reply$/.test(name)) cur.replied = true
+    }
+    if (hasText(e)) cur.wroteText = true
     const c = e.message && e.message.content
     if (Array.isArray(c) && c.some((b) => b && b.type === "thinking")) cur.думал += 1
   }
@@ -171,7 +181,7 @@ for (const f of files) {
     console.log("ОБРАЩЕНИЙ К МОДЕЛИ : " + x.requests.size + "   (строк журнала: " + x.rows + ", с размышлением: " + x.думал + ")")
     console.log("ВЫЗОВОВ ИНСТР. : " + short.length + (short.length ? "  — " + short.join(" → ") : ""))
     console.log("СЕКУНД         : " + seconds(x.endedAt - x.startedAt))
-    console.log("ответ дошёл    : " + (x.replied ? "да" : "НЕТ"))
+    console.log("ОТВЕТ В TELEGRAM: " + (x.replied ? "да, reply позван" : (x.wroteText ? "🛑 НЕТ — модель написала текст, но reply НЕ позвала: человек не получил ничего" : "🛑 НЕТ — ответа не было вовсе")))
   }
 }
 
