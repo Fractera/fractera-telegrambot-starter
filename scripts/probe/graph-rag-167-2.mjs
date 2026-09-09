@@ -138,8 +138,14 @@ say(chunks.every(n => n > 0) && totalChunks >= corpus.docs.length,
 // ── ДОКАЗАТЕЛЬСТВО 2: ИЗ КУСКОВ ИЗВЛЕЧЕНЫ СУЩНОСТИ ──────────────────────
 const labelsAfter = (await rag("/graph/label/list")).json
 const afterCount = Array.isArray(labelsAfter) ? labelsAfter.length : 0
-say(afterCount > beforeCount,
-  `в графе появились сущности: было ${beforeCount}, стало ${afterCount} (+${afterCount - beforeCount})`)
+// 🛑 «СТАЛО БОЛЬШЕ» ВЕРНО ТОЛЬКО НА ЧИСТОМ ГРАФЕ. ✗ измерено 2026-09-09: при
+// повторном посеве движок узнаёт документы по содержимому, разбирает их «за 1 с»
+// и новых сущностей не добавляет — прибор краснел при исправной работе.
+// Различаем два случая: рост на пустом графе и наличие на непустом.
+say(beforeCount === 0 ? afterCount > 0 : afterCount >= beforeCount,
+  beforeCount === 0
+    ? `в графе появились сущности: было 0, стало ${afterCount}`
+    : `граф уже держал ${beforeCount} сущностей, после повторного посева ${afterCount} — документы узнаны, не продублированы`)
 if (Array.isArray(labelsAfter)) {
   console.log(`  примеры: ${labelsAfter.slice(0, 12).map(String).join(" · ")}`)
 }
