@@ -682,6 +682,26 @@ function fail(id, message) {
 // приборами 161-2 и 161-4-5, которые зовут `registry_recall` и `registry_describe`.
 const MEMORY_SUPERSEDED = ["registry_recall", "registry_remember", "registry_remember_many"];
 
+// ═══ СТАРАЯ ПАМЯТЬ ОТКЛЮЧЕНА ОТ АГЕНТА (2026-09-09, шаг 175) ═════════════════
+//
+// 🔒 ПРЯМОЕ УКАЗАНИЕ ВЛАДЕЛЬЦА, ДОСЛОВНО: «первую память нужно отключить от
+// Telegram полностью. Пока не удалять, но полностью отключить, чтобы на тестах
+// работала гарантированно новая память; никакие части старой памяти не должны
+// быть подключены вообще; инструкции про старую память должны быть удалены».
+//
+// 🔒 ВЫКЛЮЧАТЕЛЬ, А НЕ УДАЛЕНИЕ — И ЭТО ТОЖЕ ЕГО СЛОВО. Код остаётся: старая
+// память ещё жива за своей дверью и нужна экранам и приборам. Отключено ровно
+// одно — её присутствие В СПИСКЕ ИНСТРУМЕНТОВ АГЕНТА.
+//
+// 🛑 ЧТО ЭТО ЗНАЧИТ ДО ПОДКЛЮЧЕНИЯ НОВОЙ: у агента памяти НЕТ ВОВСЕ. Состояние
+// названо вслух, а не замаскировано: молчаливое «инструмента нет» агент
+// объяснит человеку как поломку — это уже случалось сегодня.
+//
+// 🔒 ДВА ПУТИ К ОДНОМУ ДЕЛУ — ЛИШНИЙ ХОД И МОЛЧАЛИВАЯ ОШИБКА (закон 161).
+// Оставь мы старые глаголы рядом с новыми, агент выбрал бы привычные, и данные
+// легли бы в хранилище, которое мы заменяем.
+const OLD_MEMORY_CONNECTED = false;
+
 let ACCESS = null;
 async function accessModule() {
   if (!ACCESS) {
@@ -900,8 +920,9 @@ async function handle(m) {
     // 🔒 ЧЕТЫРЕ ПРИМИТИВА ДОСТУПА ПРИХОДЯТ ПОРОЖДЁННЫМИ ИЗ ОБЪЯВЛЕНИЯ (157-5),
     // а не перечисляются здесь: перечисление рядом с объявлением разошлось бы
     // с ним на первой правке параметра.
-    const a = await accessModule();
-    const mem = await memoryModule();
+    // 🛑 СТАРАЯ ПАМЯТЬ И ЕЁ РЕЕСТР В СПИСОК НЕ ПОПАДАЮТ, ПОКА ВЫКЛЮЧАТЕЛЬ СНЯТ.
+    const a = OLD_MEMORY_CONNECTED ? await accessModule() : { tools: [] };
+    const mem = OLD_MEMORY_CONNECTED ? await memoryModule() : { tools: [] };
     return ok(m.id, {
       tools: [TOOL, TOOL_REQUEST, TOOL_SEPARATE, TOOL_CLOSE, TOOL_FEEDBACK]
         .concat(a.tools)
@@ -910,8 +931,11 @@ async function handle(m) {
   }
   if (m.method === "tools/call") {
     const p = m.params || {};
-    const access = await accessModule();
-    const memory = await memoryModule();
+    // 🔒 ОТКЛЮЧЕНО И НА ВЫЗОВЕ, А НЕ ТОЛЬКО В СПИСКЕ. Инструмент, исчезнувший из
+    // списка, но работающий по имени, — это отключение, которого нет: агент
+    // помнит имена из прошлых сессий и зовёт их по памяти.
+    const access = OLD_MEMORY_CONNECTED ? await accessModule() : { tools: [] };
+    const memory = OLD_MEMORY_CONNECTED ? await memoryModule() : { tools: [] };
     const ACCESS_NAMES = access.tools.map((t) => t.name);
     const MEMORY_NAMES = memory.tools.map((t) => t.name);
     const KNOWN = [TOOL.name, TOOL_REQUEST.name, TOOL_SEPARATE.name, TOOL_CLOSE.name, TOOL_FEEDBACK.name]
