@@ -580,6 +580,10 @@ export type Needs = {
   ask: string
   /** Почему без этого нельзя — произносится вместе с вопросом. */
   why: string
+  /** На каком языке произнести (170-2). Совпал с `ask_in` — переводить нечего. */
+  say_in: string
+  /** На каком языке написан эталон `ask`. */
+  ask_in: "ru" | "en"
 }
 
 /**
@@ -1182,8 +1186,10 @@ export async function read(input: {
       if (!words) continue
       needs = {
         ask: words.ask,
+        ask_in: words.ask_in,
         for: hits.find(h => h.requires.includes(need))?.key ?? "",
         key: need,
+        say_in: words.say_in,
         why: words.why,
       }
       break

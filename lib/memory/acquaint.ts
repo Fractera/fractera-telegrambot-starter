@@ -25,6 +25,19 @@ export type Acquaint = {
   why: string
   /** Сколько признаков знакомства ещё не заполнено, включая этот. */
   left: number
+  /**
+   * На каком языке произнести вопрос (170-2).
+   *
+   * 🔒 СЛОВАРЬ ДАЁТ СМЫСЛ, АГЕНТ ДАЁТ ЯЗЫК. Держать готовые фразы на сотню языков
+   * нельзя, а человек вправе говорить на любом. Поэтому `ask` — эталон смысла
+   * (`ru` или `en`), а здесь стоит код языка, на котором фразу надо произнести.
+   * Перевод короткой фразы языковой модели бесплатен; словарь на сто языков
+   * разошёлся бы с собой на первой правке.
+   * 🛑 СОВПАЛ С ЯЗЫКОМ `ask` — ПЕРЕВОДИТЬ НЕЧЕГО, произноси как есть.
+   */
+  say_in: string
+  /** На каком языке написан сам `ask` — чтобы было видно, нужен ли перевод. */
+  ask_in: "ru" | "en"
 }
 
 /**
@@ -69,7 +82,8 @@ const WORDS: Record<string, { ru: [string, string]; en: [string, string] }> = {
  * национальность или валюта узнаются по ходу дела, а не при встрече.
  */
 export function nextQuestion(known: Set<string>, lang: string | null | undefined): Acquaint | null {
-  const code = String(lang ?? "").trim().slice(0, 2).toLowerCase() === "en" ? "en" : "ru"
+  const { ask_in, say_in } = languageOf(lang)
+  const code = ask_in
   const queue = allFacts()
     .filter(f => typeof f.askOrder === "number" && !known.has(f.key))
     .sort((a, b) => (a.askOrder ?? 0) - (b.askOrder ?? 0))
@@ -81,7 +95,34 @@ export function nextQuestion(known: Set<string>, lang: string | null | undefined
   // молчание честнее. Долг виден: признак с `askOrder` без слов пропускается.
   if (!words) return null
   const [ask, why] = words[code]
-  return { ask, key: first.key, left: queue.length, why }
+  return { ask, ask_in, key: first.key, left: queue.length, say_in, why }
+}
+
+/**
+ * На каком языке спрашивать и на каком лежит эталон фразы (170-2).
+ *
+ * 🛑 УМОЛЧАНИЕ БОЛЬШЕ НЕ РУССКОЕ, И ЭТО ИСПРАВЛЕНИЕ ЗАМКНУТОГО КРУГА.
+ * ✗ Прежняя редакция: `lang === "en" ? "en" : "ru"` — то есть при НЕИЗВЕСТНОМ
+ * языке первый вопрос уходил по-русски. Англоязычный человек получал его на
+ * чужом языке, не отвечал — и язык не узнавался никогда, потому что узнать его
+ * можно было только ответом. Круг замыкался на самом первом сообщении.
+ *
+ * 🔒 ЯЗЫК НЕИЗВЕСТЕН — БЕРЁМ АНГЛИЙСКИЙ, А НЕ РУССКИЙ. Он нейтрален: его поймёт
+ * и тот, кому он родной, и тот, кто попросит перейти на свой. Русский по
+ * умолчанию — это допущение о человеке, которого мы ещё не знаем.
+ * 🔒 ЭТАЛОН ФРАЗЫ — ru ИЛИ en, ПРОИЗНОШЕНИЕ — ЛЮБОЕ. Украинский, испанский,
+ * польский приходят как `say_in`, и переводит их агент.
+ */
+function languageOf(lang: string | null | undefined): { ask_in: "ru" | "en"; say_in: string } {
+  const code = String(lang ?? "").trim().slice(0, 2).toLowerCase()
+  if (!code) return { ask_in: "en", say_in: "en" }
+  if (code === "ru") return { ask_in: "ru", say_in: "ru" }
+  if (code === "en") return { ask_in: "en", say_in: "en" }
+  // 🔒 БЛИЗКИЕ К РУССКОМУ ПОЛУЧАЮТ РУССКИЙ ЭТАЛОН — переводить с него ближе, чем
+  // с английского. Это не утверждение о родстве языков, а выбор исходника для
+  // перевода: агент всё равно произносит на `say_in`.
+  const nearRu = new Set(["be", "bg", "kk", "ky", "mk", "sr", "uk"])
+  return { ask_in: nearRu.has(code) ? "ru" : "en", say_in: code }
 }
 
 /**
@@ -94,10 +135,18 @@ export function nextQuestion(known: Set<string>, lang: string | null | undefined
  * 🛑 НЕТ СЛОВ — НЕТ ВОПРОСА. Придуманная на ходу фраза звучит как анкета; это то
  * же правило, что у `nextQuestion`, и по той же причине.
  */
-export function askFor(key: string, lang: string | null | undefined): { ask: string; why: string } | null {
-  const code = String(lang ?? "").trim().slice(0, 2).toLowerCase() === "en" ? "en" : "ru"
+export function askFor(
+  key: string,
+  lang: string | null | undefined
+): { ask: string; ask_in: "ru" | "en"; say_in: string; why: string } | null {
+  // 🔒 ТА ЖЕ ЛОГИКА ЯЗЫКА, ЧТО У ЗНАКОМСТВА, И ВЗЯТА ОНА ОТТУДА, А НЕ НАПИСАНА
+  // РЯДОМ (170-2). Блокирующий вопрос звучит на том же языке, что и вопрос
+  // знакомства: две редакции одного выбора разошлись бы на первой правке, и
+  // человек получал бы «В каком вы часовом поясе?» по-русски после того, как
+  // весь разговор шёл по-английски.
+  const { ask_in, say_in } = languageOf(lang)
   const words = WORDS[key]
   if (!words) return null
-  const [ask, why] = words[code]
-  return { ask, why }
+  const [ask, why] = words[ask_in]
+  return { ask, ask_in, say_in, why }
 }
