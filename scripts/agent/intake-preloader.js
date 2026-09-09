@@ -1048,23 +1048,29 @@ async function handle(m) {
   }
   if (m.method === "tools/call") {
     const p = m.params || {};
-    // 🔒 ОТКЛЮЧЕНО И НА ВЫЗОВЕ, А НЕ ТОЛЬКО В СПИСКЕ. Инструмент, исчезнувший из
-    // списка, но работающий по имени, — это отключение, которого нет: агент
-    // помнит имена из прошлых сессий и зовёт их по памяти.
-    const access = OLD_MEMORY_CONNECTED ? await accessModule() : { tools: [] };
-    const memory = OLD_MEMORY_CONNECTED ? await memoryModule() : { tools: [] };
-    const box = await memoryService();
-    const ACCESS_NAMES = access.tools.map((t) => t.name);
-    const MEMORY_NAMES = memory.tools.map((t) => t.name);
-    const KNOWN = [TOOL.name, TOOL_REQUEST.name, TOOL_SEPARATE.name, TOOL_CLOSE.name, TOOL_FEEDBACK.name]
-      .concat(ACCESS_NAMES)
-      .concat(MEMORY_NAMES)
-      .concat(box.names);
-    if (!KNOWN.includes(p.name)) {
-      return fail(m.id, `unknown tool: ${p.name}`);
-    }
+    // 🛑 СЧЁТЧИК ПОДНИМАЕТСЯ ДО ПЕРВОГО `await`, А НЕ ПЕРЕД ИСПОЛНЕНИЕМ.
+    // ✗ Оплачено в тот же час: узнавание имени инструмента стало асинхронным
+    // (договор памяти приходит по HTTP), а счётчик стоял ПОСЛЕ него — и вызов
+    // терялся ровно так же, как терялся список. Ошибка одна, места два.
+    // 🔒 ПРАВИЛО: защита от выхода накрывает ВЕСЬ обработчик, начиная с первого
+    // ожидания, а не только ту его часть, которая выглядит «настоящей работой».
     inFlight += 1;
     try {
+      // 🔒 ОТКЛЮЧЕНО И НА ВЫЗОВЕ, А НЕ ТОЛЬКО В СПИСКЕ. Инструмент, исчезнувший
+      // из списка, но работающий по имени, — это отключение, которого нет:
+      // агент помнит имена из прошлых сессий и зовёт их по памяти.
+      const access = OLD_MEMORY_CONNECTED ? await accessModule() : { tools: [] };
+      const memory = OLD_MEMORY_CONNECTED ? await memoryModule() : { tools: [] };
+      const box = await memoryService();
+      const ACCESS_NAMES = access.tools.map((t) => t.name);
+      const MEMORY_NAMES = memory.tools.map((t) => t.name);
+      const KNOWN = [TOOL.name, TOOL_REQUEST.name, TOOL_SEPARATE.name, TOOL_CLOSE.name, TOOL_FEEDBACK.name]
+        .concat(ACCESS_NAMES)
+        .concat(MEMORY_NAMES)
+        .concat(box.names);
+      if (!KNOWN.includes(p.name)) {
+        return fail(m.id, `unknown tool: ${p.name}`);
+      }
       const args = p.arguments || {};
       const text = box.names.includes(p.name)
         ? await runMemoryService(p.name, args)
