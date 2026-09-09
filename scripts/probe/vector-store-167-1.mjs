@@ -220,16 +220,30 @@ say(THRESHOLD > bestStranger && THRESHOLD < worstTrue,
   // ✗ первая редакция печатала «не совпало» и молчала о том, ЧТО именно, —
   // пришлось гадать и ставить отдельную диагностику. Проверка, после которой
   // нужно исследование, сделана наполовину.
+  // 🔒 УСТОЙЧИВЫМ ОБЯЗАН БЫТЬ СОСТАВ И ПОРЯДОК, А НЕ ШЕСТОЙ ЗНАК ОЦЕНКИ.
+  // ✗ измерено 2026-09-09: три повтора дали 0.575420 · 0.575451 · 0.575451 при
+  // ОДИНАКОВОМ порядке. Это недетерминизм эмбеддинга на стороне провайдера, а не
+  // наш дефект: колебание 0.00003 против измеренного запаса порога 0.122 — на
+  // четыре порядка меньше и ни на одно решение не влияет.
+  // 🛑 ТРЕБОВАТЬ ПОБИТОВОГО СОВПАДЕНИЯ ЗНАЧИЛО БЫ ДЕРЖАТЬ ВЕЧНО КРАСНУЮ ПРОВЕРКУ,
+  // а вечно красную проверку перестают читать. Проверяем то, что имеет значение,
+  // и печатаем колебание числом — чтобы рост было видно.
   const q = corpus.vectorQuestions[0].q
-  const runs = []
+  const orders = []
+  const tops = []
   for (let n = 0; n < 3; n += 1) {
     const r = await post("/vectors/search", { collection: COLLECTION, k: 3, query: q })
     const items = Array.isArray(r.json.results) ? r.json.results : r.json.rows ?? []
-    runs.push(items.map(i => `${String(i.ref_id ?? i.refId ?? "")}:${Number(i.score ?? i.similarity ?? 0).toFixed(6)}`).join(" | "))
+    orders.push(items.map(i => String(i.ref_id ?? i.refId ?? "")).join(" | "))
+    tops.push(Number(items[0]?.score ?? items[0]?.similarity ?? 0))
   }
-  const same = new Set(runs).size === 1
-  say(same, `контроль 2: три повтора одного вопроса ${same ? "дали один ответ" : "РАЗОШЛИСЬ"}`)
-  if (!same) for (let n = 0; n < runs.length; n += 1) console.log(`     ${n + 1}. ${runs[n]}`)
+  const stable = new Set(orders).size === 1
+  const drift = Math.max(...tops) - Math.min(...tops)
+  say(stable, `контроль 2: три повтора дали ${stable ? "один и тот же порядок" : "РАЗНЫЙ ПОРЯДОК"}`)
+  if (!stable) for (let n = 0; n < orders.length; n += 1) console.log(`     ${n + 1}. ${orders[n]}`)
+  say(drift < (worstTrue - bestStranger) / 10,
+    `     колебание оценки между повторами ${drift.toFixed(6)} — ` +
+    `${drift < (worstTrue - bestStranger) / 10 ? "много меньше" : "СОПОСТАВИМО С"} запасом порога ${(worstTrue - bestStranger).toFixed(3)}`)
 }
 {
   // 3. Текст длиннее предела модели.
