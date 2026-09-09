@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbo",
-    "build": "node scripts/check-registry.mjs && node scripts/check-tools.mjs && node scripts/check-value-types.mjs && node scripts/check-table-sql.mjs && node scripts/build-registry-index.mjs --check && node scripts/check-instruction.mjs && node scripts/check-seed-clean.mjs && node scripts/check-mcp-schema.mjs && next build",
+    "build": "node scripts/check-registry.mjs && node scripts/check-tools.mjs && node scripts/check-value-types.mjs && node scripts/check-table-sql.mjs && node scripts/build-registry-index.mjs --check && node scripts/check-instruction.mjs && node scripts/check-seed-clean.mjs && node scripts/check-mcp-schema.mjs && node scripts/check-memory-boundary.mjs && next build",
     "start": "node server.mjs",
     "check": "ultracite check",
     "fix": "ultracite fix",
@@ -17,7 +17,8 @@
     "check:sql": "node scripts/check-table-sql.mjs",
     "check:instruction": "node scripts/check-instruction.mjs",
     "check:seed": "node scripts/check-seed-clean.mjs",
-    "check:mcp": "node scripts/check-mcp-schema.mjs"
+    "check:mcp": "node scripts/check-mcp-schema.mjs",
+    "check:boundary": "node scripts/check-memory-boundary.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai": "^4.0.57",
