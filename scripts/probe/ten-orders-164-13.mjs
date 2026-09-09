@@ -114,7 +114,14 @@ await clean()
 const prefixes = []
 for (const o of corpus.orders) {
   for (const s of o.seed ?? []) {
-    if (s.kind === "fact") await call("write", { key: s.key, what: s.what, source: SOURCE })
+    if (s.kind === "fact") {
+      // 🔒 `scope` И `subject` ЕДУТ ТОЛЬКО ЕСЛИ НАЗВАНЫ (165-1): пустые поля не
+      // передаются, чтобы прежние вызовы вели себя ровно как прежде.
+      const args = { key: s.key, source: SOURCE, what: s.what }
+      if (s.scope) args.scope = s.scope
+      if (s.subject) args.subject = s.subject
+      await call("write", args)
+    }
     else { await call("write", { anchors: s.anchors, what: s.what, source: SOURCE }); prefixes.push(`memory/${s.anchors[0]}-`) }
   }
   if (o.mutate) await call("mutate", o.mutate)
@@ -123,8 +130,8 @@ const indexed = await ready(prefixes)
 console.log(`посев: ${prefixes.length} историй, проиндексированы: ${indexed ? "да" : "НЕТ"}`)
 console.log("")
 
-const put = (order, name, ok, note, ms) =>
-  rows.push({ ms: ms == null ? "—" : (ms / 1000).toFixed(2), name, note, ok, order })
+const put = (order, name, ok, note, ms, outcome) =>
+  rows.push({ ms: ms == null ? "—" : (ms / 1000).toFixed(2), name, note, ok, order, outcome: outcome ?? "—" })
 
 // ── ПОРЯДОК 1: ОТВЕТ ЦЕЛИКОМ НА ПЕРВОМ УРОВНЕ ─────────────────────────────
 // 🔒 ЭТО ПРОВЕРКА ГЛАВНОГО ЗАКОНА ВЛАДЕЛЬЦА, КОТОРОЙ В КОРПУСЕ 164-6 НЕ БЫЛО НИ
@@ -136,7 +143,7 @@ const put = (order, name, ok, note, ms) =>
   const ms = Date.now() - t
   const levels = (a.levels ?? []).map(l => l.level)
   const ok = a.found === true && valuesOf(a).includes("EUR") && levels.join(",") === "1"
-  put(1, o.name, ok, `found=${a.found}, уровни ${levels.join(",") || "—"}, значение ${valuesOf(a).slice(0, 40)}`, ms)
+  put(1, o.name, ok, `found=${a.found}, уровни ${levels.join(",") || "—"}, значение ${valuesOf(a).slice(0, 40)}`, ms, a.outcome)
 }
 
 // ── ПОРЯДОК 2: ИМЯ ИЗ ТАБЛИЦЫ СТАЛО ЯКОРЕМ СВЯЗЕЙ ─────────────────────────
@@ -150,7 +157,7 @@ const put = (order, name, ok, note, ms) =>
   const byName = anchors.includes(o.entity)
   const came = has(text, o.traces)
   put(2, o.name, byName && came.length > 0,
-    `якорь ${byName ? "имя" : "НЕ имя: " + JSON.stringify(anchors.slice(0, 3))}, приметы ${came.join(" ") || "—"}`, ms)
+    `якорь ${byName ? "имя" : "НЕ имя: " + JSON.stringify(anchors.slice(0, 3))}, приметы ${came.join(" ") || "—"}`, ms, a.outcome)
 }
 
 // ── ПОРЯДОК 3: НАХОДКА ПО СМЫСЛУ, ИМЕНИ В ВОПРОСЕ НЕТ ─────────────────────
@@ -165,7 +172,7 @@ const put = (order, name, ok, note, ms) =>
   }
   const ms = Date.now() - t
   const came = has(valuesOf(a), o.traces)
-  put(3, o.name, came.length > 0, `приметы ${came.join(" ") || "—"}${deep ? ", понадобился третий уровень" : ""}`, ms)
+  put(3, o.name, came.length > 0, `приметы ${came.join(" ") || "—"}${deep ? ", понадобился третий уровень" : ""}`, ms, a.outcome)
 }
 
 // ── ПОРЯДОК 4: ОТВЕТ ЕСТЬ ТОЛЬКО КАК ПЕРЕСЕЧЕНИЕ ДВУХ СУЩНОСТЕЙ ───────────
@@ -181,7 +188,7 @@ const put = (order, name, ok, note, ms) =>
   const ms = Date.now() - t
   const both = text.includes("Тимур") && text.includes("Сорока")
   put(4, o.name, both,
-    `человек ${text.includes("Тимур") ? "есть" : "НЕТ"}, проект ${text.includes("Сорока") ? "есть" : "НЕТ"}`, ms)
+    `человек ${text.includes("Тимур") ? "есть" : "НЕТ"}, проект ${text.includes("Сорока") ? "есть" : "НЕТ"}`, ms, a.outcome)
 }
 
 // ── ПОРЯДОК 5: ПРАВИЛЬНЫЙ ОТВЕТ — «НИКОГО НЕТ» ───────────────────────────
@@ -194,7 +201,7 @@ const put = (order, name, ok, note, ms) =>
   const ms = Date.now() - t
   const leaked = has(valuesOf(a), allTraces)
   put(5, o.name, leaked.length === 0,
-    leaked.length === 0 ? "чужих примет нет" : `притянуло чужое: ${JSON.stringify(leaked.slice(0, 6))}`, ms)
+    leaked.length === 0 ? "чужих примет нет" : `притянуло чужое: ${JSON.stringify(leaked.slice(0, 6))}`, ms, a.outcome)
 }
 
 // ── ПОРЯДОК 6: СВЕЖЕЕ ПЕРВЫМ, ПРЕЖНЕЕ ИСТОРИЕЙ ───────────────────────────
@@ -207,16 +214,25 @@ const put = (order, name, ok, note, ms) =>
   const iNew = vals.indexOf("Кадарин")
   const iOld = vals.indexOf("Пальмироль")
   const ok = iNew === 0 && (iOld === -1 || iOld > iNew)
-  put(6, o.name, ok, `порядок значений: ${JSON.stringify(vals)}`, ms)
+  put(6, o.name, ok, `порядок значений: ${JSON.stringify(vals)}`, ms, a.outcome)
 }
 
-// ── ПОРЯДОК 7: ОХВАТ — ПРОВЕРКА ПОВЕРХНОСТИ ДВЕРИ, А НЕ ПРОГОН ────────────
-// 🔒 ЕСЛИ ПАРАМЕТРА НЕТ В ОБЪЯВЛЕНИИ, ЗАДАЧА НЕ «НЕ ПРОШЛА» — ОНА НЕ ВЫРАЗИМА.
-// Смешивать эти два исхода нельзя: первый чинится кодом, второй — договором.
+// ── ПОРЯДОК 7: ОХВАТ — ТЕПЕРЬ ПРОГОН, А НЕ ТОЛЬКО ПОВЕРХНОСТЬ ─────────────
+// 🔒 ДВЕ ПРОВЕРКИ ПОДРЯД, И ПЕРВАЯ ОСТАЁТСЯ: сначала «параметр объявлен», потом
+// «значение доехало вместе с областью». Оставить только вторую значило бы
+// потерять различение «не выразимо» и «не сработало» — то самое, ради которого
+// эти порядки заводились.
 {
   const hasScope = /name: "scope"/.test(decl)
-  put(7, corpus.orders[6].name, hasScope,
-    hasScope ? "параметр `scope` у двери есть" : "НЕ ВЫРАЗИМО: `scope` в объявлении ящика отсутствует, а в слое хранения колонка есть", null)
+  const t = Date.now()
+  const a = await read({ key: "person.currency", limit: 10 })
+  const ms = Date.now() - t
+  const withScope = (a.items ?? []).filter(i => String(i.scope ?? "") !== "")
+  const ok = hasScope && withScope.length > 0 && withScope.some(i => String(i.scope) === "madrid")
+  put(7, corpus.orders[6].name, ok,
+    hasScope
+      ? `объявлен: да; области у значений: ${JSON.stringify((a.items ?? []).map(i => i.scope))}`
+      : "НЕ ВЫРАЗИМО: `scope` в объявлении ящика отсутствует", ms, a.outcome)
 }
 
 // ── ПОРЯДОК 8: НЕ ХВАТАЕТ СВЕДЕНИЯ — НУЖЕН ЧЕЛОВЕК ───────────────────────
@@ -227,21 +243,39 @@ const put = (order, name, ok, note, ms) =>
   const t = Date.now()
   const a = await read({ query: o.question, depth: 1, limit: 20 })
   const ms = Date.now() - t
-  const missing = (a.missing ?? []).map(m => m.key)
-  const acquaint = a.acquaint ?? null
-  const namesTz = missing.includes("person.timezone") || acquaint?.key === "person.timezone"
-  const hasPhrase = Boolean(acquaint?.ask || acquaint?.question)
-  const hasWhy = Boolean(acquaint?.why || (a.missing ?? []).some(m => m.why))
-  put(8, o.name, namesTz && hasPhrase && hasWhy,
-    `назван пояс: ${namesTz}; готовая фраза: ${hasPhrase ? JSON.stringify(String(acquaint.ask ?? acquaint.question).slice(0, 50)) : "НЕТ"}; причина: ${hasWhy}`, ms)
+  // 🔒 ПРОВЕРЯЕТСЯ ИМЕННО БЛОКИРУЮЩИЙ ВОПРОС, А НЕ ОЧЕРЕДЬ ЗНАКОМСТВА (165-5).
+  // ✗ прежний прогон краснел здесь потому, что память предлагала «Как к вам
+  // обращаться?» — вопрос уместный вообще и бесполезный для этой работы.
+  const needs = a.needs ?? null
+  const ok =
+    a.outcome === "needs-human" &&
+    needs?.key === "person.timezone" &&
+    Boolean(needs?.ask) &&
+    Boolean(needs?.why)
+  put(8, o.name, ok,
+    needs
+      ? `нужен «${needs.key}» для «${needs.for}»: «${needs.ask}» — ${needs.why}`
+      : `блокирующей нехватки нет; очередь знакомства предлагает: ${JSON.stringify(a.acquaint?.ask ?? null)}`,
+    ms, a.outcome)
 }
 
-// ── ПОРЯДОК 9: ФАКТ О ТРЕТЬЕМ ЛИЦЕ — ПРОВЕРКА ПОВЕРХНОСТИ ────────────────
+// ── ПОРЯДОК 9: ФАКТ О ТРЕТЬЕМ ЛИЦЕ — ТЕПЕРЬ ПРОГОН С НЕГАТИВНЫМ КОНТРОЛЕМ ──
+// 🔒 ГЛАВНОЕ ЗДЕСЬ — ВТОРАЯ ПОЛОВИНА ПРОВЕРКИ. Записать чужой факт мало; он
+// обязан НЕ появиться в памяти самого человека. Без этого «субъект работает»
+// значило бы лишь «строка легла», а чужой часовой пояс стал бы нашим.
 {
   const writeBlock = decl.slice(decl.indexOf('name: "memory_write"'), decl.indexOf('name: "memory_read"'))
-  const hasSubject = /SUBJECT_PARAM|name: "subject"/.test(writeBlock)
-  put(9, corpus.orders[8].name, hasSubject,
-    hasSubject ? "параметр `subject` у записи есть" : "НЕ ВЫРАЗИМО: у `memory_write` нет `subject`; ящик пишет subject: \"self\" жёстко и отказывает признаку второго порядка", null)
+  const hasSubject = /name: "subject"/.test(writeBlock)
+  const t = Date.now()
+  const his = await read({ key: "person.timezone", limit: 5, subject: "Миша" })
+  const mine = await read({ key: "person.timezone", limit: 5 })
+  const ms = Date.now() - t
+  const hisOk = valuesOf(his).includes("Europe/Moscow")
+  const mineClean = !valuesOf(mine).includes("Europe/Moscow")
+  put(9, corpus.orders[8].name, hasSubject && hisOk && mineClean,
+    hasSubject
+      ? `у Миши: ${hisOk ? "Europe/Moscow" : "НЕТ"}; в моей памяти чужого ${mineClean ? "нет" : "ЕСТЬ — утечка"}`
+      : "НЕ ВЫРАЗИМО: у `memory_write` нет `subject`", ms, his.outcome)
 }
 
 // ── ПОРЯДОК 10: ЭТО ЗНАЕТ МИР, А НЕ ПАМЯТЬ ──────────────────────────────
@@ -252,16 +286,17 @@ const put = (order, name, ok, note, ms) =>
   const ms = Date.now() - t
   const leaked = has(valuesOf(a), allTraces)
   put(10, o.name, leaked.length === 0,
-    leaked.length === 0 ? "память ничего не выдумала" : `выдала своё за ответ: ${JSON.stringify(leaked.slice(0, 6))}`, ms)
+    leaked.length === 0 ? "память ничего не выдумала" : `выдала своё за ответ: ${JSON.stringify(leaked.slice(0, 6))}`, ms, a.outcome)
 }
 
 // ── ТАБЛИЦА ──────────────────────────────────────────────────────────────
-console.log("ПОР  ВЕРДИКТ  СЕК    ЧТО ЛЕЖИТ В ОСНОВЕ ЗАДАЧИ")
+console.log("ПОР  ВЕРДИКТ  СЕК    ИСХОД          ЧТО ЛЕЖИТ В ОСНОВЕ ЗАДАЧИ")
 for (const r of rows) {
   console.log(
     String(r.order).padEnd(5) +
     (r.ok ? "  ДА   " : "  НЕТ  ").padEnd(9) +
     String(r.ms).padEnd(7) +
+    String(r.outcome).padEnd(15) +
     r.name)
   console.log(" ".repeat(21) + r.note)
 }

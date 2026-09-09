@@ -13,8 +13,11 @@ import {
   offerToLearn,
   type ResearchInput,
 } from "./research"
-import { type Acquaint, nextQuestion } from "./acquaint"
+import { type Acquaint, askFor, nextQuestion } from "./acquaint"
 import { candidates } from "./schema-map"
+// 🔒 ЗАКРЫТЫЙ СПИСОК ИСХОДОВ БЕРЁТСЯ ИЗ ЕДИНСТВЕННОГО ОБЪЯВЛЕНИЯ (165-4), а не
+// повторяется здесь: из него же порождается описание инструмента для агента.
+import { OUTCOMES } from "./decl.mjs"
 
 // ВНУТРЕННОСТИ ЧЁРНОГО ЯЩИКА ПАМЯТИ (161-1, стандарт памяти §10).
 //
@@ -37,6 +40,10 @@ export type MemoryWriteInput = {
   basis?: string
   source?: string
   automationId?: number | null
+  /** Чей это факт: сам человек по умолчанию, либо кто-то из его окружения (165-1). */
+  subject?: string
+  /** Где факт верен: ключ другого признака. Пусто значит «не знаю где» (165-1, закон 141). */
+  scope?: string
   /** Блок дообучения: находка глубины, которую человек согласился зафиксировать (162-9). */
   research?: ResearchInput
   /** Человек сказал «да» на предложение зафиксировать. Без этого род `research` не пишется. */
@@ -281,13 +288,23 @@ export async function write(input: MemoryWriteInput): Promise<MemoryWriteResult>
     }
   }
 
+  // 🔒 СУБЪЕКТ И ОХВАТ ОТКРЫТЫ СНАРУЖИ (165-1), И ЭТО НЕ НОВАЯ СПОСОБНОСТЬ, А
+  // СНЯТАЯ ЗАГЛУШКА: колонки `subject_key` (шаг 83) и `scope_key` (шаг 141) есть
+  // у всех признаков, писатель их принимает, а дверь агента писала «self» жёстко
+  // и охват не передавала вовсе. Измерено 2026-09-09: записать факт о третьем
+  // лице или указать область истинности было НЕЧЕМ.
+  // 🛑 УМОЛЧАНИЕ ПРЕЖНЕЕ: не назвали — значит про самого человека. Иначе каждый
+  // прежний вызов сменил бы смысл молча.
+  const subject = String(input.subject ?? "").trim() || "self"
+  const scope = String(input.scope ?? "").trim() || null
   const written = await writeFact({
     automationId: input.automationId ?? null,
     basis: input.basis ?? null,
     claim: (claim || null) as FactClaim | null,
     key,
+    scope,
     source: input.source ?? "сказано человеком в переписке",
-    subject: "self",
+    subject,
     // 🔒 ЗНАЧЕНИЕ ПЕРЕДАЁТСЯ КАК ЕСТЬ, БЕЗ ПРИВЕДЕНИЯ К СТРОКЕ. Приведение типа
     // ПЕРЕД проверкой обезоруживает проверку — закон, оплаченный в 160 тем, что
     // объект становился строкой до сторожа глубины и проходил его насквозь.
@@ -479,6 +496,15 @@ export type MemoryItem = {
    * второе за свой факт.
    */
   about: "self" | "all-records"
+  /**
+   * Значение пришло по СЛАБОМУ совпадению — по описанию записи, а не по словам
+   * человека (165-3).
+   *
+   * 🛑 ЭТО НЕ «ПЛОХОЕ ЗНАЧЕНИЕ», А ЗНАЧЕНИЕ НЕ НА ТОТ ВОПРОС. ✗ измерено
+   * 2026-09-09: «в каком я часовом поясе» отвечало городом, и ответ выглядел
+   * уверенным. Пусто значит «совпало по словам человека».
+   */
+  weak?: boolean
 }
 
 /**
@@ -492,6 +518,35 @@ export type Missing = { key: string; title: string; where: string; why: string }
 
 /** Стоит ли идти глубже и во что это обойдётся. */
 export type Deeper = { available: boolean; cost_seconds: number; what: string }
+
+/**
+ * Исход ответа целиком — одно слово про то, что произошло (165-4).
+ *
+ * 🔒 СПИСОК ПОРОЖДЁН ИЗ `decl.mjs`, А НЕ ПОВТОРЁН ЗДЕСЬ РУКАМИ. Два перечисления
+ * одного закрытого списка расходятся молча — закон, оплаченный в проекте числами
+ * в инструкциях пять раз подряд.
+ */
+export type Outcome = (typeof OUTCOMES)[number]["name"]
+
+/**
+ * Блокирующая нехватка: без этого ответа человека дальше нельзя (165-5).
+ *
+ * 🔒 ЭТО НЕ ЗНАКОМСТВО, И РАЗНИЦА СОДЕРЖАТЕЛЬНАЯ. Очередь знакомства говорит
+ * «спросить когда-нибудь» и идёт своим порядком; `needs` говорит «эта работа без
+ * этого не делается» и приходит от объявленной зависимости признака (`requires`).
+ * ✗ до 165-2 их не различал никто: на «напомни мне завтра в девять» память
+ * предлагала спросить «Как к вам обращаться?», а часовой пояс не называла вовсе.
+ */
+export type Needs = {
+  /** Признак, которого не хватает. */
+  key: string
+  /** Кто его потребовал: признак, попавший в вопрос. */
+  for: string
+  /** Готовая фраза человеку на его языке. */
+  ask: string
+  /** Почему без этого нельзя — произносится вместе с вопросом. */
+  why: string
+}
 
 /**
  * Предложение зафиксировать находку глубокого поиска (162-9).
@@ -548,6 +603,10 @@ export type LookedAt = {
 export type MemoryReadResult =
   | {
       found: true
+      /** Что произошло с ответом целиком (165-4). */
+      outcome: Outcome
+      /** Чего не хватает, чтобы работу можно было делать (165-5). */
+      needs?: Needs
       subject: string
       total: number
       items: MemoryItem[]
@@ -563,6 +622,8 @@ export type MemoryReadResult =
     }
   | {
       found: false
+      outcome: Outcome
+      needs?: Needs
       subject: string
       searched: string[]
       hint: string
@@ -707,7 +768,7 @@ export async function read(input: {
     // первого уровня, чтобы обеспечить реактивную работу». Каждый кандидат — это
     // поход в слой данных; непрочитанные названы в `missing`, а не забыты.
     const LEVEL1_READS = 8
-    const toRead: { key: string; title: string; address: string; byColumn: boolean }[] = []
+    const toRead: { key: string; title: string; address: string; byColumn: boolean; strong: boolean }[] = []
     for (const hit of hits) {
       const fact = allFacts().find(f => f.key === hit.key)
       if (!fact) continue
@@ -727,7 +788,16 @@ export async function read(input: {
         })
         continue
       }
-      toRead.push({ address, byColumn: placed.kind === "column", key: hit.key, title: fact.title })
+      // 🔒 `strong` ЕДЕТ ДО САМОГО ЗНАЧЕНИЯ (165-3): по нему потом видно, отвечали
+      // мы на заданный вопрос или принесли похожее. Слабое совпадение — это два
+      // слова из ОПИСАНИЯ записи, а не из слов человека.
+      toRead.push({
+        address,
+        byColumn: placed.kind === "column",
+        key: hit.key,
+        strong: hit.strong === true,
+        title: fact.title,
+      })
     }
 
     // 🔒 ЧТЕНИЯ УРОВНЯ 1 ИДУТ ОДНОВРЕМЕННО, А НЕ ПО ОЧЕРЕДИ — И ЭТО ПРЯМОЕ
@@ -758,6 +828,7 @@ export async function read(input: {
           scope: v.scope,
           title: t.title,
           value: v.value,
+          weak: t.strong ? undefined : true,
         })
       } else {
         missing.push({
@@ -875,6 +946,12 @@ export async function read(input: {
         scope: null,
         title: `Знание об окружении: ${q}`,
         value: text,
+        // 🔒 СПРОШЕНО ФРАЗОЙ ЧЕЛОВЕКА, А НЕ ИМЕНЕМ С УРОВНЯ 1 — ЗНАЧИТ СЛАБОЕ (165-3).
+        // Это не «плохая находка»: вектор по фразе находит то, чего связи по
+        // именам не находят (измерено 161-3). Но такой кусок пришёл ПО ПОХОЖЕСТИ,
+        // и выдавать его за ответ на заданный вопрос нельзя — на нём и держится
+        // разница между `answered` и `partial`.
+        weak: known.includes(q) ? undefined : true,
       })
     }
     levels.push({
@@ -1021,6 +1098,58 @@ export async function read(input: {
     }
   }
 
+  // ── БЛОКИРУЮЩАЯ НЕХВАТКА: ЧЕГО НЕ ХВАТАЕТ ДЛЯ САМОЙ РАБОТЫ (165-5) ────────
+  //
+  // 🔒 ВЫВОДИТСЯ ИЗ ОБЪЯВЛЕННОЙ ЗАВИСИМОСТИ, А НЕ ИЗ СЛОВ ВОПРОСА. ✗ измерено
+  // 2026-09-09: «поставь срок на завтра» находило недостающий часовой пояс, а
+  // «напомни мне завтра в девять» — нет; задача одна, разница в формулировке.
+  // Теперь `intent.schedule` объявляет `requires: ["person.timezone"]`, и вопрос
+  // человеку возникает от требования, а не от совпадения слов.
+  // 🛑 ЧИТАЕМ ТОЛЬКО ТОГДА, КОГДА ТРЕБОВАНИЕ ЕСТЬ: у вопроса без зависимостей
+  // лишнего похода в слой данных не возникает вовсе.
+  let needs: Needs | undefined
+  const required = [...new Set(hits.flatMap(h => h.requires))].filter(Boolean)
+  if (required.length > 0) {
+    const have = new Set(items.filter(i => i.about === "self").map(i => i.key))
+    for (const need of required) {
+      if (have.has(need)) continue
+      const got = await recall(need, { limit: 1, subject })
+      if (got.found === true && got.items.length > 0) continue
+      // 🛑 НЕТ ГОТОВОЙ ФРАЗЫ — НЕТ ВОПРОСА, И ЭТО НАШ ДОЛГ, А НЕ ПОВОД ВЫДУМАТЬ.
+      // Тот же закон, что у знакомства: сочинённый на ходу вопрос звучит анкетой.
+      const words = askFor(need, language)
+      if (!words) continue
+      needs = {
+        ask: words.ask,
+        for: hits.find(h => h.requires.includes(need))?.key ?? "",
+        key: need,
+        why: words.why,
+      }
+      break
+    }
+  }
+
+  // ── ИСХОД: ОДНО СЛОВО ПРО ОТВЕТ ЦЕЛИКОМ (165-4) ──────────────────────────
+  //
+  // 🔒 ПОРЯДОК ПРОВЕРОК — ЭТО И ЕСТЬ СМЫСЛ ПОЛЯ. Блокирующая нехватка важнее
+  // любой находки: ответить наполовину на работу, которую нельзя сделать, хуже,
+  // чем сразу назвать недостающее. Дальше — отвечали ли мы на ЗАДАННЫЙ вопрос
+  // (сильное совпадение на уровне 1) или принесли похожее.
+  // 🛑 «НЕ ПРО ПАМЯТЬ» И «ИСКАЛИ И НЕ НАШЛИ» РАЗВЕДЕНЫ НАМЕРЕННО: первое значит,
+  // что ни один признак реестра не признал вопрос своим (спрашивают у мира),
+  // второе — что предмет наш, а значений нет. Слитые в одно «не найдено», они
+  // одинаково останавливают следующий шаг, хотя шаги эти разные.
+  const direct = items.filter(i => i.weak !== true && i.key !== "surroundings")
+  const outcome: Outcome = needs
+    ? "needs-human"
+    : direct.length > 0
+      ? "answered"
+      : items.length > 0
+        ? "partial"
+        : !key && hits.length === 0
+          ? "not-mine"
+          : "nothing-known"
+
   if (items.length > 0) {
     return {
       deeper: depth >= MAX_DEPTH ? noDeeper : offer,
@@ -1031,6 +1160,8 @@ export async function read(input: {
       levels,
       looked,
       missing,
+      needs,
+      outcome,
       subject,
       total: items.length,
     }
@@ -1062,6 +1193,8 @@ export async function read(input: {
           : "по этим словам в записанном ничего не нашлось"
         : "о человеке пока ничего не записано",
     missing,
+    needs,
+    outcome,
     searched,
     subject,
   }

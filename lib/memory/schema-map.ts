@@ -41,7 +41,13 @@ export type MapEntry = {
   exists: boolean
 }
 
-export type Candidate = MapEntry & { why: string[] }
+export type Candidate = MapEntry & {
+  why: string[]
+  /** Совпало по словам человека, а не только по описанию записи (165-3). */
+  strong: boolean
+  /** Без каких признаков этот не работает вовсе (165-2). */
+  requires: string[]
+}
 
 /**
  * Какие таблицы существуют в базе.
@@ -129,6 +135,8 @@ export function candidates(query: string, opts: { limit?: number } = {}): {
       key: fact.key,
       level: String(fact.level ?? ""),
       placement,
+      requires: Array.isArray(fact.requires) ? fact.requires : [],
+      strong: hit.strong === true,
       subject: fact.subject ?? null,
       tags: Array.isArray(fact.tags) ? fact.tags : [],
       title: fact.title,

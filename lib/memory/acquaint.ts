@@ -83,3 +83,21 @@ export function nextQuestion(known: Set<string>, lang: string | null | undefined
   const [ask, why] = words[code]
   return { ask, key: first.key, left: queue.length, why }
 }
+
+/**
+ * Готовая фраза для ОДНОГО названного признака — для блокирующего вопроса (165-5).
+ *
+ * 🔒 ЭТО ТОТ ЖЕ СЛОВАРЬ, ЧТО У ЗНАКОМСТВА, И ВТОРОГО ЗАВОДИТЬ НЕЛЬЗЯ. Вопрос
+ * человеку звучит одинаково независимо от того, почему его задают: разные слова
+ * для одного и того же признака — это две редакции одной фразы, и через месяц
+ * они разойдутся. Разное здесь — не текст, а СРОЧНОСТЬ.
+ * 🛑 НЕТ СЛОВ — НЕТ ВОПРОСА. Придуманная на ходу фраза звучит как анкета; это то
+ * же правило, что у `nextQuestion`, и по той же причине.
+ */
+export function askFor(key: string, lang: string | null | undefined): { ask: string; why: string } | null {
+  const code = String(lang ?? "").trim().slice(0, 2).toLowerCase() === "en" ? "en" : "ru"
+  const words = WORDS[key]
+  if (!words) return null
+  const [ask, why] = words[code]
+  return { ask, why }
+}
