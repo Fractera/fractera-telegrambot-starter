@@ -1,0 +1,151 @@
+// СБОРКА КОРПУСА ИЗ РЕАЛЬНОЙ ДОКУМЕНТАЦИИ FRACTERA (167).
+//
+// 🎯 РЕШЕНИЕ ВЛАДЕЛЬЦА 2026-09-09, ДОСЛОВНО: «может быть поступить более
+// практично для теста — загрузить реальную документацию Fractera: документы,
+// связанные с памятью, и документы слоя порт 3000, CLAUDE.md, может быть два
+// навыка. Я думаю это лучше, не так ли? Реальные документы с реальными связями».
+//
+// 🔒 ЕГО ДОВОД СИЛЬНЕЕ МОЕГО ПЕРВОНАЧАЛЬНОГО, И ВОТ ПОЧЕМУ. Синтетический текст
+// про ИИ — это текст, где ответы знает тот, кто его сочинил: проверка выродилась
+// бы в «нашлось то, что я положил». У реальных документов есть НАСТОЯЩИЕ связи
+// между собой — инструкция агента ссылается на память, память на реестр, навык
+// на инструкцию. Граф либо выявит их, либо нет, и это честный ответ о графе.
+//
+// 🛑 ОДНО ВОЗРАЖЕНИЕ НАЗВАНО ДО ПОСТРОЙКИ: агент читает эти документы как свои
+// инструкции, то есть знает их помимо всякого поиска. Поэтому оба теста
+// спрашивают ХРАНИЛИЩА НАПРЯМУЮ, минуя модель: иначе «нашла в векторе» было бы
+// неотличимо от «знала и так».
+//
+// Собирает `development-docs/instruments/167-corpus.json`, который читают оба
+// прибора: 167-1 (вектор) и 167-2 (граф связей).
+import { readFileSync, writeFileSync } from "node:fs"
+import { fileURLToPath } from "node:url"
+import { dirname, join } from "node:path"
+
+const here = dirname(fileURLToPath(import.meta.url))
+const root = join(here, "../..")
+const code = join(root, "..")
+
+// 🔒 ПЯТЬ ДОКУМЕНТОВ ИЗ ТРЁХ РАЗНЫХ МЕСТ, И ЭТО НЕ ДЛЯ ОБЪЁМА. Связи должны
+// пересекать границу репозитория: память живёт на 3600, `use-app-config` — на
+// 3000, а инструкция агента ссылается и на память, и на навык реестра. Корпус из
+// одного репозитория показал бы связность папки, а не способность графа.
+const DOCS = [
+  {
+    id: "memory-overview",
+    title: "Память Fractera — обзор",
+    layer: "служба 3600",
+    path: join(root, "development-docs/MEMORY.md"),
+    anchors: ["Память Fractera", "каскад памяти"],
+  },
+  {
+    id: "agent-instruction",
+    title: "Инструкция агента Telegram-канала",
+    layer: "служба 3600",
+    path: join(root, "CLAUDE.md"),
+    anchors: ["Инструкция агента", "Telegram-канал Fractera"],
+  },
+  {
+    id: "skill-registry-entry",
+    title: "Навык: новая запись реестра",
+    layer: "служба 3600",
+    path: join(root, ".claude/skills/create-registry-entry/SKILL.md"),
+    anchors: ["create-registry-entry", "реестр признаков"],
+  },
+  {
+    id: "skill-agentic-rag",
+    title: "Навык слоя 3000: агентный RAG",
+    layer: "гостевое приложение 3000",
+    path: join(code, "fractera-next-starter/.claude/skills/use-agentic-rag/SKILL.md"),
+    anchors: ["use-agentic-rag", "граф знаний"],
+  },
+  {
+    id: "skill-app-config",
+    title: "Навык слоя 3000: настройки приложения",
+    layer: "гостевое приложение 3000",
+    path: join(code, "fractera-next-starter/.claude/skills/use-app-config/SKILL.md"),
+    anchors: ["use-app-config", "APP-CONFIG"],
+  },
+]
+
+/**
+ * Резать по разделам верхнего уровня.
+ *
+ * 🔒 РЕЗАТЬ ПРИХОДИТСЯ НАМ, И ЭТО ИЗМЕРЕННОЕ СВОЙСТВО, А НЕ ДОПУЩЕНИЕ: в слое
+ * данных нет ни чанкинга, ни ограничения длины — текст уезжает в эмбеддинг
+ * целиком. Документ на восемь тысяч слов превысил бы предел модели и был бы
+ * отвергнут, а короткий прошёл бы: то есть поведение зависело бы от размера
+ * файла и выглядело бы случайным.
+ * 🛑 ГРАФ РЕЖЕТ САМ — ему отдаём документ ЦЕЛИКОМ. Разные потребители, разные
+ * правила; смешать их значило бы отдать графу наши куски и потерять связи между
+ * ними.
+ */
+function sections(text, max = 4000) {
+  const out = []
+  let buf = []
+  for (const line of text.split("\n")) {
+    if (/^## /.test(line) && buf.join("\n").trim().length > 400) {
+      out.push(buf.join("\n").trim())
+      buf = []
+    }
+    buf.push(line)
+    if (buf.join("\n").length > max) {
+      out.push(buf.join("\n").trim())
+      buf = []
+    }
+  }
+  if (buf.join("\n").trim()) out.push(buf.join("\n").trim())
+  return out.filter(s => s.length > 200)
+}
+
+const docs = []
+for (const d of DOCS) {
+  let text
+  try {
+    text = readFileSync(d.path, "utf8")
+  } catch {
+    console.log(`✗ НЕТ ФАЙЛА: ${d.path}`)
+    continue
+  }
+  const parts = sections(text)
+  docs.push({ ...d, path: undefined, words: text.split(/\s+/).length, text, parts })
+  console.log(`✓ ${d.id.padEnd(22)} ${String(text.split(/\s+/).length).padStart(5)} слов → ${parts.length} кусков`)
+}
+
+// 🔒 ВОПРОСЫ НАЗВАНЫ ЗДЕСЬ, ДО ПРОГОНА, И РАЗДЕЛЕНЫ ПО ТОМУ, ЧТО ПРОВЕРЯЮТ.
+// Вектору — вопросы, где слова НЕ совпадают с текстом (иначе это проверка
+// подстроки). Графу — вопросы о СВЯЗЯХ между документами, потому что связи и
+// есть его предмет; вопрос про один документ он ответил бы и без рёбер.
+const corpus = {
+  about:
+    "Корпус двух проверок 167: реальная документация Fractera. 167-1 проверяет векторный склад, " +
+    "167-2 — граф связей. Оба спрашивают хранилища напрямую, минуя модель агента.",
+  source: "probe-167",
+  docs,
+  vectorQuestions: [
+    { q: "чем отличается сказанное человеком от догадки системы", expect: "memory-overview" },
+    { q: "как объяснить боту новый вид сведений, которых он не понимает", expect: "skill-registry-entry" },
+    { q: "где живут настройки сайта и как их поменять без пересборки", expect: "skill-app-config" },
+    { q: "что делать, когда обычный поиск по словам не находит нужного", expect: "skill-agentic-rag" },
+  ],
+  vectorControl: {
+    q: "рецепт домашнего борща со свёклой и сметаной",
+    about: "Постороннее: близость обязана быть ниже порога 0.33, иначе склад отвечает похожим на всё",
+  },
+  graphQuestions: [
+    { q: "Память Fractera", about: "знает ли граф сам документ памяти" },
+    { q: "реестр признаков", about: "сущность, названная в ДВУХ документах — памяти и навыке" },
+    { q: "граф знаний", about: "сущность, общая для памяти 3600 и навыка слоя 3000" },
+  ],
+  graphControl: {
+    q: "Зурбаган",
+    about: "Выдуманное имя: метки быть не должно, иначе поиск отвечает чем попало",
+  },
+}
+
+const out = join(root, "development-docs/instruments/167-corpus.json")
+writeFileSync(out, `${JSON.stringify(corpus, null, 2)}\n`)
+const words = docs.reduce((s, d) => s + d.words, 0)
+const parts = docs.reduce((s, d) => s + d.parts.length, 0)
+console.log(`\nкорпус: ${docs.length} документов, ${words} слов, ${parts} кусков для вектора`)
+console.log(`записан: ${out}`)

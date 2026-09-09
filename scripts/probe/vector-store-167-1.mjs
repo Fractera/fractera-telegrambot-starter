@@ -1,0 +1,163 @@
+// ПРИБОР 167-1 — ВЕКТОРНЫЙ СКЛАД НА РЕАЛЬНОЙ ДОКУМЕНТАЦИИ FRACTERA.
+//
+// 🎯 ТРЕБОВАНИЕ ВЛАДЕЛЬЦА 2026-09-09: «до тех пор пока мы не подтвердили
+// способности всех трёх составляющих к тестированию, мы не можем приступать».
+// Таблицы подтверждены прогоном по порядкам (9 из 10). Здесь — второй слой.
+//
+// 🔒 ЧТО ИМЕННО ДОКАЗЫВАЕТСЯ, И ЭТО НЕ «ПОИСК РАБОТАЕТ». Доказывается цепочка:
+// текст доехал → у него посчитан эмбеддинг → он попал в индекс → вопрос ДРУГИМИ
+// СЛОВАМИ находит нужный кусок → посторонний вопрос его НЕ находит. Без
+// последнего звена склад, отвечающий на всё, выглядел бы работающим.
+//
+// 🛑 СПРАШИВАЕМ СКЛАД НАПРЯМУЮ, БЕЗ МОДЕЛИ. Эти документы агент читает как свои
+// инструкции — он знает их содержание помимо всякого поиска. Спроси мы его,
+// «нашла в векторе» было бы неотличимо от «знала и так».
+//
+// 🛑 ЧТО ПИШЕТ И ЧЬЁ ЭТО: своя коллекция `probe-167-docs` в общем складе, метка
+// в `refTable`. Уборка по коллекции — чужих записей не касается.
+//
+// Запуск: node scripts/probe/vector-store-167-1.mjs [keep|clean]
+import { readFileSync } from "node:fs"
+import { fileURLToPath } from "node:url"
+import { dirname, join } from "node:path"
+
+const MARK = "===PROBE_167_1==="
+const MODE = process.argv[2] ?? "run"
+const here = dirname(fileURLToPath(import.meta.url))
+const root = join(here, "../..")
+const corpus = JSON.parse(readFileSync(join(root, "development-docs/instruments/167-corpus.json"), "utf8"))
+const COLLECTION = "probe-167-docs"
+const REF_TABLE = "probe_167"
+// 🔒 ПОРОГ НЕ ВЫДУМАН ЗДЕСЬ: это `SIMILAR_THRESHOLD` из `lib/automations/similar.ts`,
+// полученный измерением (посторонние ≤ 0.286, верные ≥ 0.379, взята середина).
+// Своё число рядом с чужим измеренным — второй порог, который разойдётся молча.
+const THRESHOLD = 0.33
+
+function machineEnv(k) {
+  try {
+    for (const line of readFileSync(process.env.FRACTERA_MACHINE_ENV || "/etc/fractera/secrets.env", "utf8").split("\n")) {
+      const i = line.indexOf("=")
+      if (i > 0 && line.slice(0, i).trim() === k) return line.slice(i + 1).trim().replace(/^["']|["']$/g, "")
+    }
+  } catch { /* нет файла — законное состояние */ }
+  return ""
+}
+const key = process.env.DATA_SECRET || machineEnv("DATA_SECRET") || ""
+const dataUrl = process.env.REMOTE_DATA_URL || machineEnv("REMOTE_DATA_URL") || "http://localhost:3300"
+if (!key) { console.log(`${MARK} НЕТ КЛЮЧА СЛОЯ ДАННЫХ`); process.exit(2) }
+
+let bad = 0
+const say = (ok, what) => { if (!ok) bad += 1; console.log(`${ok ? "✓" : "✗"} ${what}`) }
+const post = (path, body) => fetch(`${dataUrl}${path}`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json", "X-Data-Secret": key },
+  body: JSON.stringify(body),
+}).then(async r => ({ status: r.status, json: await r.json().catch(() => ({})) }))
+  .catch(e => ({ status: 0, json: { ok: false, error: String(e) } }))
+const sql = (text, params = []) => post("/db/migrate", { sql: text, params }).then(r => r.json)
+
+async function clean() {
+  await sql("DELETE FROM vectors WHERE collection = ?", [COLLECTION])
+  const r = await sql("SELECT COUNT(*) AS n FROM vectors WHERE collection = ?", [COLLECTION])
+  return Number((r.rows ?? [])[0]?.n ?? -1)
+}
+
+if (MODE === "clean") {
+  console.log(MARK)
+  console.log(`уборка коллекции «${COLLECTION}»: осталось ${await clean()}`)
+  console.log(`${MARK}DONE`)
+  process.exit(0)
+}
+
+console.log(MARK)
+console.log(`корпус: ${corpus.docs.length} документов реальной документации Fractera`)
+
+// ── СОСТОЯНИЕ СКЛАДА ДО ─────────────────────────────────────────────────
+const before = await sql("SELECT COUNT(*) AS n FROM vectors")
+const beforeAll = Number((before.rows ?? [])[0]?.n ?? 0)
+await clean()
+const status = await fetch(`${dataUrl}/vectors/status`, { headers: { "X-Data-Secret": key } })
+  .then(r => r.json()).catch(() => ({}))
+console.log(`склад до посева: всего записей ${beforeAll}; режим: ${JSON.stringify(status).slice(0, 160)}`)
+console.log("")
+
+// ── ПОСЕВ: КАЖДЫЙ КУСОК — СВОЯ ЗАПИСЬ ───────────────────────────────────
+// 🔒 РЕЖЕМ МЫ, И ЭТО ИЗМЕРЕННОЕ СВОЙСТВО СКЛАДА: чанкинга в слое данных нет,
+// текст уезжает в эмбеддинг целиком. Документ на восемь тысяч слов превысил бы
+// предел модели, короткий прошёл бы — то есть поведение зависело бы от размера
+// файла. Здесь это названо, а не обойдено молча.
+const started = Date.now()
+let sent = 0
+let refused = 0
+for (const d of corpus.docs) {
+  for (let i = 0; i < d.parts.length; i += 1) {
+    const r = await post("/vectors", {
+      collection: COLLECTION,
+      id: `${d.id}-${i}`,
+      refId: d.id,
+      refTable: REF_TABLE,
+      text: d.parts[i],
+    })
+    if (r.status === 200 && r.json.ok !== false) sent += 1
+    else { refused += 1; if (refused <= 2) console.log(`  отказ на ${d.id}-${i}: ${JSON.stringify(r.json).slice(0, 120)}`) }
+  }
+}
+const seedMs = Date.now() - started
+const parts = corpus.docs.reduce((s, d) => s + d.parts.length, 0)
+say(sent === parts, `все куски приняты складом: ${sent} из ${parts}${refused ? `, отказов ${refused}` : ""}`)
+console.log(`  посев занял ${(seedMs / 1000).toFixed(1)} с — по ${Math.round(seedMs / Math.max(sent, 1))} мс на кусок`)
+
+// ── ДОКАЗАТЕЛЬСТВО ТРАНСФОРМАЦИИ: ЭМБЕДДИНГ ПОСЧИТАН И ЛЕЖИТ ────────────
+// 🔒 «ЗАПИСЬ ЕСТЬ» И «ЭМБЕДДИНГ ПОСЧИТАН» — РАЗНЫЕ УТВЕРЖДЕНИЯ. Строка может
+// лечь с пустым вектором, и поиск тогда молча не найдёт ничего; проверяем
+// ДЛИНУ вектора, а не наличие строки.
+const rows = await sql(
+  "SELECT id, LENGTH(embedding) AS bytes, LENGTH(text) AS chars FROM vectors WHERE collection = ? ORDER BY id LIMIT 3",
+  [COLLECTION],
+)
+const sample = rows.rows ?? []
+const bytes = Number(sample[0]?.bytes ?? 0)
+say(sample.length > 0 && bytes > 1000,
+  `у записей есть эмбеддинг: первая — ${bytes} байт вектора на ${sample[0]?.chars ?? 0} знаков текста`)
+console.log(`  измерений: ${Math.round(bytes / 4)} (ожидается 1536 у text-embedding-3-small)`)
+
+const cnt = await sql("SELECT COUNT(*) AS n FROM vectors WHERE collection = ?", [COLLECTION])
+const stored = Number((cnt.rows ?? [])[0]?.n ?? 0)
+const ann = await sql("SELECT COUNT(*) AS n FROM vectors_ann")
+say(stored === parts, `в складе ровно наши куски: ${stored}`)
+console.log(`  индекс поиска (vectors_ann): ${Number((ann.rows ?? [])[0]?.n ?? -1)} записей всего`)
+console.log("")
+
+// ── ПОИСК ПО СМЫСЛУ: СЛОВА ВОПРОСА В ТЕКСТЕ НЕ СОВПАДАЮТ ────────────────
+console.log("ВОПРОС                                                  НАШЁЛ            БЛИЗОСТЬ  ОЖИДАЛИ")
+for (const { q, expect } of corpus.vectorQuestions) {
+  const t = Date.now()
+  const r = await post("/vectors/search", { collection: COLLECTION, k: 5, query: q })
+  const ms = Date.now() - t
+  const items = Array.isArray(r.json.results) ? r.json.results : r.json.rows ?? []
+  const top = items[0] ?? {}
+  const got = String(top.ref_id ?? top.refId ?? "—")
+  const score = Number(top.score ?? top.similarity ?? 0)
+  const ok = got === expect && score >= THRESHOLD
+  console.log(
+    `${q.slice(0, 54).padEnd(56)}${got.padEnd(17)}${score.toFixed(3).padEnd(10)}${expect}`)
+  say(ok, `  → ${ok ? "верно" : `ОЖИДАЛИ ${expect}, получили ${got}`} · ${ms} мс`)
+}
+
+// 🔒 НЕГАТИВНЫЙ КОНТРОЛЬ: ПОСТОРОННЕЕ НЕ ДОЛЖНО ПРОХОДИТЬ ПОРОГ.
+// Без него всё выше доказывало бы лишь то, что склад возвращает верхнюю строку.
+{
+  const r = await post("/vectors/search", { collection: COLLECTION, k: 3, query: corpus.vectorControl.q })
+  const items = Array.isArray(r.json.results) ? r.json.results : r.json.rows ?? []
+  const score = Number(items[0]?.score ?? items[0]?.similarity ?? 0)
+  console.log("")
+  say(score < THRESHOLD,
+    `контроль: «${corpus.vectorControl.q}» → близость ${score.toFixed(3)} ${score < THRESHOLD ? "ниже" : "ВЫШЕ"} порога ${THRESHOLD}`)
+}
+
+if (MODE !== "keep") console.log(`\nуборка: в коллекции осталось ${await clean()}`)
+else console.log(`\nкорпус ОСТАВЛЕН (keep) — снять: … vector-store-167-1.mjs clean`)
+
+console.log(`${MARK}DONE`)
+console.log(`PROBE_RC=${bad === 0 ? 0 : 1}`)
+process.exit(bad === 0 ? 0 : 1)
