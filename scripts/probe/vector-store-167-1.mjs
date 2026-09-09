@@ -216,12 +216,20 @@ say(THRESHOLD > bestStranger && THRESHOLD < worstTrue,
 {
   // 2. Повтор того же запроса: склад обязан быть устойчив, иначе прогон не
   // воспроизводим и любое сравнение «до/после» бессмысленно.
+  // 🛑 КОНТРОЛЬ ОБЯЗАН ПОКАЗЫВАТЬ РАЗНИЦУ, А НЕ ТОЛЬКО ФАКТ РАСХОЖДЕНИЯ.
+  // ✗ первая редакция печатала «не совпало» и молчала о том, ЧТО именно, —
+  // пришлось гадать и ставить отдельную диагностику. Проверка, после которой
+  // нужно исследование, сделана наполовину.
   const q = corpus.vectorQuestions[0].q
-  const a = await post("/vectors/search", { collection: COLLECTION, k: 3, query: q })
-  const b = await post("/vectors/search", { collection: COLLECTION, k: 3, query: q })
-  const ids = x => JSON.stringify((Array.isArray(x.json.results) ? x.json.results : x.json.rows ?? [])
-    .map(i => String(i.ref_id ?? i.refId ?? "") + ":" + Number(i.score ?? i.similarity ?? 0).toFixed(4)))
-  say(ids(a) === ids(b), `контроль 2: повтор того же вопроса дал тот же ответ`)
+  const runs = []
+  for (let n = 0; n < 3; n += 1) {
+    const r = await post("/vectors/search", { collection: COLLECTION, k: 3, query: q })
+    const items = Array.isArray(r.json.results) ? r.json.results : r.json.rows ?? []
+    runs.push(items.map(i => `${String(i.ref_id ?? i.refId ?? "")}:${Number(i.score ?? i.similarity ?? 0).toFixed(6)}`).join(" | "))
+  }
+  const same = new Set(runs).size === 1
+  say(same, `контроль 2: три повтора одного вопроса ${same ? "дали один ответ" : "РАЗОШЛИСЬ"}`)
+  if (!same) for (let n = 0; n < runs.length; n += 1) console.log(`     ${n + 1}. ${runs[n]}`)
 }
 {
   // 3. Текст длиннее предела модели.
