@@ -94,6 +94,14 @@ function hasText(entry) {
  * 🔒 КОНЕЦ ОБМЕНА — СЛЕДУЮЩЕЕ СООБЩЕНИЕ ЧЕЛОВЕКА, А НЕ «ПЕРВЫЙ ОТВЕТ БЕЗ
  * ИНСТРУМЕНТА». Агент вправе ответить, а потом ещё что-то дописать; обрезав по
  * первому тексту, прибор занизил бы цену — то есть солгал бы в нашу пользу.
+ *
+ * 🔒 ХОД СЧИТАЕТСЯ ПО `requestId`, А НЕ ПО СТРОКАМ ЖУРНАЛА (исправлено 2026-09-09).
+ * ✗ ПЕРВАЯ РЕДАКЦИЯ ЗАВЫШАЛА ВТРОЕ: одно обращение к модели пишет несколько строк
+ * `assistant` — отдельно размышление, отдельно текст, отдельно вызов инструмента.
+ * Прибор печатал «7 ходов» там, где обращений было **два**, — и диагноз выходил
+ * «лишние ходы» вместо верного «модель думает девять секунд в одном ходе».
+ * 🔒 Правило шире случая: **прежде чем объяснять число, спроси, что именно оно
+ * считает.** Прибор, считающий не то, ошибается уверенно и в понятную сторону.
  */
 function exchanges(entries) {
   const out = []
@@ -107,9 +115,11 @@ function exchanges(entries) {
           said: spoken(t),
           startedAt: Date.parse(e.timestamp),
           endedAt: Date.parse(e.timestamp),
-          turns: 0,
+          requests: new Set(),
+          rows: 0,
           tools: [],
           replied: false,
+          думал: 0,
         }
         continue
       }
@@ -118,10 +128,13 @@ function exchanges(entries) {
       continue
     }
     if (e.type !== "assistant" || !cur) continue
-    cur.turns += 1
+    cur.rows += 1
+    cur.requests.add(e.requestId || "(без requestId)")
     cur.endedAt = Math.max(cur.endedAt, Date.parse(e.timestamp) || cur.endedAt)
     for (const name of toolsOf(e)) cur.tools.push(name)
     if (hasText(e)) cur.replied = true
+    const c = e.message && e.message.content
+    if (Array.isArray(c) && c.some((b) => b && b.type === "thinking")) cur.думал += 1
   }
   if (cur) out.push(cur)
   return out
@@ -151,11 +164,12 @@ for (const f of files) {
   for (const x of ex) {
     total += 1
     const said = x.said.length > 64 ? x.said.slice(0, 61) + "..." : x.said
+    const short = x.tools.map((t) => t.replace(/^mcp__[a-z_]+__/, ""))
     console.log("")
     console.log("человек сказал : " + said)
     console.log("время          : " + new Date(x.startedAt).toISOString())
-    console.log("ХОДОВ МОДЕЛИ   : " + x.turns)
-    console.log("ВЫЗОВОВ ИНСТР. : " + x.tools.length + (x.tools.length ? "  — " + x.tools.join(" → ") : ""))
+    console.log("ОБРАЩЕНИЙ К МОДЕЛИ : " + x.requests.size + "   (строк журнала: " + x.rows + ", с размышлением: " + x.думал + ")")
+    console.log("ВЫЗОВОВ ИНСТР. : " + short.length + (short.length ? "  — " + short.join(" → ") : ""))
     console.log("СЕКУНД         : " + seconds(x.endedAt - x.startedAt))
     console.log("ответ дошёл    : " + (x.replied ? "да" : "НЕТ"))
   }
