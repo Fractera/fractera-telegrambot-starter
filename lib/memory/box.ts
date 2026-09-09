@@ -432,15 +432,49 @@ export type LevelReport = {
  */
 const NAME_PREFIX = 4
 
-async function matchLabel(name: string): Promise<string | null> {
+/**
+ * Написания одного имени, какие знает граф (168-2).
+ *
+ * 🛑 ВОЗВРАЩАЕТ МАССИВ, А НЕ ОДНО ИМЯ, И ЭТО ИСПРАВЛЕНИЕ ИЗМЕРЕННОЙ ПОТЕРИ.
+ * ✗ Прежняя редакция делала `return exact[0]` — брала первое найденное написание
+ * и выбрасывала остальные. Измерено 2026-09-09 на корпусе реальной документации:
+ * граф держал 11 пар, различающихся ТОЛЬКО регистром, у девяти пар рёбра были у
+ * ОБОИХ написаний, и наш код терял **22 ребра** из-за выбора первого.
+ * 🔒 САМЫЙ НАГЛЯДНЫЙ СЛУЧАЙ: «Answers» — 0 рёбер, «answers» — 7. Поиск возвращал
+ * оба, код брал заглавное (оно раньше по алфавиту) и терял ВСЁ содержание.
+ * Тот же класс, что `limit: 1` при чтении списка знакомых днём раньше: **брать
+ * первое там, где верны все**.
+ *
+ * 🔒 БЕРУТСЯ ТОЛЬКО НАПИСАНИЯ ТОГО ЖЕ ИМЕНИ, А НЕ ВСЁ, ЧТО НАШЛА ПОДСТРОКА, И
+ * ЭТО ТОЖЕ ИЗМЕРЕНО. Поиск по «память» отдаёт четыре метки: `Память`, `память`,
+ * `Память Fractera`, `Личная Память`. Последние две — самостоятельные сущности,
+ * а не двойники; взяв их все, мы размножили бы один якорь в четыре запроса и
+ * съели бюджет, отведённый другим именам.
+ *
+ * 🔒 НЕСТРОГОСТЬ ОСТАЁТСЯ НАШЕЙ. Движок ищет подстроку без учёта регистра и не
+ * берёт падежей: `Зеленодольске` → пусто, `Денис` → пусто при живой метке
+ * `Дений Парадоксу`. Не нашлось целиком — пробуем НАЧАЛО имени (закон 83), порог
+ * в четыре буквы: короче — и «Ден» начнёт совпадать с «Денежный».
+ * 🔒 ВОЗВРАЩАЕТСЯ НАПИСАНИЕ ГРАФА, А НЕ ЧЕЛОВЕКА: связи ищут по своим именам.
+ */
+async function matchLabel(name: string): Promise<string[]> {
   const word = String(name ?? "").trim()
-  if (word.length < NAME_PREFIX) return null
-  const exact = await labelSearch(word, 3)
-  if (exact.length > 0) return exact[0]
+  if (word.length < NAME_PREFIX) return []
+  const lower = word.toLowerCase()
+
+  const exact = await labelSearch(word, 10)
+  if (exact.length > 0) {
+    // Все написания ИМЕННО этого имени — они и есть разорванная надвое сущность.
+    const sameName = exact.filter(l => l.toLowerCase() === lower)
+    if (sameName.length > 0) return sameName
+    // Точного совпадения нет — прежнее поведение: ближайшее по подстроке, одно.
+    return [exact[0]]
+  }
+
   const head = word.slice(0, Math.max(NAME_PREFIX, Math.ceil(word.length * 0.6)))
-  if (head === word) return null
+  if (head === word) return []
   const near = await labelSearch(head, 3)
-  return near[0] ?? null
+  return near.length > 0 ? [near[0]] : []
 }
 
 function anchorsFrom(items: MemoryItem[]): string[] {
@@ -921,15 +955,28 @@ export async function read(input: {
     // и шестью секундами. И имя приходит в написании ГРАФА, а не человека.
     // 🛑 ВОПРОС ЧЕЛОВЕКА ПРЕДФИЛЬТР НЕ ПРОХОДИТ И ПРОХОДИТЬ НЕ ДОЛЖЕН: он идёт
     // вектором, которому метки безразличны (закон 162-3, оплаченный потерей находки).
+    // 🔒 ВАРИАНТЫ ОДНОГО ИМЕНИ СЧИТАЮТСЯ ОДНИМ ЯКОРЕМ ПРИ ПОДСЧЁТЕ ПРЕДЕЛА, НО
+    // СПРАШИВАЮТСЯ ВСЕ (168-2). Иначе два написания «Памяти» съели бы бюджет,
+    // отведённый другим именам, — и починка потери обернулась бы новой потерей.
+    // Предел здесь про ЧИСЛО СУЩНОСТЕЙ, а не про число запросов к связям.
     const known: string[] = []
     const unknown: string[] = []
+    let namesTaken = 0
     for (const a of anchors) {
-      const label = await matchLabel(a)
-      if (label) known.push(label)
-      else unknown.push(a)
+      const spellings = await matchLabel(a)
+      if (spellings.length === 0) {
+        unknown.push(a)
+        continue
+      }
+      if (namesTaken >= MAX_ANCHORS) break
+      namesTaken += 1
+      known.push(...spellings)
     }
     askedLabels.push(...known)
-    const asking = [...new Set([...known, query])].slice(0, MAX_ANCHORS + 1)
+    // 🛑 ПОТОЛОК ЗАПРОСОВ ОСТАЁТСЯ, И ОН ШИРЕ ЧИСЛА ИМЁН РОВНО НА ИХ НАПИСАНИЯ:
+    // каждое стоит одного похода в связи (551 мс), и без потолка десять
+    // двойников превратили бы ответ в минуту ожидания.
+    const asking = [...new Set([...known, query])].slice(0, MAX_ANCHORS * 2 + 1)
     for (const q of asking) {
       // ── КАКИМ РЕЖИМОМ СПРАШИВАТЬ — ИЗМЕРЕНО (161-3) ────────────────────
       //
