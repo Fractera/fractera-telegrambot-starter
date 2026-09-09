@@ -108,6 +108,8 @@ export type TelegramUi = {
     filledAny: string;
     filledYes: string;
     filledNo: string;
+    /** Что стоит в колонке значения, когда бот об этом ещё не знает. */
+    valueEmpty: string;
     found: string;
     page: string;
     prev: string;
@@ -847,6 +849,7 @@ const EN: TelegramUi = {
     filledAny: "All rows",
     filledYes: "Filled only",
     filledNo: "Empty only",
+    valueEmpty: "not known yet",
     found: "{n} rows · {f} filled",
     page: "Page {p} of {t}",
     prev: "Back",
@@ -1335,6 +1338,7 @@ const RU: TelegramUi = {
     filledAny: "Все строки",
     filledYes: "Только заполненные",
     filledNo: "Только пустые",
+    valueEmpty: "пока не знаю",
     found: "строк: {n} · заполнено: {f}",
     page: "Страница {p} из {t}",
     prev: "Назад",
@@ -1351,7 +1355,7 @@ const RU: TelegramUi = {
     askBot: "Добавить запись",
     askBotTitle: "Записи появляются из разговора, а не из формы",
     askBotBody:
-      "Чтобы добавить о себе больше, просто расскажите об этом Telegram-боту в свободной форме — «зови меня Рома», «пиши мне только после десяти», «считаю в евро». Бот распознает сказанное, запомнит, и строка появится здесь.",
+      "Чтобы добавить о себе больше, просто расскажите об этом Telegram-боту в свободной форме — «зови меня Алекс», «пиши мне только после десяти», «считаю в евро». Бот распознает сказанное, запомнит, и строка появится здесь.",
     askBotWhy: "Эта страница — чтобы читать и поправлять. Сказанное боту и есть единственное место, где рождается знание о вас: вторая форма здесь была бы вторым способом сказать одно и то же.",
     askBotClose: "Понятно",
   },
