@@ -1283,7 +1283,7 @@
       "storedIn": "fact_person_avoid",
       "onMissing": "ask",
       "subject": "self",
-      "aggregate": "last",
+      "aggregate": "list",
       "example": "не звонить, писать только в Telegram",
       "lost": "Запрет в одной ситуации и запрет вообще отличаются словом «никогда»."
     },
@@ -1312,7 +1312,7 @@
       "storedIn": "fact_person_projects",
       "onMissing": "ask",
       "subject": "self",
-      "aggregate": "last",
+      "aggregate": "list",
       "example": "Fractera",
       "lost": "Проект, о котором он спросил из любопытства, — не его проект."
     },
@@ -1348,7 +1348,7 @@
       "storedIn": "fact_person_important_people",
       "onMissing": "ask",
       "subject": "self",
-      "aggregate": "last",
+      "aggregate": "list",
       "example": "Миша — разработчик в команде",
       "lost": "Русские падежи разводят одного человека на двоих («Мише» и «Миша»): сведение делает владелец, а не система."
     },

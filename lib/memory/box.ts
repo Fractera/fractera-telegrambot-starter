@@ -809,27 +809,41 @@ export async function read(input: {
     // очерёдность — значения ложатся в том же порядке, в каком совпали с вопросом.
     // 🛑 СУЖЕНИЕ ПО СУБЪЕКТУ — ТОЛЬКО ТАМ, ГДЕ ЕСТЬ ЧЕМ СУЖАТЬ: у чужой колонки
     // такой колонки нет, и `recall` на сужение отвечает отказом по устройству.
+    // 🔒 СКОЛЬКО ЗНАЧЕНИЙ БРАТЬ — ГОВОРИТ РЕЕСТР, А НЕ КОД (165-3). У признака с
+    // накоплением `list` значений много и ВСЕ они верны: знакомые, проекты,
+    // запреты. У `last` верно последнее.
+    // ✗ ОПЛАЧЕНО ДВУМЯ ПРОГОНАМИ: чтение брало ОДНУ строку у всех подряд, и
+    // список из восьми знакомых приезжал одним человеком — а дальше это ОДНО имя
+    // становилось якорем связей. Кейс «кто из моих друзей мог знать президента»
+    // отвечал про того, чья строка оказалась первой, и на корпусе из одного друга
+    // это было неотличимо от правильной работы.
+    const LIST_READS = 6
+    const many = (k: string) => (allFacts().find(f => f.key === k)?.aggregate === "list" ? LIST_READS : 1)
     const got = await Promise.all(
-      toRead.map(t => recall(t.key, t.byColumn ? { limit: 1 } : { subject, limit: 1 }))
+      toRead.map(t => recall(t.key, t.byColumn ? { limit: many(t.key) } : { limit: many(t.key), subject }))
     )
     for (let i = 0; i < toRead.length; i += 1) {
       const t = toRead[i]
       const r = got[i]
       if (r.found === true && r.items.length > 0) {
-        const v = r.items[0]
-        items.push({
-          // 🛑 ЗНАЧЕНИЕ ИЗ ЧУЖОЙ ТАБЛИЦЫ НЕ ОБЪЯВЛЯЕТСЯ ФАКТОМ О ЧЕЛОВЕКЕ.
-          about: t.byColumn ? "all-records" : "self",
-          at: v.at,
-          basis: v.basis,
-          claim: v.claim,
-          from: t.address,
-          key: t.key,
-          scope: v.scope,
-          title: t.title,
-          value: v.value,
-          weak: t.strong ? undefined : true,
-        })
+        // 🔒 ВСЕ ЗНАЧЕНИЯ СПИСКА ЕДУТ В ОТВЕТ, В ТОМ ЖЕ ПОРЯДКЕ, ЧТО ОТДАЛО
+        // ХРАНИЛИЩЕ: из них строятся якоря уровня 2, и потеря здесь ниже уже не
+        // восстановима. У признака с `last` элемент ровно один — цикл вырождается.
+        for (const v of r.items) {
+          items.push({
+            // 🛑 ЗНАЧЕНИЕ ИЗ ЧУЖОЙ ТАБЛИЦЫ НЕ ОБЪЯВЛЯЕТСЯ ФАКТОМ О ЧЕЛОВЕКЕ.
+            about: t.byColumn ? "all-records" : "self",
+            at: v.at,
+            basis: v.basis,
+            claim: v.claim,
+            from: t.address,
+            key: t.key,
+            scope: v.scope,
+            title: t.title,
+            value: v.value,
+            weak: t.strong ? undefined : true,
+          })
+        }
       } else {
         missing.push({
           key: t.key,
