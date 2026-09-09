@@ -1,6 +1,4 @@
-import { allFacts } from "@/lib/facts/registry"
-import { recall } from "@/lib/registry/access"
-import type { Fact } from "@/lib/facts/types"
+import { askMemory } from "@/lib/architect/memory-service"
 
 // ЧТО СИСТЕМА ЗНАЕТ О ЧЕЛОВЕКЕ — ОТБОР, СОРТИРОВКА И СТРАНИЦЫ НА СЕРВЕРЕ.
 //
@@ -56,41 +54,54 @@ export function readKnownQuery(raw: Record<string, string | undefined>): KnownQu
  * про сообщение, а не про него; смешав их, страница перестала бы отвечать на
  * свой единственный вопрос: что система знает ОБО МНЕ.
  */
-function personFacts(): Fact[] {
-  return allFacts().filter(f => f.subject === "self")
-}
-
 /**
- * Прочитать значения и собрать страницу.
+ * Прочитать из СЛУЖБЫ ПАМЯТИ и собрать страницу.
  *
- * 🔒 ЧТЕНИЕ ОДНИМ ВЫЗОВОМ НА ПРИЗНАК, НО ПАРАЛЛЕЛЬНО. ✗ измерено 2026-09-08:
- * тринадцать последовательных вызовов дали 595 мс и тринадцать ходов модели —
- * здесь ходов модели нет вовсе, но последовательные ожидания сложились бы так же.
+ * 🔒 ОДИН ВЫЗОВ НА ВСЮ СТРАНИЦУ, А НЕ ПО ВЫЗОВУ НА ПРИЗНАК. Прежде здесь шло
+ * чтение по каждому признаку отдельно — тринадцать ожиданий подряд. Новая
+ * память отдаёт всё известное одним ответом и без вызова модели.
+ *
+ * 🛑 ОТКАЗ СЛУЖБЫ И ПУСТАЯ ПАМЯТЬ — РАЗНЫЕ СОСТОЯНИЯ, И ПУТАТЬ ИХ НЕЛЬЗЯ.
+ * Пустой список человек читает как «обо мне ничего не записано»; молчание
+ * службы он прочтёт так же — и это была бы уверенная ложь.
  */
 export async function queryKnown(query: KnownQuery): Promise<KnownPage> {
-  const facts = personFacts()
-  const got = await Promise.all(
-    facts.map(async fact => {
-      const answer = await recall(fact.key, { subject: "self", limit: 1 })
-      const has = answer.found === true && answer.items.length > 0
-      const failed = answer.found === false && "error" in answer
-      const row: KnownRow = {
-        key: fact.key,
-        title: fact.title,
-        what: fact.description,
-        example: fact.example ?? null,
-        tags: fact.tags ?? [],
-        value: has ? String(answer.items[0].value ?? "") : null,
-        at: has ? answer.items[0].at : null,
-        state: has ? "known" : failed ? "down" : "empty",
-        hint: answer.found === false ? answer.hint : null,
-      }
-      return row
-    }),
-  )
+  const answer = await askMemory()
 
-  const down = got.some(r => r.state === "down")
-  const filledCount = got.filter(r => r.state === "known").length
+  // 🔒 ИМЯ РОДА — ЭТО УЖЕ ФРАЗА, И ОНА ЖЕ НАЗВАНИЕ СТРОКИ. Второго словаря
+  // названий здесь нет намеренно: он разошёлся бы с памятью на первой правке.
+  const readable = (k: string) => k.split("_").join(" ")
+
+  const got: KnownRow[] = [
+    ...answer.known.map(v => ({
+      key: v.what,
+      title: readable(v.what),
+      // Догадка помечается словами, а не молча выдаётся за свидетельство.
+      what: v.claim === "guess"
+        ? `это вывод системы, а не ваши слова${v.basis ? `: ${v.basis}` : ""}`
+        : "вы сказали это сами",
+      example: null,
+      tags: v.claim === "guess" ? ["догадка"] : [],
+      value: v.value,
+      at: null,
+      state: "known" as const,
+      hint: null,
+    })),
+    ...answer.not_yet_known.map(m => ({
+      key: m.what,
+      title: readable(m.what),
+      what: m.why,
+      example: null,
+      tags: [],
+      value: null,
+      at: null,
+      state: (answer.ok ? "empty" : "down") as "empty" | "down",
+      hint: answer.trouble,
+    })),
+  ]
+
+  const down = !answer.ok
+  const filledCount = answer.known.length
 
   const needle = query.q.toLowerCase()
   const found = got.filter(row => {
