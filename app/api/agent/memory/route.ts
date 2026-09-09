@@ -156,7 +156,17 @@ export async function POST(request: Request) {
       // 🛑 ФОРМА БЛОКА ПРОВЕРЯЕТСЯ ЗДЕСЬ, А НЕ ВНУТРИ: объявление принимает `value`,
       // то есть что угодно объектом, и без разбора сюда доехал бы мусор.
       research: researchFrom(args.research),
+      // 🛑 ДВЕРЬ ПЕРЕЧИСЛЯЕТ ПОЛЯ ПОИМЁННО, И ЭТО МЕСТО, ГДЕ СПОСОБНОСТЬ ТЕРЯЕТСЯ
+      // МОЛЧА. ✗ оплачено в тот же час 2026-09-09: `subject` и `scope` были
+      // объявлены в `decl.mjs`, приняты проверкой аргументов и **выброшены
+      // здесь** — значение легло на самого человека, а охват стал `null`.
+      // Снаружи это неотличимо от «не построено»: прибор показал утечку чужого
+      // часового пояса в личную память.
+      // 🔒 ЗАКОН 143 ПОДТВЕРЖДЁН ЕЩЁ РАЗ: у каждой построенной способности надо
+      // спрашивать не «есть ли она», а «КТО ЕЁ ЗОВЁТ».
+      scope: args.scope as string | undefined,
       source: args.source as string | undefined,
+      subject: args.subject as string | undefined,
       what: (args.what ?? "") as string | Record<string, unknown>,
     })
     return NextResponse.json({ ...result, fn: "write" }, { status: result.ok ? 200 : 400 })
