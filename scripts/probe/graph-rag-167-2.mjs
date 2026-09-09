@@ -147,35 +147,100 @@ if (Array.isArray(labelsAfter)) {
 // ── ДОКАЗАТЕЛЬСТВО 3: МЕЖДУ СУЩНОСТЯМИ ЕСТЬ РЁБРА ───────────────────────
 // 🔒 УЗЛЫ БЕЗ РЁБЕР — ЭТО СПИСОК, А НЕ ГРАФ. Именно рёбра отличают агентный RAG
 // от обычного поиска по кускам, и потому они проверяются отдельно.
-let edgeReport = "подграф не отдан"
-let haveEdges = false
-for (const label of (Array.isArray(labelsAfter) ? labelsAfter : []).slice(0, 6)) {
-  const g = await rag(`/graphs?label=${encodeURIComponent(String(label))}&max_depth=2&max_nodes=50`)
-  const nodes = Array.isArray(g.json.nodes) ? g.json.nodes.length : 0
-  const edges = Array.isArray(g.json.edges) ? g.json.edges.length : 0
-  if (edges > 0) {
-    haveEdges = true
-    const e = g.json.edges[0] ?? {}
-    edgeReport = `«${label}»: узлов ${nodes}, рёбер ${edges}; пример связи ${JSON.stringify(e.source ?? e.src ?? "")} → ${JSON.stringify(e.target ?? e.tgt ?? "")}`
-    break
+// ✗ ПЕРВАЯ РЕДАКЦИЯ ОСТАНАВЛИВАЛАСЬ НА ПЕРВОЙ ЖЕ МЕТКЕ С РЁБРАМИ И ДЕЛАЛА
+// `break`: утверждение «связи построены» доказывалось на ОДНОМ подграфе из 165,
+// а общее число рёбер не измерялось вовсе. Найдено критическим разбором 168.
+// Теперь обходятся все метки, и печатается вся картина — включая одиночек,
+// которых видно только на полном обходе.
+const allLabels = Array.isArray(labelsAfter) ? labelsAfter.map(String) : []
+let totalEdges = 0
+let lonely = 0
+let richest = { edges: 0, label: "", sample: "" }
+const seenEdges = new Set()
+for (const label of allLabels) {
+  const g = await rag(`/graphs?label=${encodeURIComponent(label)}&max_depth=1&max_nodes=100`)
+  const edges = Array.isArray(g.json.edges) ? g.json.edges : []
+  if (edges.length === 0) lonely += 1
+  // 🔒 РЁБРА СЧИТАЮТСЯ ПО ПАРЕ КОНЦОВ, А НЕ СЛОЖЕНИЕМ ПОДГРАФОВ: одно ребро
+  // видно из обоих своих узлов, и наивная сумма завысила бы счёт ровно вдвое.
+  for (const e of edges) {
+    const a = String(e.source ?? e.src ?? "")
+    const b = String(e.target ?? e.tgt ?? "")
+    seenEdges.add([a, b].sort().join("→"))
+  }
+  if (edges.length > richest.edges) {
+    const e = edges[0] ?? {}
+    richest = {
+      edges: edges.length,
+      label,
+      sample: `${String(e.source ?? e.src ?? "")} → ${String(e.target ?? e.tgt ?? "")}`,
+    }
   }
 }
-say(haveEdges, `между сущностями построены связи — ${edgeReport}`)
+totalEdges = seenEdges.size
+say(totalEdges > 0 && richest.edges > 0,
+  `связи построены по всему графу: ${totalEdges} различных рёбер на ${allLabels.length} сущностях`)
+console.log(`  самая связанная — «${richest.label}»: ${richest.edges} рёбер; пример: ${richest.sample}`)
+console.log(`  сущностей без единой связи: ${lonely} из ${allLabels.length}`)
 
 // ── ДОКАЗАТЕЛЬСТВО 4: ПО СВЯЗЯМ ОТВЕЧАЕТ ЗАПРОС ─────────────────────────
 // 🔒 СПРАШИВАЕМ ЗА КОНТЕКСТ, А НЕ ЗА ПРОЗОЙ: 551 мс против 7533 мс и вшестеро
 // больше данных (измерено 161-3). Сочиняет ответ человеку наш агент, не движок.
+// ✗ ПЕРВАЯ РЕДАКЦИЯ ПРОВЕРЯЛА ФОРМУ, А НЕ СОДЕРЖАНИЕ: `text.length > 200 &&
+// /Entity/`. Восемьдесят килобайт ЧУЖОГО текста прошли бы такую проверку, и
+// «связи ответили» означало лишь «движок что-то вернул». Найдено критическим
+// разбором 168.
+// 🔒 ТЕПЕРЬ ПРОВЕРЯЕТСЯ ПРОИСХОЖДЕНИЕ: в ответе обязаны быть ссылки на НАШИ
+// документы `docs/167-*`. Это то же правило, по которому в проекте измеряют
+// доставку, а не впечатление.
 console.log("")
+const ourDoc = /docs\/167-/
 for (const { q, about } of corpus.graphQuestions) {
   const t = Date.now()
   const r = await rag("/query", {
     method: "POST",
-    body: JSON.stringify({ query: q, mode: "local", only_need_context: true, enable_rerank: false }),
+    body: JSON.stringify({
+      enable_rerank: false,
+      include_references: true,
+      mode: "local",
+      only_need_context: true,
+      query: q,
+    }),
   })
   const ms = Date.now() - t
+  const whole = JSON.stringify(r.json)
   const text = String(r.json.response ?? r.json.answer ?? "")
-  const hasData = text.length > 200 && /Entity|entity|relationship|Document Chunks/i.test(text)
-  say(hasData, `связи ответили на «${q}» (${about}): ${text.length} знаков за ${ms} мс`)
+  const refs = (whole.match(/docs\/167-[a-z-]+/g) ?? [])
+  const distinct = [...new Set(refs)]
+  say(ourDoc.test(whole) && text.length > 200,
+    `связи ответили на «${q}» (${about}): ${text.length} знаков за ${ms} мс` +
+    `; наших документов в ответе ${distinct.length}: ${distinct.join(", ") || "НЕТ НИ ОДНОГО"}`)
+}
+
+// ── МЕЖСЛОЙНЫЙ ВОПРОС: ОТВЕТ ТРЕБУЕТ ДВУХ ДОКУМЕНТОВ ИЗ РАЗНЫХ МЕСТ ──────
+//
+// 🔒 РАДИ ЭТОГО КОРПУС И БРАЛСЯ РЕАЛЬНЫМ (решение владельца: «реальные документы
+// с реальными связями»). Одиночная метка отвечается и без рёбер — достаточно
+// найти её кусок. Вопрос, ответ на который лежит в ДВУХ документах разных
+// репозиториев, без связей не отвечается вовсе.
+{
+  const q = "как настройки гостевого приложения связаны с реестром признаков службы"
+  const t = Date.now()
+  const r = await rag("/query", {
+    method: "POST",
+    body: JSON.stringify({
+      enable_rerank: false,
+      include_references: true,
+      mode: "mix",
+      only_need_context: true,
+      query: q,
+    }),
+  })
+  const ms = Date.now() - t
+  const whole = JSON.stringify(r.json)
+  const distinct = [...new Set(whole.match(/docs\/167-[a-z-]+/g) ?? [])]
+  say(distinct.length >= 2,
+    `межслойный вопрос собрал ${distinct.length} документа за ${ms} мс: ${distinct.join(", ")}`)
 }
 
 // 🔒 НЕГАТИВНЫЙ КОНТРОЛЬ: ВЫДУМАННОЙ СУЩНОСТИ В ГРАФЕ БЫТЬ НЕ ДОЛЖНО.

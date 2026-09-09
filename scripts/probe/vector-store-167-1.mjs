@@ -169,15 +169,78 @@ console.log("")
 console.log(`ТОЧНОСТЬ РАНЖИРОВАНИЯ: верхним угадан ${exact} из ${corpus.vectorQuestions.length}; ` +
   `в первых пяти ${inFive} из ${corpus.vectorQuestions.length}`)
 
-// 🔒 НЕГАТИВНЫЙ КОНТРОЛЬ: ПОСТОРОННЕЕ НЕ ДОЛЖНО ПРОХОДИТЬ ПОРОГ.
-// Без него всё выше доказывало бы лишь то, что склад возвращает верхнюю строку.
-{
-  const r = await post("/vectors/search", { collection: COLLECTION, k: 3, query: corpus.vectorControl.q })
+// ── ГРАНИЦЫ ПОРОГА НА СВОЁМ КОРПУСЕ ─────────────────────────────────────
+//
+// ✗ ЧЕМ ОПЛАЧЕНО: порог `0.33` измерен на саммари автоматизаций и применён к
+// документации без перемера. Число, взятое с чужого корпуса, — это «число,
+// похожее на знание» (закон 146). Здесь измеряется РАЗРЫВ на своём корпусе:
+// худший верный ответ против лучшего постороннего. Порог осмыслен, только если
+// лежит между ними.
+console.log("")
+const strangers = [
+  corpus.vectorControl.q,
+  "как заквасить капусту на зиму в трёхлитровой банке",
+  "расписание электричек до Сергиева Посада",
+]
+let worstTrue = 1
+let bestStranger = 0
+for (const { q } of corpus.vectorQuestions) {
+  const r = await post("/vectors/search", { collection: COLLECTION, k: 1, query: q })
   const items = Array.isArray(r.json.results) ? r.json.results : r.json.rows ?? []
-  const score = Number(items[0]?.score ?? items[0]?.similarity ?? 0)
-  console.log("")
-  say(score < THRESHOLD,
-    `контроль: «${corpus.vectorControl.q}» → близость ${score.toFixed(3)} ${score < THRESHOLD ? "ниже" : "ВЫШЕ"} порога ${THRESHOLD}`)
+  const s = Number(items[0]?.score ?? items[0]?.similarity ?? 0)
+  if (s < worstTrue) worstTrue = s
+}
+for (const q of strangers) {
+  const r = await post("/vectors/search", { collection: COLLECTION, k: 1, query: q })
+  const items = Array.isArray(r.json.results) ? r.json.results : r.json.rows ?? []
+  const s = Number(items[0]?.score ?? items[0]?.similarity ?? 0)
+  console.log(`  постороннее «${q.slice(0, 44)}» → ${s.toFixed(3)}`)
+  if (s > bestStranger) bestStranger = s
+}
+console.log(`ГРАНИЦЫ НА ЭТОМ КОРПУСЕ: худший верный ${worstTrue.toFixed(3)} · лучший посторонний ${bestStranger.toFixed(3)}`)
+say(worstTrue > bestStranger,
+  `разрыв есть: верные и посторонние разделимы (запас ${(worstTrue - bestStranger).toFixed(3)})`)
+say(THRESHOLD > bestStranger && THRESHOLD < worstTrue,
+  `порог ${THRESHOLD} лежит ВНУТРИ измеренного разрыва — годен для этого корпуса`)
+
+// ── ТРИ НЕГАТИВНЫХ КОНТРОЛЯ, КОТОРЫХ НЕ БЫЛО ────────────────────────────
+//
+// 🔒 ВСЕ ТРИ ПРОВЕРЯЮТ ОДНО: НАЗВАН ЛИ ОТКАЗ ИЛИ ПРОГЛОЧЕН. Молчаливый отказ
+// выглядит успехом, и это единственный класс, который прибор обязан ловить сам.
+{
+  // 1. Пустая коллекция: ответ обязан быть пустым, а не «ближайшим из чужого».
+  const r = await post("/vectors/search", { collection: "probe-167-nothing", k: 5, query: "что угодно" })
+  const items = Array.isArray(r.json.results) ? r.json.results : r.json.rows ?? []
+  say(items.length === 0, `контроль 1: пустая коллекция вернула ${items.length} результатов`)
+}
+{
+  // 2. Повтор того же запроса: склад обязан быть устойчив, иначе прогон не
+  // воспроизводим и любое сравнение «до/после» бессмысленно.
+  const q = corpus.vectorQuestions[0].q
+  const a = await post("/vectors/search", { collection: COLLECTION, k: 3, query: q })
+  const b = await post("/vectors/search", { collection: COLLECTION, k: 3, query: q })
+  const ids = x => JSON.stringify((Array.isArray(x.json.results) ? x.json.results : x.json.rows ?? [])
+    .map(i => String(i.ref_id ?? i.refId ?? "") + ":" + Number(i.score ?? i.similarity ?? 0).toFixed(4)))
+  say(ids(a) === ids(b), `контроль 2: повтор того же вопроса дал тот же ответ`)
+}
+{
+  // 3. Текст длиннее предела модели.
+  // ✗ В ОТЧЁТЕ 167 Я НАПИСАЛ «документ на восемь тысяч слов был бы отвергнут» —
+  // и НЕ ИЗМЕРЯЛ этого ни разу. Предположение, поданное как факт; здесь оно
+  // становится измерением. Годится любой исход — важно, чтобы он был НАЗВАН.
+  const huge = corpus.docs.map(d => d.text).join("\n\n").repeat(2)
+  const r = await post("/vectors", {
+    collection: COLLECTION,
+    id: "probe-167-huge",
+    refId: "huge",
+    refTable: REF_TABLE,
+    text: huge,
+  })
+  const words = huge.split(/\s+/).length
+  const refusedLoudly = r.status !== 200 || r.json.ok === false
+  say(true, `контроль 3: текст в ${words} слов → ${refusedLoudly ? "ОТКАЗ НАЗВАН" : "принят молча"}: ` +
+    `${r.status} ${JSON.stringify(r.json).slice(0, 120)}`)
+  await sql("DELETE FROM vectors WHERE id = ?", ["probe-167-huge"])
 }
 
 if (MODE !== "keep") console.log(`\nуборка: в коллекции осталось ${await clean()}`)
