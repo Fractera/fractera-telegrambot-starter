@@ -84,8 +84,13 @@ say(spellings.length >= 2, `в графе два написания одного
 //
 // 🔒 ИМЯ ПОПАДАЕТ В ЛИЧНУЮ ТАБЛИЦУ, ОТТУДА — В ЯКОРЯ УРОВНЯ 2. Это тот самый
 // путь, на котором терялось написание: значение → `anchorsFrom` → `matchLabel`.
+// 🛑 ВОПРОС ОБЯЗАН СОВПАСТЬ С ПРИЗНАКОМ, ИНАЧЕ ПРОВЕРЯЕТСЯ НЕ ТО. ✗ первая
+// редакция спрашивала «что известно про квилдрон» — механический поиск не нашёл
+// такого триггера, уровень 1 вернул пусто, якорей не возникло, и `matchLabel` не
+// звался ВООБЩЕ. Прибор краснел, показывая исправность починки как её отсутствие.
+// Берём фразу из живых триггеров `person.important-people`.
 await call("write", { key: "person.important-people", source: SOURCE, what: NAME })
-const answer = (await call("read", { depth: 2, limit: 20, query: `что известно про ${TWIN}` })).answer ?? {}
+const answer = (await call("read", { depth: 2, limit: 20, query: "кто из моих знакомых" })).answer ?? {}
 const anchors = ((answer.levels ?? []).find(l => l.level === 2)?.anchors) ?? []
 console.log(`  память спросила связи по именам: ${JSON.stringify(anchors)}`)
 
