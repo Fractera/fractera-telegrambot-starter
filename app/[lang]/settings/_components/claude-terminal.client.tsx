@@ -2,6 +2,10 @@
 
 // ТЕРМИНАЛ АГЕНТА В МОДАЛЬНОМ ОКНЕ ВКЛАДКИ (шаг 117, 2026-09-05).
 //
+// 🪦 С 181-3 В РАМКЕ — СТРАНИЦА «ПОДПИСКА CLAUDE», А НЕ ТЕРМИНАЛ. Вход в подписку из
+// терминала убран словом владельца 2026-09-10 («Из терминала убери вход в подписку»),
+// а карточка существует ради входа; адрес относительный — страница на этом же хосте.
+//
 // 🔒 РАМКА ВОКРУГ СУЩЕСТВУЮЩЕГО ТЕРМИНАЛА, А НЕ ВТОРОЙ ТЕРМИНАЛ. Мост
 // псевдотерминала живёт в процессе чата `:3600` (114-3), и замок у него там же.
 // Построить свой мост в слоте значило бы завести ВТОРУЮ реализацию оболочки
@@ -24,7 +28,6 @@ import { SquareTerminal, ExternalLink } from "lucide-react"
 import { AppDialog } from "@/components/dialog/app-dialog.client"
 import type { AppDialogUi } from "@/components/dialog/app-dialog.i18n"
 import { Button } from "@/components/ui/button"
-import { agentTerminalUrl } from "@/lib/runtime-urls"
 
 export type ClaudeTerminalLabels = {
   open: string
@@ -34,9 +37,12 @@ export type ClaudeTerminalLabels = {
 }
 
 export function ClaudeTerminal({
+  href,
   labels,
   ui,
 }: {
+  /** Что показать в рамке — страница «Подписка Claude» этого же хоста (181-3). */
+  href: string
   labels: ClaudeTerminalLabels
   ui: AppDialogUi
 }) {
@@ -53,7 +59,7 @@ export function ClaudeTerminal({
         variant="outline"
         data-agent-terminal="open"
         onClick={() => {
-          setUrl(agentTerminalUrl())
+          setUrl(href)
           setOpen(true)
         }}
       >

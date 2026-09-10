@@ -1,0 +1,148 @@
+"use client";
+
+import { FitAddon } from "@xterm/addon-fit";
+import type { Terminal } from "@xterm/xterm";
+import { useEffect, useImperativeHandle, useRef } from "react";
+import "@xterm/xterm/css/xterm.css";
+
+// ОБЁРТКА xterm.js — ПЕРЕНЕСЕНА ИЗ `e1e7ff0^`, А НЕ НАПИСАНА ЗАНОВО (шаг 114-4).
+//
+// Источник: `ai-workspace`, `bridges/app/components/ai-elements/xterm-terminal.client.tsx`
+// на ревизии перед удалением шагом 500. Здесь она короче: платформ пять больше
+// нет, а сокет открывает не она — им владеет панель, потому что панель же
+// добывает билет и переключает режимы. Компонент только рисует и отдаёт наружу
+// две способности: писать в stdin и забрать фокус.
+//
+// 🔒 РАЗМЕР СООБЩАЕТСЯ СЕРВЕРУ, А НЕ ПОДРАЗУМЕВАЕТСЯ. PTY заводится на 500
+// колонок, чтобы ссылка входа не завернулась до первого замера; настоящий
+// размер уезжает сразу после открытия и на каждое изменение окна. Без этого
+// интерфейс CLI рисуется по чужой ширине и выглядит сломанным.
+
+export type XtermHandle = {
+  focus: () => void;
+  /**
+   * Полный сброс (RIS). Возвращает ВСЕ режимы DEC в исходное — слежение за
+   * мышью, дополнительный экран, скобочную вставку, видимость курсора — и
+   * очищает ленту. Зовётся при открытии новой сессии: PTY у неё новый, а
+   * терминал в браузере тот же самый, и его состояние иначе переезжает из
+   * прошлой сессии (114-7).
+   */
+  reset: () => void;
+  write: (data: string) => void;
+};
+
+type Props = {
+  /** Куда писать нажатия. */
+  onData: (data: string) => void;
+  /** Куда сообщать новый размер. */
+  onResize: (size: { cols: number; rows: number }) => void;
+  ref?: React.Ref<XtermHandle>;
+};
+
+export function XtermTerminal({ onData, onResize, ref }: Props) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const termRef = useRef<Terminal | null>(null);
+
+  // Обработчики держим в ref: пересоздавать терминал из-за новой функции
+  // означало бы терять содержимое ленты при каждом рендере панели.
+  const onDataRef = useRef(onData);
+  const onResizeRef = useRef(onResize);
+  onDataRef.current = onData;
+  onResizeRef.current = onResize;
+
+  useImperativeHandle(ref, () => ({
+    focus: () => termRef.current?.focus(),
+    reset: () => termRef.current?.reset(),
+    write: (data: string) => termRef.current?.write(data),
+  }));
+
+  useEffect(() => {
+    const host = containerRef.current;
+    if (!host) {
+      return;
+    }
+
+    let disposed = false;
+    let term: Terminal | null = null;
+    let observer: ResizeObserver | null = null;
+
+    // 🔒 xterm ГРУЗИТСЯ ДИНАМИЧЕСКИ: он трогает `document` на уровне модуля,
+    // и статический импорт утащил бы его в серверную сборку страницы.
+    (async () => {
+      const { Terminal: Xterm } = await import("@xterm/xterm");
+      if (disposed) {
+        return;
+      }
+
+      term = new Xterm({
+        convertEol: true,
+        cursorBlink: true,
+        fontFamily:
+          'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
+        fontSize: 13,
+        scrollback: 5000,
+        theme: { background: "#0b0b0c", foreground: "#e6e6e6" },
+      });
+
+      const fit = new FitAddon();
+      term.loadAddon(fit);
+      term.open(host);
+      termRef.current = term;
+
+      // 🛑 `fit()` МЕНЯЕТ РАЗМЕР ХОЗЯИНА — ЗНАЧИТ НАБЛЮДАТЕЛЬ, ЗОВУЩИЙ ЕГО
+      // НАПРЯМУЮ, БУДИТ САМ СЕБЯ. ✗ ОПЛАЧЕНО ДНЁМ ОТЛАДКИ 2026-09-07: вкладка
+      // вставала намертво, JavaScript в ней не исполнялся вовсе, и снаружи это
+      // выглядело как «терминал не подключается» — сокет не открывался просто
+      // потому, что до этой строки поток уже не доходил.
+      //
+      // 🔒 ДВЕ ЗАЩИТЫ, И ОБЕ НУЖНЫ: размер сравнивается с прошлым (шум в доли
+      // пикселя игнорируется), и подгонка уезжает в кадр отрисовки — внутри
+      // самого обратного вызова наблюдателя её делать нельзя.
+      let lastW = -1;
+      let lastH = -1;
+      let scheduled = false;
+
+      const push = () => {
+        try {
+          fit.fit();
+        } catch {
+          /* контейнер ещё нулевой высоты — следующий вызов застанет его живым */
+        }
+        onResizeRef.current({ cols: term?.cols ?? 80, rows: term?.rows ?? 24 });
+      };
+
+      push();
+      term.focus();
+      term.onData((d) => onDataRef.current(d));
+
+      observer = new ResizeObserver(() => {
+        const box = host.getBoundingClientRect();
+        if (Math.abs(box.width - lastW) < 1 && Math.abs(box.height - lastH) < 1) {
+          return;
+        }
+        lastW = box.width;
+        lastH = box.height;
+        if (scheduled) {
+          return;
+        }
+        scheduled = true;
+        requestAnimationFrame(() => {
+          scheduled = false;
+          if (!disposed) {
+            push();
+          }
+        });
+      });
+      observer.observe(host);
+    })();
+
+    return () => {
+      disposed = true;
+      observer?.disconnect();
+      termRef.current = null;
+      term?.dispose();
+    };
+  }, []);
+
+  return <div className="h-full w-full" ref={containerRef} />;
+}

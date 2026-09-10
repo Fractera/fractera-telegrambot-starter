@@ -153,7 +153,11 @@ export async function proxy(request: NextRequest) {
   // ЗАМЕРОМ, А НЕ ГЛАЗАМИ. Адрес прежний, на него ведут закладки и ссылка
   // выхода из панели; пропустить его дальше значило показать человеку без
   // сессии пустую страницу вместо приглашения войти.
-  if (pathname === "/welcome" || pathname === "/terminal") {
+  if (
+    pathname === "/welcome" ||
+    pathname === "/terminal" ||
+    pathname === "/claude-subscription"
+  ) {
     return NextResponse.redirect(
       `${publicOrigin(request)}/${langOf(request)}${pathname}`
     );
@@ -205,7 +209,10 @@ export async function proxy(request: NextRequest) {
     pathname === "/api/fractera/known" ||
     pathname === "/api/fractera/soul" ||
     pathname === "/api/fractera/pty-ticket" ||
-    pathname === "/api/fractera/misses"
+    pathname === "/api/fractera/misses" ||
+    // 🔒 Дверь ключа OpenAI проверяет роль сама (181-2), как у памяти: перехваченная
+    // привратником, она отдавала бы переадресацию вместо JSON.
+    pathname === "/api/fractera/openai-key"
     // 🪦 ЗДЕСЬ СТОЯЛА ДВЕРЬ СТЕНДА ПАМЯТИ — УЕХАЛА НА СВОЮ СЛУЖБУ 2026-09-10
     // (178-4). Она была четвёртой дверью этого класса; правило, по которому её
     // сюда вписали, живо и работает — им же её отсюда и убрали, вместе с самой

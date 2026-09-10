@@ -1,7 +1,6 @@
 import { AlertTriangle, Timer, ScrollText } from "lucide-react"
 import { H4, Small } from "@/components/ui/typography"
 import { TelegramSchedule } from "./telegram-schedule.client"
-import { OpenAiKeySection } from "./openai-key"
 import { AnthropicKeySection } from "./anthropic-key"
 import { AgentChannelSection } from "./agent-channel"
 import { FactsRegistrySection } from "./facts-registry"
@@ -22,6 +21,7 @@ import type { TelegramUi } from "../_i18n/telegram.i18n"
 //      поэтому он стоит ВТОРЫМ, а не в отдельном разделе: «в одной настройке мы
 //      должны пробросить сразу две»;
 //   3) «Расписание» — как часто дёргать проект.
+// 🪦 С 181-2 КАРТОЧКИ «КЛЮЧ OPENAI» ЗДЕСЬ НЕТ — у ключа своя вкладка «Подписка OpenAI».
 //
 // 🔒 ТРИ СОСТОЯНИЯ БОТА РАЗЛИЧАЮТСЯ ВИДОМ, А НЕ ОТТЕНКОМ ОДНОГО, И ПРИЧИНА
 // ПЕРЕЕХАЛА ВМЕСТЕ С НИМИ: лечение у них разное.
@@ -97,7 +97,9 @@ export function TelegramSettings({
           «работает ли агент вообще», ключи — «чем оплачено то, что сверх него».
           Разнеси их по разным экранам — и человек перестанет видеть, что одно
           обязательно, а другое нет. */}
-      <OpenAiKeySection ui={ui} />
+      {/* 🪦 КЛЮЧ OpenAI УЕХАЛ С ЭТОГО ЭКРАНА 2026-09-10 (181-2) — слово владельца: «Убери
+          подписку OpenAI из настроек». Он живёт на своей вкладке «Подписка OpenAI» в
+          меню слева; закон «оба ключа рядом» выше отменён тем же словом. */}
       <AnthropicKeySection />
       <TelegramTail configured={configured} lang={lang} tg={tg} ui={ui} />
     </div>

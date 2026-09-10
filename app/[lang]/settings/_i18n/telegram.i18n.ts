@@ -1,4 +1,6 @@
 import type { TelegramSection } from "../_lib/telegram-sections";
+import type { OpenAiKeyWords } from "../_components/openai-key";
+import type { OpenAiTabWords } from "../_components/openai-tab";
 
 // СЛОВА ВХОДА «TELEGRAM-БОТ» (77-1, 2026-08-31).
 //
@@ -53,6 +55,8 @@ export type TelegramUi = {
    * маршрутизация начала бы искать раздел `terminal`, которого нет.
    */
   terminalLabel: string;
+  /** Пункт меню «Подписка Claude» — страница входа в соседней вкладке (181-2). */
+  claudeLabel: string;
   subtitle: string;
   // 🪦 БЫЛО СЕМЬ РАЗДЕЛОВ, СТАЛО ЧЕТЫРЕ (111, 2026-09-04): «команды»,
   // «календарь» и «карта» убраны словом владельца вместе со своими словами.
@@ -418,33 +422,9 @@ export type TelegramUi = {
    * админскому ключу с правом api.usage.read. Поэтому есть строка, которая
    * объясняет это человеку, а не пустое поле «остаток: —».
    */
-  openai: {
-    title: string;
-    lead: string;
-    exists: string;
-    missing: string;
-    partial: string;
-    consumerApp: string;
-    consumerData: string;
-    consumerGraph: string;
-    keyLabel: string;
-    keyPlaceholder: string;
-    keyReplace: string;
-    save: string;
-    saving: string;
-    saved: string;
-    failed: string;
-    badFormat: string;
-    check: string;
-    checking: string;
-    valid: string;
-    invalid: string;
-    funded: string;
-    noFunds: string;
-    fundsUnknown: string;
-    balanceNote: string;
-    restartNote: string;
-  };
+  openai: OpenAiKeyWords;
+  /** Объяснение вкладки «Подписка OpenAI» простыми словами (181-2). */
+  openaiTab: OpenAiTabWords;
 
   /**
    * КАНАЛ АГЕНТА: ПОДПИСКА CLAUDE CODE И ДВА ЕГО БОТА (шаг 117, 2026-09-05).
@@ -620,17 +600,17 @@ const EN: TelegramUi = {
       "The main bot of the project: you write to it from your phone and Claude Code answers. The token entered here goes to the very file the channel plugin reads — set it up here or in the terminal, it is the same bot either way.",
     botAutomationTitle: "Telegram bot — automation agent",
     dialogDescription:
-      "Sign in to the subscription, connect the bot and confirm the pairing code that arrives in Telegram.",
-    dialogTitle: "Claude Code terminal",
+      "Sign in to the Claude subscription for the whole server — the bot and the memory both think with it.",
+    dialogTitle: "Claude subscription",
     lead: "This is how the bot thinks. A message from Telegram goes straight into a live Claude Code session on your server, and the answer comes back to Telegram — on your subscription, with no API billing. Without this sign-in nothing below works: neither the bot nor its answers.",
     newTab: "Open in a new tab",
-    openTerminal: "Open the terminal",
+    openTerminal: "Sign in to the subscription",
     pending: "codes awaiting confirmation: {n}",
     statusOff: "not signed in",
     statusOn: "signed in",
     title: "Claude Code subscription",
     unreachable:
-      "The chat service is not answering, so the terminal cannot be shown. That is normal on your own machine: the service lives on the server.",
+      "The chat service is not answering, so the sign-in page cannot be shown. That is normal on your own machine: the service lives on the server.",
   },
 
   facts: {
@@ -782,15 +762,17 @@ const EN: TelegramUi = {
   },
   menuTitle: "Telegram bot",
   terminalLabel: "Terminal",
+  claudeLabel: "Claude subscription",
   openai: {
     badFormat: "That does not look like an OpenAI key — they start with sk-",
     balanceNote:
       "The remaining balance cannot be shown: OpenAI returns it only to a browser session of your account or to an admin key with the api.usage.read scope. An ordinary project key never sees it.",
     check: "Check",
     checking: "Checking…",
-    consumerApp: "this project",
+    consumerApp: "the site project",
     consumerData: "data layer",
     consumerGraph: "knowledge graph",
+    consumerMachine: "memory and the bot",
     exists: "An OpenAI key is set",
     failed: "Action failed",
     funded: "The balance is positive",
@@ -799,17 +781,31 @@ const EN: TelegramUi = {
     keyLabel: "Key from platform.openai.com",
     keyPlaceholder: "sk-…",
     keyReplace: "Paste a new key to replace the saved one",
-    lead: "Recommended, not required. This key powers Fracteras memory: the vector store and the agentic RAG, that is the knowledge graph. With it the bot remembers what was said, searches by meaning and answers from your own documents rather than from the last few messages. Without it the bot still works — it simply has no memory of its own.",
+    lead:
+      "One key for the whole server: entered here, it reaches every service that needs it. If you have already entered it somewhere else, there is no need to enter it again.",
     missing: "No OpenAI key yet",
     noFunds: "The key works, but the account is out of credit",
     partial: "The key has not reached every service",
     restartNote:
-      "The project restarts to pick up the new key; the channel service reads it straight away.",
+      "Most services pick up a new key at once. The site project and the knowledge graph read it when they start, so they get it after their next restart.",
     save: "Save",
     saved: "OpenAI key saved",
     saving: "Saving…",
     title: "OpenAI key",
     valid: "The key is valid",
+  },
+  openaiTab: {
+    heading: "Why the project needs an OpenAI key",
+    intro:
+      "Claude does the thinking in this project — on your subscription. The OpenAI key is needed for two helper jobs, and neither gets done without it:",
+    voiceTitle: "Voice becomes text",
+    voice:
+      "When you dictate a message instead of typing it, the recording has to become text. OpenAI does that. Without the key a voice message stays a sound that nobody has read.",
+    vectorsTitle: "Search by meaning",
+    vectors:
+      "To find the right piece in your documents and past conversations, every text is turned into a fingerprint of its meaning — a vector. The agentic RAG and the vector store compare these fingerprints and find what is close in meaning, even when the words differ. OpenAI makes the fingerprints.",
+    without:
+      "Without the key the main things keep working: Claude answers, memory remembers what was said. What you lose is voice-to-text and search by meaning.",
   },
   missesWords: {
     title: "What the bot did not understand",
@@ -894,6 +890,10 @@ const EN: TelegramUi = {
     settings: {
       hint: "The token, the connection and everything the bot needs in order to answer.",
       title: "Settings",
+    },
+    openai: {
+      hint: "What the OpenAI key is for — and the key itself, one for the whole server.",
+      title: "OpenAI subscription",
     },
   },
 
@@ -1108,17 +1108,17 @@ const RU: TelegramUi = {
       "Основной бот проекта: вы пишете ему с телефона, отвечает Claude Code. Токен, введённый здесь, попадает в тот же файл, который читает плагин каналов, — настроите отсюда или из терминала, бот получится один и тот же.",
     botAutomationTitle: "Telegram-бот — агент автоматизации",
     dialogDescription:
-      "Войдите в подписку, подключите бота и подтвердите код привязки, который придёт в Telegram.",
-    dialogTitle: "Терминал Claude Code",
+      "Вход в подписку Claude для всего сервера — ей думают и бот, и память.",
+    dialogTitle: "Подписка Claude",
     lead: "Этим бот и думает. Сообщение из Telegram попадает прямо в живую сессию Claude Code на вашем сервере, а ответ возвращается в Telegram — по вашей подписке, без оплаты API. Без этого входа не работает ничего из того, что ниже: ни бот, ни ответы.",
     newTab: "Открыть отдельной вкладкой",
-    openTerminal: "Открыть терминал",
+    openTerminal: "Войти в подписку",
     pending: "ожидают подтверждения: {n}",
     statusOff: "вход не выполнен",
     statusOn: "вход выполнен",
     title: "Подписка Claude Code",
     unreachable:
-      "Служба чата не отвечает, поэтому терминал показать нечем. На вашем компьютере это нормально: служба живёт на сервере.",
+      "Служба чата не отвечает, поэтому страницу входа показать нечем. На вашем компьютере это нормально: служба живёт на сервере.",
   },
 
   facts: {
@@ -1271,15 +1271,17 @@ const RU: TelegramUi = {
   },
   menuTitle: "Telegram-бот",
   terminalLabel: "Терминал",
+  claudeLabel: "Подписка Claude",
   openai: {
     badFormat: "Это не похоже на ключ OpenAI — они начинаются с sk-",
     balanceNote:
       "Остаток показать нельзя: OpenAI отдаёт его только браузерной сессии вашего кабинета или админскому ключу с правом api.usage.read. Обычный проектный ключ его не видит.",
     check: "Проверить",
     checking: "Проверяю…",
-    consumerApp: "этот проект",
+    consumerApp: "проект сайта",
     consumerData: "слой данных",
     consumerGraph: "граф знаний",
+    consumerMachine: "память и бот",
     exists: "Ключ OpenAI существует",
     failed: "Действие не выполнено",
     funded: "Баланс положительный",
@@ -1288,17 +1290,31 @@ const RU: TelegramUi = {
     keyLabel: "Ключ с platform.openai.com",
     keyPlaceholder: "sk-…",
     keyReplace: "Вставьте новый ключ, чтобы заменить сохранённый",
-    lead: "Рекомендуется, но не обязателен. На этом ключе живёт память Fractera: векторная база и агентный RAG, то есть граф знаний. С ним бот помнит сказанное, ищет по смыслу и отвечает по вашим документам, а не по последним нескольким сообщениям — именно это делает работу с Telegram-ботом полноценной. Без ключа бот работает, просто своей памяти у него нет.",
+    lead:
+      "Ключ один на весь сервер: введённый здесь, он доезжает до всех служб, которым нужен. Если вы уже вводили его в другом месте — второй раз вводить не нужно.",
     missing: "Ключ OpenAI не задан",
     noFunds: "Ключ рабочий, но на счёте кончились средства",
     partial: "Ключ доехал не до всех служб",
     restartNote:
-      "Проект перезапускается, чтобы прочитать новый ключ; служба каналов читает его сразу.",
+      "Большинство служб подхватывают новый ключ сразу. Проект сайта и граф знаний читают его при запуске — им он достанется после ближайшего перезапуска.",
     save: "Сохранить",
     saved: "Ключ OpenAI сохранён",
     saving: "Сохраняю…",
     title: "Ключ OpenAI",
     valid: "Ключ верный",
+  },
+  openaiTab: {
+    heading: "Зачем проекту ключ OpenAI",
+    intro:
+      "Думает в проекте Claude — по вашей подписке. Ключ OpenAI нужен для двух вспомогательных дел, и без него они не делаются:",
+    voiceTitle: "Голос превращается в текст",
+    voice:
+      "Когда вы не печатаете сообщение, а надиктовываете его, запись нужно превратить в текст. Это делает OpenAI. Без ключа голосовое сообщение так и останется звуком, который никто не прочитал.",
+    vectorsTitle: "Поиск по смыслу",
+    vectors:
+      "Чтобы находить нужное в ваших документах и прошлых разговорах, каждый текст превращается в «отпечаток смысла» — вектор. Агентный RAG и векторная база сравнивают такие отпечатки и находят близкое по смыслу, даже когда слова другие. Отпечатки делает OpenAI.",
+    without:
+      "Без ключа главное продолжает работать: Claude отвечает, память запоминает сказанное. Пропадут расшифровка голоса и поиск по смыслу.",
   },
   missesWords: {
     title: "Чего бот не понял",
@@ -1383,6 +1399,10 @@ const RU: TelegramUi = {
     settings: {
       hint: "Токен, связь и всё, без чего бот не отвечает.",
       title: "Настройки",
+    },
+    openai: {
+      hint: "Зачем нужен ключ OpenAI — и сам ключ, один на весь сервер.",
+      title: "Подписка OpenAI",
     },
   },
 

@@ -1,8 +1,13 @@
 import { NextResponse } from "next/server";
+import { checkOpenAiKey } from "@/lib/architect/openai-key";
 import { machineEnv } from "@/lib/fractera/machine-env";
 import { fracteraRoles } from "@/lib/fractera/session";
 
 // КЛЮЧ OpenAI — ОДИН НА ВЕСЬ СЕРВЕР, И ЧАТ ЕГО НЕ КОПИРУЕТ (шаг 96).
+//
+// 🔒 ФАЙЛ ОДИН НА ДВЕ СЛУЖБЫ — ЧАТ И ПАМЯТЬ, БАЙТ В БАЙТ (181-1). Дверь не знает, в
+// какой службе стоит: читает склад секретов машины и пишет через слой данных, а оба
+// адреса у служб общие по устройству сервера, а не по договорённости.
 //
 // 🔒 ЗАКОН ПРОЕКТА: ключ один, потребителей несколько — проект, слой данных,
 // граф знаний, теперь чат. Каждый, кто заводит СВОЙ файл с ключом, добавляет
@@ -32,6 +37,8 @@ function maskOf(key: string): string {
 // 🪦 ЧИТАЛСЯ ФАЙЛ СЛОТА 3000 — ОТМЕНЕНО 2026-09-06. Это была последняя нитка к
 // соседу: служба показывала маску ключа, взятую из `.env.local` чужого
 // приложения. Теперь источник — склад секретов машины, он же место записи.
+// ✗ «Он же место записи» до 181-4 было неправдой: дверь слоя данных склад машины не
+// писала, и новый ключ отсюда оставался невидим этой же двери. С 181-4 — правда.
 function readKey(): string {
   return machineEnv("OPENAI_API_KEY") || process.env.OPENAI_API_KEY || "";
 }
@@ -97,6 +104,21 @@ export async function POST(request: Request) {
   const roles = await fracteraRoles();
   if (!roles.includes("architect")) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
+
+  // 🔒 ПРОВЕРКА ЖИВОГО КЛЮЧА — БЕЗ ТЕЛА И БЕЗ СЕКРЕТА В ПРОВОДЕ (181-1).
+  // ✗ Ветки не было: кнопка «Проверить» слала `?check=1` без тела, дверь читала
+  // пустой ключ и отвечала `400 bad-format` — человек видел голый код на каждом
+  // нажатии. Ветка перенесена из источника карточки (FNS); значение берётся здесь
+  // же, из склада машины, и наружу не уходит.
+  if (new URL(request.url).searchParams.get("check") === "1") {
+    const saved = readKey();
+    if (!saved) {
+      return NextResponse.json({ error: "no-key" }, { status: 409 });
+    }
+    return NextResponse.json(await checkOpenAiKey(saved), {
+      headers: { "Cache-Control": "no-store" },
+    });
   }
 
   const body = (await request.json().catch(() => null)) as {

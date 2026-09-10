@@ -18,6 +18,7 @@ import { StarterCard } from "./_components/starter-card";
 import { TaskParseSection } from "./_components/task-parse-section";
 import { TelegramAbout } from "./_components/telegram-about";
 import { TelegramSettings } from "./_components/telegram-settings";
+import { OpenAiTab } from "./_components/openai-tab";
 import { architectLayerUi } from "./_i18n/architect-layer.i18n";
 import { telegramUi } from "./_i18n/telegram.i18n";
 import { queryAutomationsLive, readAutomationQuery } from "./_lib/automations";
@@ -232,16 +233,29 @@ async function BotSettingsGate({
               href: hrefOfTelegramSection(lang, id),
               label: ui.pages[id].title,
             };
-            return id === "logs"
-              ? [
-                  item,
-                  {
-                    href: `/${lang}/terminal`,
-                    label: ui.terminalLabel,
-                    newTab: true,
-                  },
-                ]
-              : [item];
+            if (id === "logs") {
+              return [
+                item,
+                {
+                  href: `/${lang}/terminal`,
+                  label: ui.terminalLabel,
+                  newTab: true,
+                },
+              ];
+            }
+            // 🔒 «ПОДПИСКА CLAUDE» — ПРЯМО НАД «ПОДПИСКОЙ OpenAI» (181-2), как у памяти:
+            // страница входа в соседней вкладке, а не раздел этого экрана.
+            if (id === "openai") {
+              return [
+                {
+                  href: `/${lang}/claude-subscription`,
+                  label: ui.claudeLabel,
+                  newTab: true,
+                },
+                item,
+              ];
+            }
+            return [item];
           })}
           menuTitle={ui.menuTitle}
           menuWord={t.menuTitle}
@@ -473,6 +487,8 @@ async function BotSettingsGate({
                   where={`logs-${view}`}
                 />
               ))}
+
+            {active === "openai" && <OpenAiTab ui={ui} />}
 
             {active === "passport" &&
               (passport ? (

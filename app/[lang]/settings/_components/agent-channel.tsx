@@ -72,6 +72,7 @@ export async function AgentChannelSection({ lang, ui }: { lang: string; ui: Tele
         {state.available ? (
           <div className="flex flex-wrap items-center gap-2">
             <ClaudeTerminal
+              href={`/${lang}/claude-subscription`}
               ui={appDialogUi(lang)}
               labels={{
                 open: w.openTerminal,

@@ -1,8 +1,7 @@
 "use client";
 
-import { BotIcon, RotateCcwIcon, SendIcon } from "lucide-react";
+import { KeyRoundIcon, RotateCcwIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AgentSetupModal } from "./agent-setup-modal.client";
 import { AuthFlowModal } from "./auth-flow-modal.client";
 import {
   type XtermHandle,
@@ -18,6 +17,11 @@ import { extractAuthUrl } from "@/lib/fractera/terminal-auth.mjs";
 // остальное панели развёртывания, медиатеки, домена и пользователей. Сюда
 // перенесены ровно четыре его способности: сокет, чтение буфера на предмет
 // ссылки входа, модалка и возврат кода в stdin.
+//
+// 🔒 ФАЙЛ ОДИН НА ДВЕ СТРАНИЦЫ ВХОДА В ПОДПИСКУ CLAUDE — ПАМЯТИ (`/terminal`, 180) И
+// ЧАТА (`/claude-subscription`, 181-2), БАЙТ В БАЙТ. Учётка Claude одна на сервер,
+// и страница входа у обеих служб — одна и та же вещь; две разные копии разошлись
+// бы на первой же правке.
 //
 // 🔒 СЫРЬЁ КОПИТСЯ БЕЗ ЧИСТКИ, И ЭТО НЕ НЕБРЕЖНОСТЬ. Основная дверь распознавания
 // (`extractAuthUrl`) ищет гиперссылку OSC-8, а она И ЕСТЬ управляющая
@@ -67,7 +71,7 @@ const RESTORE_MODES = [
   .map((mode) => `${ESC}[${mode}`)
   .join("");
 
-type Mode = "claude-channel" | "system";
+type Mode = "claude-check" | "claude-login" | "system";
 
 type Status = "closed" | "connected" | "connecting" | "idle";
 
@@ -75,10 +79,6 @@ export function TerminalPanel({ lang }: { lang: string }) {
   const [status, setStatus] = useState<Status>("idle");
   const [note, setNote] = useState("");
   const [authUrl, setAuthUrl] = useState<string | null>(null);
-  const [setupOpen, setSetupOpen] = useState(false);
-  // Какой режим идёт сейчас: команду привязки принимает ТОЛЬКО сессия с
-  // каналом. Отправленная в оболочку, она была бы просто ненайденной командой.
-  const [mode, setMode] = useState<Mode>("system");
 
   const termRef = useRef<XtermHandle>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -212,12 +212,11 @@ export function TerminalPanel({ lang }: { lang: string }) {
     [scan]
   );
 
-  // 🪦 «ОТКРЫТИЕ ВКЛАДКИ ВХОДИТ ТОЛЬКО ЕСЛИ НАДО» (114-8) — ВХОДА ЗДЕСЬ БОЛЬШЕ НЕТ
-  // (181-3, слово владельца 2026-09-10: «Из терминала убери вход в подписку»).
-  // Вкладка открывает обычную оболочку; вход и этот закон живут на странице
-  // «Подписка Claude» (`/{lang}/claude-subscription`).
+  // 🔒 ОТКРЫТИЕ ВКЛАДКИ ВХОДИТ ТОЛЬКО ЕСЛИ НАДО. `claude auth login` не умеет
+  // спрашивать, вошли ли уже (измерено 114-8: начинает обмен безусловно), и
+  // вкладка, просящая вход у давно вошедшего, читается как «вход не сохранился».
   useEffect(() => {
-    connect("system");
+    connect("claude-check");
     return () => {
       if (timerRef.current) {
         clearTimeout(timerRef.current);
@@ -241,68 +240,20 @@ export function TerminalPanel({ lang }: { lang: string }) {
     [send]
   );
 
-  // Кнопка открывает окно подключения бота. 🪦 До 181-3 она же входила в
-  // подписку; вход уехал на страницу «Подписка Claude».
-  const handleOpenSetup = useCallback(() => {
-    setSetupOpen(true);
-  }, []);
-
-  const handleCloseSetup = useCallback(() => {
-    setSetupOpen(false);
-  }, []);
-
-  // Запуск канала закрывает окно: дальше человек смотрит в терминал — там
-  // появляется код привязки, и окно его закрыло бы.
-  const handleLaunchChannel = useCallback(() => {
-    setSetupOpen(false);
-    setMode("claude-channel");
-    connect("claude-channel");
+  // 🔒 КНОПКА ВХОДИТ ВСЕГДА, В ОТЛИЧИЕ ОТ ОТКРЫТИЯ ВКЛАДКИ. Вошедшему она нужна
+  // ровно затем, зачем нажимают такую кнопку: сменить учётную запись или
+  // переделать вход, который он считает испорченным.
+  // 🪦 В ТЕРМИНАЛЕ ЧАТА ТАКАЯ КНОПКА ОТКРЫВАЛА ОКНО НАСТРОЙКИ АГЕНТА — ТОКЕН БОТА,
+  // КЛЮЧ OpenAI, ПОДПИСКА, ПРИВЯЗКА КАНАЛА. Странице входа из всего окна нужна одна
+  // строка — вход в подписку, поэтому кнопка входит сразу (180-3). С шага 181 вход
+  // из терминала чата убран вовсе и живёт только на страницах «Подписка Claude».
+  const handleLogin = useCallback(() => {
+    connect("claude-login");
   }, [connect]);
 
-  // 🔒 КОМАНДА ПРИВЯЗКИ УХОДИТ В ТЕРМИНАЛ, А НЕ В ДВЕРЬ, И ЭТО НЕ ЛЕНЬ.
-  // Привязку выполняет САМА сессия Claude Code: это её слэш-команда, и
-  // состояние ожидания живёт у неё в памяти. Дверь, дописавшая `access.json`
-  // в обход, разошлась бы с тем, что помнит плагин, — и разошлась бы молча.
-  const handlePair = useCallback(
-    (code: string) => {
-      send({ data: `/telegram:access pair ${code}\n`, type: "stdin" });
-      termRef.current?.focus();
-    },
-    [send]
-  );
-
-  // 🔒 РУЧНОЙ СБРОС — НЕ ЛИШНЯЯ КНОПКА, А ПРИЗНАНИЕ ГРАНИЦЫ. Два слоя выше
-  // лечат случаи, которые мы УМЕЕМ заметить: смену режима и обрыв сокета.
-  // Программа внутри живого PTY способна испортить состояние терминала и не
-  // умереть при этом, и заметить такое из браузера нечем. Тогда человеку нужна
-  // не догадка агента, а кнопка.
-  // 🔒 ПОДКЛЮЧЕНИЕ К ЖИВОЙ СЕССИИ АГЕНТА, А НЕ ЗАПУСК ВТОРОЙ (119).
-  //
-  // ✗ ЧЕМ ОПЛАЧЕНО. Владелец: «когда я открываю терминал, я не вижу никаких
-  // зависших сообщений, почему мой терминал пуст? На первом тестировании каждое
-  // моё сообщение отображалось в терминале». Он был прав: в первом испытании он
-  // ЗАПУСКАЛ канал в этой самой вкладке — вкладка и БЫЛА сессией. Уведя канал под
-  // pm2, мы получили живучесть и потеряли видимость, и цену тогда не назвали.
-  //
-  // 🔒 КНОПКА ПОДКЛЮЧАЕТ, А НЕ ЗАПУСКАЕТ. Набрать здесь `claude --channels` значило
-  // бы завести ВТОРОГО опрашивателя того же бота, а Telegram отдаёт каждое
-  // обновление ровно одному читателю: переписка владельца поделилась бы пополам,
-  // молча. `tmux attach` показывает ТОТ ЖЕ экран, что живёт под pm2.
-  //
-  // 🪦 БЫЛО `tmux attach` — ЗАМЕНЕНО НА `screen -r` 2026-09-05 (122), И ЗАМЕНА
-  // ОПЛАЧЕНА РЕГРЕССИЕЙ. Под tmux цикл опроса плагина умирал каждые пять минут:
-  // процесс жив, pm2 `online`, а ответ в Telegram не доходил. Измерено замером
-  // соединения каждые 25 с в течение восьми минут — `script` и `screen` дали ноль
-  // обрывов, `tmux` обрывался дважды. `screen` даёт и стабильность, и подключаемость.
-  //
-  // 🔒 И ЭТО ЖЕ ЕДИНСТВЕННЫЙ СПОСОБ ОТВЕТИТЬ НА МОДАЛЬНЫЙ ВОПРОС CLI: вопрос о
-  // политике путей плагин в Telegram не пересылает, и 2026-09-05 такой вопрос
-  // держал бота молчащим два часа — нажать клавишу было некому. Теперь есть кому.
-  const handleAttachAgent = useCallback(() => {
-    send({ data: "screen -r fractera-agent\n", type: "stdin" });
-    termRef.current?.focus();
-  }, [send]);
-
+  // 🔒 РУЧНОЙ СБРОС — НЕ ЛИШНЯЯ КНОПКА, А ПРИЗНАНИЕ ГРАНИЦЫ. Программа внутри
+  // живого PTY способна испортить состояние терминала и не умереть при этом, и
+  // заметить такое из браузера нечем. Тогда человеку нужна не догадка, а кнопка.
   const handleReset = useCallback(() => {
     termRef.current?.reset();
     termRef.current?.focus();
@@ -336,38 +287,25 @@ export function TerminalPanel({ lang }: { lang: string }) {
   return (
     <div className="flex h-dvh w-full flex-col bg-[#0b0b0c]">
       <header className="flex shrink-0 flex-wrap items-center gap-2 border-white/10 border-b px-3 py-2">
-        {/* 🪦 КНОПКА «В ЧАТ» УБРАНА 2026-09-05 (124) ПРЯМЫМ СЛОВОМ ВЛАДЕЛЬЦА:
-            «наша задача убрать полностью ai sdk из этого проекта». Путь к ИИ
-            один — Telegram → Claude Code, и лента чата в нём не участвует;
-            кнопка вела туда, откуда решено уходить. Корень службы теперь сам
-            переадресует сюда, так что уводить отсюда больше некуда и незачем.
-            🛑 Служба `:3600` жива и нужна: терминал подписки, дверь канала
-            агента, медиатека, расшифровка голоса. Ушла дверь к ленте, не служба. */}
-
-        {/* 🪦 «ВКЛАДКА СУЩЕСТВУЕТ РАДИ ОДНОГО — ПОДКЛЮЧИТЬ ПОДПИСКУ» (114-8) —
-            ОТМЕНЕНО 181-3: вход в подписку уехал на страницу «Подписка Claude».
-            Эта кнопка открывает окно подключения бота. */}
+        {/* 🔒 ОДНА КНОПКА — РЕШЕНИЕ ВЛАДЕЛЬЦА (114-8). «Оболочка» и «Claude Code»
+            убраны: вкладка существует ради одного — подключить подписку. Оболочка
+            под ней та же самая, и набрать в ней `claude` по-прежнему можно. */}
+        {/* 🔒 КНОПКА ВЫГЛЯДИТ КНОПКОЙ: ФОН И РАМКА (181-5). Слово владельца
+            2026-09-10: «сама кнопка выполнено с прозрачным background и выглядит
+            как заголовок а не как кнопка. Оформи её как кнопку с бэкграундом и
+            бордюром». Цвета заданы явно по закону выше: фон панели от темы не
+            зависит. «Сбросить» остаётся прозрачной намеренно — это служебное
+            действие, а не то, ради чего страницу открывают. */}
         <Button
-          onClick={handleOpenSetup}
-          className="text-white/80 hover:bg-white/10 hover:text-white"
+          onClick={handleLogin}
+          className="border border-white/25 bg-white/10 text-white hover:bg-white/20 hover:text-white"
           size="sm"
-          title="Telegram-бот: токен, живая сессия, привязка"
+          title="Войти в подписку Claude Code — для всего сервера"
           variant="ghost"
         >
-          <SendIcon size={14} />
-          Подключение бота
+          <KeyRoundIcon size={14} />
+          Вход по подписке Claude Code
         </Button>
-        <Button
-          onClick={handleAttachAgent}
-          className="text-white/80 hover:bg-white/10 hover:text-white"
-          size="sm"
-          title="Показать живую сессию агента: тот же экран, что работает под pm2. Отключиться — Ctrl+A, затем D"
-          variant="ghost"
-        >
-          <BotIcon size={14} />
-          Сессия агента
-        </Button>
-
 
         <Button
           className="ml-auto text-white/80 hover:bg-white/10 hover:text-white"
@@ -401,16 +339,6 @@ export function TerminalPanel({ lang }: { lang: string }) {
           ref={termRef}
         />
       </div>
-
-      {setupOpen ? (
-        <AgentSetupModal
-          channelRunning={mode === "claude-channel"}
-          lang={lang}
-          onClose={handleCloseSetup}
-          onLaunchChannel={handleLaunchChannel}
-          onPair={handlePair}
-        />
-      ) : null}
 
       {authUrl ? (
         <AuthFlowModal

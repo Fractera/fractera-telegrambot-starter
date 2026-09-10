@@ -2,7 +2,8 @@ import { dataFetch } from "@/lib/fractera/data-service"
 
 // КЛЮЧ OPENAI — СОСТОЯНИЕ, ЗАПИСЬ И ПРОВЕРКА (77-8, 2026-09-01).
 //
-// 🔒 ОДИН КЛЮЧ — ТРИ ПОТРЕБИТЕЛЯ, ТРИ ОТДЕЛЬНЫЕ ПРАВДЫ. Закон перенесён из панели
+// 🔒 ОДИН КЛЮЧ — ЧЕТЫРЕ ПОТРЕБИТЕЛЯ, ЧЕТЫРЕ ОТДЕЛЬНЫЕ ПРАВДЫ (четвёртый — склад
+// секретов машины, 181-4; число правится вместе с типом ниже). Закон перенесён из панели
 // вместе с причиной, которую она оплатила днём отладки: «ключ, доехавший до графа
 // и не доехавший до слота, — ровно тот случай, когда „задан“ было бы ложью».
 // Отказ у второго потребителя МОЛЧАЛИВЫЙ: приём документа отвечает 200 и не
@@ -48,6 +49,8 @@ export type OpenAiKeyState = {
   data: Consumer
   /** Служба графа знаний. Может быть не установлена. */
   graph: Consumer
+  /** Склад секретов машины: из него ключ читают память и бот (181-4). */
+  machine: Consumer
   /** Хвост ключа приложения — для узнавания, не для использования. */
   tail: string | null
 }
@@ -65,16 +68,25 @@ export async function readOpenAiKeyState(): Promise<OpenAiKeyState> {
   const empty = { configured: false, present: false }
   try {
     const r = await dataFetch("/platform/openai-key", { cache: "no-store" })
-    if (!r.ok) return { app: empty, data: empty, graph: empty, tail: null }
+    if (!r.ok) return { app: empty, data: empty, graph: empty, machine: empty, tail: null }
     const d = (await r.json()) as {
-      state: Record<"app" | "data" | "graph", { configured: boolean; present: boolean }>
+      state: Record<string, { configured: boolean; present: boolean } | undefined>
       tail: string | null
     }
-    return { app: d.state.app, data: d.state.data, graph: d.state.graph, tail: d.tail }
+    // 🔒 `?? empty` — НЕ ЛЕНЬ, А СОВМЕСТИМОСТЬ: слой данных, ещё не знающий
+    // четвёртого потребителя (до 181-4), его просто не пришлёт, и экран обязан
+    // показать «службы не видно», а не упасть.
+    return {
+      app: d.state.app ?? empty,
+      data: d.state.data ?? empty,
+      graph: d.state.graph ?? empty,
+      machine: d.state.machine ?? empty,
+      tail: d.tail,
+    }
   } catch {
     // 🔒 СЛОЙ ДАННЫХ НЕДОСТУПЕН — ЭТО НЕ «КЛЮЧА НЕТ». Отдаём «служб не видно»,
     // и экран скажет это словами, а не покрасит всё в красный.
-    return { app: empty, data: empty, graph: empty, tail: null }
+    return { app: empty, data: empty, graph: empty, machine: empty, tail: null }
   }
 }
 

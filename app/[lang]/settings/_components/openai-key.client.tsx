@@ -1,18 +1,24 @@
-// 🛑 ЭТО ЗЕРКАЛЬНЫЙ ФАЙЛ ИЗ `fractera-next-starter`, И ОН ОТЛИЧАЕТСЯ ОТ
-// ИСТОЧНИКА РОВНО ОДНОЙ ВЕЩЬЮ — АДРЕСОМ ДВЕРИ (137-3, 2026-09-06).
-// Там он зовёт `/api/architect/...`; здесь такой двери нет и заводить её
-// нельзя: у службы бота УЖЕ есть своя — `/api/fractera/openai-key`, и она пишет через
-// единственную дверь слоя данных. Вторая дверь к одному хранилищу — ровно та
-// ошибка, за которую заплачено шагом 109-3: ключ доезжал до приложения, а граф
-// знаний и слой данных о нём не знали, и отказ был МОЛЧАЛИВЫЙ.
-// 🔒 Значит `diff` этого файла с источником НЕ пуст, и так задумано. Всё
-// остальное в нём — байт в байт.
+// 🛑 ПРОИСХОЖДЕНИЕ — `fractera-next-starter`; сюда файл пришёл через чат (137-3) и
+// теперь ОДИН НА ДВЕ СЛУЖБЫ, ПАМЯТЬ И ЧАТ, БАЙТ В БАЙТ (181-1). От источника он
+// отличается тремя вещами, и каждая названа, чтобы `diff` с FNS не читался как порча:
+// 1. АДРЕС ДВЕРИ — `/api/fractera/openai-key`. У служб своя дверь, и пишет она через
+//    единственную дверь слоя данных: вторая дверь к одному хранилищу — ровно та
+//    ошибка, за которую заплачено шагом 109-3.
+// 2. ОТВЕТ НА СОХРАНЕНИЕ — СТРОКОЙ ПОД ФОРМОЙ, А НЕ ВСПЛЫВАЮЩИМ ОКНОМ. ✗ Измерено
+//    2026-09-10: `<Toaster/>` не смонтирован в чате ни в одном файле, а у памяти нет
+//    и самого пакета — `toast()` звался в пустоту, и «Ключ сохранён» не видел никто.
+//    Строка на месте не зависит от раскладки службы.
+// 3. КОД ОТКАЗА ПО ФОРМЕ — ТОТ, ЧТО ОТДАЁТ НАША ДВЕРЬ (`bad-format`); код двери FNS
+//    (`bad-key-format`) понимается тоже. ✗ Прежде подпись «не похоже на ключ» не
+//    показывалась никогда: человек видел голый код.
+// 🔒 ОТВЕТ ЧИТАЕТСЯ ПО СОДЕРЖИМОМУ, А НЕ ПО КОДУ HTTP. Привратник отказывает
+// ПЕРЕАДРЕСАЦИЕЙ: с истёкшей сессией `fetch` приходит на страницу приветствия с кодом
+// 200, и форма, верящая коду, объявила бы несохранённый ключ сохранённым.
 "use client"
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Loader2, CheckCircle2, XCircle, AlertTriangle } from "lucide-react"
-import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Small } from "@/components/ui/typography"
@@ -53,6 +59,9 @@ export type OpenAiKeyLabels = {
 
 type CheckResult = { valid: boolean; funded: boolean | null; reason: string | null }
 
+/** Коды отказа, означающие «это не ключ OpenAI»: нашей двери и двери FNS. */
+const BAD_FORMAT = new Set(["bad-format", "bad-key-format"])
+
 export function OpenAiKeyForm({
   configured,
   labels,
@@ -66,10 +75,12 @@ export function OpenAiKeyForm({
   const [checking, setChecking] = useState(false)
   const [result, setResult] = useState<CheckResult | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [saved, setSaved] = useState(false)
 
   async function save() {
     setSaving(true)
     setError(null)
+    setSaved(false)
     try {
       const r = await fetch("/api/fractera/openai-key", {
         method: "POST",
@@ -77,16 +88,21 @@ export function OpenAiKeyForm({
         body: JSON.stringify({ key: key.trim() }),
       })
       const d = await r.json().catch(() => ({}))
-      if (!r.ok) {
-        setError(d.error === "bad-key-format" ? labels.badFormat : String(d.error ?? r.status))
+      // 🔒 УСПЕХ — ЭТО `present: true` В ТЕЛЕ, А НЕ `200` В СТАТУСЕ (см. шапку).
+      if (!r.ok || d.present !== true) {
+        setError(
+          BAD_FORMAT.has(d.error)
+            ? labels.badFormat
+            : `${labels.failed}: ${String(d.reason ?? d.error ?? r.status)}`
+        )
         return
       }
       setKey("")
       setResult(null)
-      toast.success(labels.saved)
+      setSaved(true)
       router.refresh()
     } catch (e) {
-      setError(String((e as Error).message ?? e))
+      setError(`${labels.failed}: ${String((e as Error).message ?? e)}`)
     } finally {
       setSaving(false)
     }
@@ -96,16 +112,17 @@ export function OpenAiKeyForm({
     setChecking(true)
     setError(null)
     setResult(null)
+    setSaved(false)
     try {
       const r = await fetch("/api/fractera/openai-key?check=1", { method: "POST" })
       const d = await r.json().catch(() => ({}))
-      if (!r.ok) {
-        setError(String(d.error ?? r.status))
+      if (!r.ok || typeof d.valid !== "boolean") {
+        setError(`${labels.failed}: ${String(d.error ?? r.status)}`)
         return
       }
-      setResult({ valid: Boolean(d.valid), funded: d.funded ?? null, reason: d.reason ?? null })
+      setResult({ valid: d.valid, funded: d.funded ?? null, reason: d.reason ?? null })
     } catch (e) {
-      setError(String((e as Error).message ?? e))
+      setError(`${labels.failed}: ${String((e as Error).message ?? e)}`)
     } finally {
       setChecking(false)
     }
@@ -136,6 +153,13 @@ export function OpenAiKeyForm({
           )}
         </div>
       </div>
+
+      {saved && (
+        <span data-openai-saved className="flex items-center gap-1.5">
+          <CheckCircle2 className="size-3.5 text-emerald-600 dark:text-emerald-400" />
+          <Small className="text-emerald-700 dark:text-emerald-300">{labels.saved}</Small>
+        </span>
+      )}
 
       {result && (
         <div data-openai-check className="flex flex-col gap-1.5 rounded-md border border-border p-2.5">

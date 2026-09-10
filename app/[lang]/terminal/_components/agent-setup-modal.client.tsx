@@ -18,6 +18,11 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 
+// 🪦 С 181-3 ОКНО — ТОЛЬКО ПРО БОТА. Половина «подписка» уехала на страницу «Подписка
+// Claude», раздел ключа OpenAI — на вкладку «Подписка OpenAI» (слово владельца
+// 2026-09-10: «Из терминала убери вход в подписку», «Убери подписку OpenAI из
+// настроек»). Запуск канала по-прежнему требует входа — подсказка у кнопки ведёт туда.
+//
 // ОКНО ПОДКЛЮЧЕНИЯ АГЕНТА — ОДНА КНОПКА, ОБЕ ПОЛОВИНЫ (шаг 115).
 //
 // Решение владельца дословно: «в нашей кнопке которая называется вход по
@@ -36,17 +41,7 @@ import { Input } from "@/components/ui/input";
 const BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 const ENDPOINT = `${BASE}/api/fractera/agent-setup`;
 
-/**
- * Дверь ключа OpenAI — ЧУЖАЯ И ЕДИНСТВЕННАЯ.
- *
- * 🔒 Она уже умеет всё: читает маску из файла слота, а пишет через
- * `POST /platform/openai-key` службы данных, которая одна знает список
- * потребителей. Своего хранения здесь нет и заводить его нельзя — второй путь
- * ключа разошёлся бы с первым молча (оплачено шагом 109-3).
- */
-const KEY_ENDPOINT = `${BASE}/api/fractera/openai-key`;
-
-type OpenAiState = { masked: string; present: boolean };
+// 🪦 ЗДЕСЬ СТОЯЛА ДВЕРЬ КЛЮЧА OpenAI ДЛЯ РАЗДЕЛА ОКНА — УБРАНА 181-3 вместе с разделом.
 
 type Setup = {
   subscription: { loggedIn: boolean | null; method: string | null };
@@ -134,7 +129,6 @@ type Props = {
   channelRunning: boolean;
   onClose: () => void;
   onLaunchChannel: () => void;
-  onLogin: () => void;
   /** Отправить команду привязки в терминал вкладки. */
   onPair: (code: string) => void;
 };
@@ -144,7 +138,6 @@ export function AgentSetupModal({
   lang,
   onClose,
   onLaunchChannel,
-  onLogin,
   onPair,
 }: Props & { lang: string }) {
   const [setup, setSetup] = useState<Setup | null>(null);
@@ -153,85 +146,11 @@ export function AgentSetupModal({
   const [note, setNote] = useState("");
   const pairRef = useRef<HTMLElement | null>(null);
   const [pairVisible, setPairVisible] = useState(false);
-  const [openai, setOpenai] = useState<OpenAiState | null>(null);
-  const [openaiKey, setOpenaiKey] = useState("");
-  const [keyBusy, setKeyBusy] = useState(false);
-  const [keyNote, setKeyNote] = useState("");
   // 🔒 ЯЗЫК ПРИХОДИТ ПРОПСОМ ИЗ МАРШРУТА, А НЕ УГАДЫВАЕТСЯ В БРАУЗЕРЕ
   // (2026-09-06). Пока страница жила вне `[lang]`, сервер языка не знал, и
   // хук `useUiLang()` выяснял его после разметки — первый проход всегда был
   // английским. Теперь язык известен до единого байта.
   const uiLang = lang;
-
-  // 🔒 КЛЮЧ СПРАШИВАЕТСЯ ОДИН РАЗ, А НЕ КАЖДЫЕ ТРИ СЕКУНДЫ. Опрос нужен там, где
-  // состояние меняется САМО — код привязки прилетает от бота, пока человек
-  // смотрит на экран. Ключ меняет только он сам, здесь и сейчас.
-  const loadKey = useCallback(async () => {
-    try {
-      const res = await fetch(KEY_ENDPOINT, { cache: "no-store" });
-      if (res.ok) {
-        setOpenai((await res.json()) as OpenAiState);
-      }
-    } catch {
-      /* дверь недоступна — раздел просто покажет «не задан» */
-    }
-  }, []);
-
-  useEffect(() => {
-    loadKey();
-  }, [loadKey]);
-
-  const handleKeyChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      setOpenaiKey(e.target.value);
-    },
-    []
-  );
-
-  const handleSaveKey = useCallback(async () => {
-    const value = openaiKey.trim();
-    if (value.length < 20) {
-      return;
-    }
-    setKeyBusy(true);
-    setKeyNote("");
-    try {
-      const res = await fetch(KEY_ENDPOINT, {
-        body: JSON.stringify({ key: value }),
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
-      });
-      const data = (await res.json().catch(() => ({}))) as {
-        applied?: { chat?: boolean; project?: boolean };
-        error?: string;
-        masked?: string;
-        reason?: string;
-      };
-      if (res.ok) {
-        setOpenai({ masked: data.masked ?? "", present: true });
-        setOpenaiKey("");
-        // 🛑 «СОХРАНЁН» И «ПРИМЕНЁН» — РАЗНЫЕ УТВЕРЖДЕНИЯ, И ДВЕРЬ ГОВОРИТ ЭТО
-        // ОТВЕТОМ. Разбор входящих подхватит ключ сразу — он читает файл на
-        // каждом обращении; само приложение читает окружение при старте и до
-        // пересборки работает со старым. Обещать обратное значило бы соврать.
-        setKeyNote(
-          data.applied?.project
-            ? "Ключ сохранён и применён везде."
-            : "Ключ сохранён. Разбор входящих подхватит сразу; само приложение — после ближайшей пересборки."
-        );
-        return;
-      }
-      setKeyNote(
-        data.error === "bad-format"
-          ? "Это не похоже на ключ OpenAI: ожидается вид sk-…"
-          : `Не сохранён: ${data.reason ?? data.error ?? res.status}`
-      );
-    } catch {
-      setKeyNote("Не сохранён: дверь недоступна.");
-    } finally {
-      setKeyBusy(false);
-    }
-  }, [openaiKey]);
 
   const jumpToPair = useCallback(() => {
     pairRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -329,7 +248,6 @@ export function AgentSetupModal({
   );
 
   const loggedIn = setup?.subscription.loggedIn === true;
-  const unknown = setup?.subscription.loggedIn === null;
   const hasToken = setup?.telegram.present === true;
   const pending = setup?.telegram.pending ?? [];
   const allowed = setup?.telegram.allowed ?? 0;
@@ -377,37 +295,19 @@ export function AgentSetupModal({
             </span>
             <div className="flex flex-col gap-0.5">
               <DialogTitle className="text-left">
-                Подключение агента
+                Подключение бота
               </DialogTitle>
               <DialogDescription className="text-left text-[12px]">
-                Подписка Claude Code и бот, из которого вы будете ему писать.
+                Бот, из которого вы пишете агенту, и живая сессия, в которой он отвечает.
               </DialogDescription>
             </div>
           </div>
         </DialogHeader>
 
-        {/* ── 1. подписка ─────────────────────────────────────────────── */}
+        {/* ── 1. бот ──────────────────────────────────────────────────── */}
         <section className="flex flex-col gap-2 rounded-lg border border-border p-3">
           <div className="flex items-center justify-between gap-3">
-            <span className="font-medium text-[13px]">
-              1. Подписка Claude Code
-            </span>
-            <span className="text-[12px] text-muted-foreground">
-              {setup === null && "проверяем…"}
-              {loggedIn && `подключена · ${setup?.subscription.method ?? ""}`}
-              {setup !== null && !(loggedIn || unknown) && "не подключена"}
-              {unknown && "состояние неизвестно"}
-            </span>
-          </div>
-          <Button onClick={onLogin} size="sm" type="button" variant="outline">
-            {loggedIn ? "Войти заново" : "Войти по подписке"}
-          </Button>
-        </section>
-
-        {/* ── 2. бот ──────────────────────────────────────────────────── */}
-        <section className="flex flex-col gap-2 rounded-lg border border-border p-3">
-          <div className="flex items-center justify-between gap-3">
-            <span className="font-medium text-[13px]">2. Telegram-бот</span>
+            <span className="font-medium text-[13px]">1. Telegram-бот</span>
             <span className="font-mono text-[12px] text-muted-foreground">
               {hasToken ? setup?.telegram.masked : "не задан"}
             </span>
@@ -441,9 +341,9 @@ export function AgentSetupModal({
           </div>
         </section>
 
-        {/* ── 3. запуск ───────────────────────────────────────────────── */}
+        {/* ── 2. запуск ───────────────────────────────────────────────── */}
         <section className="flex flex-col gap-2 rounded-lg border border-border p-3">
-          <span className="font-medium text-[13px]">3. Сессия агента</span>
+          <span className="font-medium text-[13px]">2. Сессия агента</span>
           <p className="text-[12px] text-muted-foreground leading-relaxed">
             Канал уже работает — он поднят при установке сервера и живёт сам.
             Кнопка <strong className="text-foreground">показывает</strong> его
@@ -471,12 +371,27 @@ export function AgentSetupModal({
           </Button>
           {loggedIn && hasToken ? null : (
             <span className="text-[11px] text-muted-foreground">
-              Доступно, когда подключены обе половины выше.
+              {loggedIn ? (
+                "Доступно, когда сохранён токен бота выше."
+              ) : (
+                <>
+                  Доступно после входа в подписку Claude —{" "}
+                  <a
+                    className="underline"
+                    href={`/${uiLang}/claude-subscription`}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    страница «Подписка Claude»
+                  </a>
+                  .
+                </>
+              )}
             </span>
           )}
         </section>
 
-        {/* ── 4. привязка ─────────────────────────────────────────────────
+        {/* ── 3. привязка ─────────────────────────────────────────────────
             🔒 РАЗДЕЛ ПОЯВЛЯЕТСЯ САМ И САМ ЖЕ ИСЧЕЗАЕТ. Пока привязывать
             нечего, показывать нечего; пустой раздел «ожидание кода» на экране
             читался бы как незавершённая настройка. */}
@@ -486,7 +401,7 @@ export function AgentSetupModal({
             ref={pairRef}
           >
             <span className="font-medium text-[13px]">
-              4. Бот получил сообщение — подтвердите, что это вы
+              3. Бот получил сообщение — подтвердите, что это вы
             </span>
             {pending.map((p) => (
               <PairRow
@@ -548,70 +463,8 @@ export function AgentSetupModal({
           />
         </a>
 
-        {/* ── 5. ключ OpenAI — НЕОБЯЗАТЕЛЬНО ────────────────────────────────
-            🔒 РАЗДЕЛ ВНИЗУ И БЛЕДНЕЕ ОСТАЛЬНЫХ, ПОТОМУ ЧТО ОН НЕ НУЖЕН ДЛЯ
-            РАБОТЫ БОТА. Бот отвечает по подписке владельца; ключ тратится
-            только на разбор входящих — расшифровку речи, описание изображений
-            и укладку в векторную память и граф знаний. Раздел, выглядящий как
-            четыре обязательных шага выше, читался бы как пятое препятствие.
-
-            🔒 ЭТО ДВЕРЬ К ОБЩЕМУ ХРАНИЛИЩУ, А НЕ ЕЩЁ ОДНО МЕСТО ХРАНЕНИЯ.
-            Слово владельца: «во множестве мест вводим ключ, но если он хотя бы
-            в одном месте введён — он виден везде». Так и устроено: запись идёт
-            единственной дверью `POST /platform/openai-key` службы данных, и
-            список потребителей знает она одна. ✗ шагом 109-3 оплачено обратное:
-            чат писал файл слота сам, ключ доезжал только до приложения, а граф
-            знаний и слой данных о нём не знали — и молчали об этом.
-
-            🛑 ДВЕРЬ СУЩЕСТВОВАЛА С ШАГА 96 И НЕ ИМЕЛА НИ ОДНОГО ЭКРАНА.
-            Способность была построена и заперта: ввести ключ отсюда было
-            нельзя, хотя код для этого лежал готовым. */}
-        <section className="flex flex-col gap-2 rounded-lg border border-border/60 border-dashed p-3">
-          <div className="flex items-center justify-between gap-2">
-            <span className="font-medium text-[13px] text-muted-foreground">
-              Ключ OpenAI — необязательно
-            </span>
-            <span className="font-mono text-[11px] text-muted-foreground">
-              {openai?.present ? openai.masked : "не задан"}
-            </span>
-          </div>
-          <p className="text-[12px] text-muted-foreground leading-relaxed">
-            Боту он не нужен — тот отвечает по вашей подписке. Ключ тратится
-            только на{" "}
-            <strong className="text-foreground">разбор входящих</strong>:
-            расшифровку голосовых, описание изображений и укладку в векторную
-            память и граф знаний. Расход экономный — короткие вызовы по одному
-            на сообщение, и только когда сообщение пришло.
-          </p>
-          <p className="text-[12px] text-muted-foreground leading-relaxed">
-            Ключ в проекте{" "}
-            <strong className="text-foreground">один на всё</strong>: введённый
-            здесь, он становится виден и приложению, и слою данных, и графу
-            знаний. Если вы уже задавали его в другом месте — здесь он показан
-            маской, вводить второй раз не нужно.
-          </p>
-          <div className="flex gap-2">
-            <Input
-              autoComplete="off"
-              className="font-mono text-[13px]"
-              onChange={handleKeyChange}
-              placeholder="sk-…"
-              type="password"
-              value={openaiKey}
-            />
-            <Button
-              disabled={keyBusy || openaiKey.trim().length < 20}
-              onClick={handleSaveKey}
-              type="button"
-              variant="outline"
-            >
-              {keyBusy ? "…" : "Сохранить"}
-            </Button>
-          </div>
-          {keyNote ? (
-            <span className="text-[11px] text-muted-foreground">{keyNote}</span>
-          ) : null}
-        </section>
+        {/* 🪦 РАЗДЕЛ «КЛЮЧ OpenAI — НЕОБЯЗАТЕЛЬНО» УБРАН 2026-09-10 (181-3): у ключа своя
+            вкладка «Подписка OpenAI» в меню бота, с объяснением, зачем он нужен. */}
 
         {note ? (
           <p className="rounded-lg bg-amber-500/10 px-3 py-2 text-[12px] text-amber-600 dark:text-amber-300">
