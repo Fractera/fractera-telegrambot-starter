@@ -306,9 +306,15 @@ export function TerminalPanel({ lang }: { lang: string }) {
         {/* 🪦 «ВКЛАДКА СУЩЕСТВУЕТ РАДИ ОДНОГО — ПОДКЛЮЧИТЬ ПОДПИСКУ» (114-8) —
             ОТМЕНЕНО 181-3: вход в подписку уехал на страницу «Подписка Claude».
             Эта кнопка открывает окно подключения бота. */}
+        {/* 🔒 КНОПКИ ВЫГЛЯДЯТ КНОПКАМИ: ФОН И РАМКА (181-8, слово владельца
+            2026-09-10 про эту же вкладку: «update design need bg and border»).
+            Цвета заданы явно по закону ниже: фон панели от темы не зависит, и
+            прозрачная кнопка на нём читается как заголовок, а не как орган
+            управления. Тот же вид, что у кнопки входа на странице «Подписка
+            Claude» (181-5). */}
         <Button
           onClick={handleAttachAgent}
-          className="text-white/80 hover:bg-white/10 hover:text-white"
+          className="border border-white/25 bg-white/10 text-white hover:bg-white/20 hover:text-white"
           size="sm"
           title="Показать живую сессию агента: тот же экран, что работает под pm2. Отключиться — Ctrl+A, затем D"
           variant="ghost"
@@ -319,7 +325,7 @@ export function TerminalPanel({ lang }: { lang: string }) {
 
 
         <Button
-          className="ml-auto text-white/80 hover:bg-white/10 hover:text-white"
+          className="ml-auto border border-white/25 bg-white/10 text-white hover:bg-white/20 hover:text-white"
           onClick={handleReset}
           size="sm"
           title="Вернуть терминал в исходное состояние: мышь, экран, курсор"
