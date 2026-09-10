@@ -891,6 +891,10 @@ const EN: TelegramUi = {
       hint: "What we are building, why, and how it works today. A living document.",
       title: "Passport",
     },
+    "memory-test": {
+      hint: "A bench for the memory service. Phrases go straight to it and come back with its own answer — no agent in between.",
+      title: "Memory test",
+    },
     settings: {
       hint: "The token, the connection and everything the bot needs in order to answer.",
       title: "Settings",
@@ -1379,6 +1383,10 @@ const RU: TelegramUi = {
     passport: {
       hint: "Что мы строим, зачем и как это устроено сегодня. Живой документ: правится по мере того, как решения принимаются.",
       title: "Паспорт",
+    },
+    "memory-test": {
+      hint: "Стенд службы памяти. Фраза уходит прямо в неё и возвращается её же ответом — агента в цепочке нет.",
+      title: "Тест памяти",
     },
     settings: {
       hint: "Токен, связь и всё, без чего бот не отвечает.",

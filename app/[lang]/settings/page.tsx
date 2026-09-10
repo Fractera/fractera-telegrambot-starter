@@ -484,6 +484,17 @@ async function BotSettingsGate({
                     : "The passport is not written yet. It lives as development-docs/PASSPORT.md in the project itself — create it and it will appear here."}
                 </div>
               ))}
+
+            {/* 🔒 СТЕНД ПАМЯТИ (176). Дверь построена, поверхность приезжает
+                следующим подшагом — и раздел говорит это словами: пункт меню,
+                за которым молча пусто, читается как поломка, а не как «рано». */}
+            {active === "memory-test" && (
+              <InProgress
+                label={ui.pages["memory-test"].title}
+                lead={ui.skeleton.inProgress}
+                where="memory-test"
+              />
+            )}
           </div>
         </WorkspaceShell>
       </div>
