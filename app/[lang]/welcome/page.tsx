@@ -68,8 +68,14 @@ async function SignInLink({ lang }: { lang: string }) {
   // Адрес выводится из хоста, по которому открыт сам чат; почему именно так —
   // в `lib/fractera/auth-url.ts`, там же и оплаченный этим дефект.
   const authUrl = publicAuthUrl(host, proto)
-  const back = host ? `${proto}://${host}/` : ""
-  const href = authUrl && back ? `${authUrl}/login?redirectUrl=${encodeURIComponent(back)}` : ""
+  // 🔒 ВОЗВРАТ — НА ГЛАВНУЮ СВОЕГО ЯЗЫКА, А НЕ НА ГОЛЫЙ КОРЕНЬ: с корня
+  // привратник уводит по заголовку браузера, и русский мог вернуться на `/en`.
+  const back = host ? `${proto}://${host}/${lang}` : ""
+  // ✗ ЗДЕСЬ СТОЯЛ `redirectUrl`, А ЭКРАН ВХОДА ЧИТАЕТ ТОЛЬКО `callbackUrl`
+  // (`services/auth/.../login-placeholder.client.tsx:33`). Найдено разведкой
+  // шага 179: параметр игнорировался молча, и после входа человек оставался на
+  // экране службы входа вместо возврата в чат.
+  const href = authUrl && back ? `${authUrl}/login?callbackUrl=${encodeURIComponent(back)}` : ""
 
-  return <WelcomeSignIn href={href} ui={welcomeUi(lang)} />
+  return <WelcomeSignIn home={`/${lang}`} href={href} ui={welcomeUi(lang)} />
 }

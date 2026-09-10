@@ -87,7 +87,11 @@ export async function proxy(request: NextRequest) {
       // `?lang=ru` в самой ссылке. Зеркало 3000: там читают ровно этот параметр.
       const asked = search.get("lang") ?? "";
       const back = SUPPORTED.includes(asked) ? asked : langOf(request);
-      search.set("redirectUrl", `${publicOrigin(request)}/${back}`);
+      // 🔒 ПОСЛЕ ВЫХОДА — СТРАНИЦА ПРИВЕТСТВИЯ, А НЕ ГЛАВНАЯ (179-2, слово
+      // владельца 2026-09-10: «after success logout to do welcome page… в обоих
+      // проектах»). Там две дороги — войти снова или вернуться на главную;
+      // главная сама по себе не говорит человеку, что он только что вышел.
+      search.set("redirectUrl", `${publicOrigin(request)}/${back}/welcome`);
     }
     const qs = search.toString();
     const away = NextResponse.redirect(
