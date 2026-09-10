@@ -427,22 +427,43 @@ export type TelegramUi = {
   openaiTab: OpenAiTabWords;
 
   /**
-   * КАНАЛ АГЕНТА: ПОДПИСКА CLAUDE CODE И ДВА ЕГО БОТА (шаг 117, 2026-09-05).
+   * ВКЛАДКА «ПОДКЛЮЧЕНИЕ TELEGRAM-БОТА» (181-7).
    *
-   * 🔒 ПОДПИСКА — ПЕРВАЯ КАРТОЧКА РАЗДЕЛА по прямому слову владельца. Ключи
-   * отвечают на вопрос «чем оплачено дополнительное», подписка — «работает ли
-   * агент вообще»; порядок карточек повторяет этот порядок вопросов.
+   * 🔒 ЗДЕСЬ ТОЛЬКО ВТОРАЯ ПОЛОВИНА — АКТИВАЦИЯ. Слова карточки токена лежат в
+   * `agent`, потому что сама карточка переехала целиком и своих слов не меняла.
+   */
+  connect: {
+    title: string;
+    lead: string;
+    show: string;
+    showAgain: string;
+    reset: string;
+    needsToken: string;
+    needsLogin: string;
+    loginLink: string;
+    pairTitle: string;
+    pair: string;
+    pairFirst: string;
+    pairHint: string;
+    allowed: string;
+    none: string;
+    statusConnected: string;
+    statusConnecting: string;
+    statusClosed: string;
+    statusIdle: string;
+    ticketForbidden: string;
+    ticketFailed: string;
+    ticketUnreachable: string;
+    closedWith: string;
+  };
+  /**
+   * КАНАЛ АГЕНТА: TELEGRAM-БОТ (шаг 117, 2026-09-05).
+   *
+   * 🪦 СЛОВА КАРТОЧКИ «ПОДПИСКА CLAUDE CODE» УДАЛЕНЫ 181-6 вместе с самой карточкой
+   * (слово владельца 2026-09-10). Вход в подписку живёт на своей странице, и её
+   * слова — в `app/[lang]/claude-subscription/_i18n/`.
    */
   agent: {
-    title: string;
-    statusOn: string;
-    statusOff: string;
-    lead: string;
-    openTerminal: string;
-    dialogTitle: string;
-    dialogDescription: string;
-    newTab: string;
-    unreachable: string;
     botAutomationTitle: string;
     botAutomationLead: string;
     allowed: string;
@@ -578,6 +599,31 @@ const EN: TelegramUi = {
     "The section exists and its place is taken; the text and the picture that explain how the bot is arranged in this project are still being prepared. Nothing is broken here — there is simply nothing written yet.",
   aboutSoonTitle: "This description is being written.",
 
+  connect: {
+    allowed: "People paired: {n}. Write to the bot — it answers.",
+    closedWith: "Session closed:",
+    lead:
+      "The bot already runs on the server — the button shows its live screen here. Write to the bot from your phone: a pairing code appears below on its own, and one click confirms it.",
+    loginLink: "the «Claude subscription» page",
+    needsLogin: "The agent has not signed in to the Claude subscription yet —",
+    needsToken: "Save the bot token above first.",
+    none: "Nobody is paired yet. Write to the bot from your phone — the code will appear here.",
+    pair: "Confirm",
+    pairFirst: "Press «Show the live session» first: the pairing command is accepted by the session that runs the channel.",
+    pairHint: "The command runs in the session above — nothing to type. You will see the answer there.",
+    pairTitle: "The bot got a message — confirm it is you",
+    reset: "Reset the terminal",
+    show: "Show the live session",
+    showAgain: "Show again",
+    statusClosed: "session closed",
+    statusConnected: "session on screen",
+    statusConnecting: "connecting…",
+    statusIdle: "not opened",
+    ticketFailed: "The ticket door answered",
+    ticketForbidden: "The live session is for the architect of this project only.",
+    ticketUnreachable: "The ticket door is unreachable.",
+    title: "Activating the bot",
+  },
   agent: {
     allowed: "people paired: {n}",
     bot: {
@@ -599,18 +645,7 @@ const EN: TelegramUi = {
     botAutomationLead:
       "The main bot of the project: you write to it from your phone and Claude Code answers. The token entered here goes to the very file the channel plugin reads — set it up here or in the terminal, it is the same bot either way.",
     botAutomationTitle: "Telegram bot — automation agent",
-    dialogDescription:
-      "Sign in to the Claude subscription for the whole server — the bot and the memory both think with it.",
-    dialogTitle: "Claude subscription",
-    lead: "This is how the bot thinks. A message from Telegram goes straight into a live Claude Code session on your server, and the answer comes back to Telegram — on your subscription, with no API billing. Without this sign-in nothing below works: neither the bot nor its answers.",
-    newTab: "Open in a new tab",
-    openTerminal: "Sign in to the subscription",
     pending: "codes awaiting confirmation: {n}",
-    statusOff: "not signed in",
-    statusOn: "signed in",
-    title: "Claude Code subscription",
-    unreachable:
-      "The chat service is not answering, so the sign-in page cannot be shown. That is normal on your own machine: the service lives on the server.",
   },
 
   facts: {
@@ -891,6 +926,10 @@ const EN: TelegramUi = {
       hint: "The token, the connection and everything the bot needs in order to answer.",
       title: "Settings",
     },
+    "telegram-connect": {
+      hint: "Both halves of the bot in one place: the token it is known by, and the activation that makes it answer you.",
+      title: "Connecting the Telegram bot",
+    },
     openai: {
       hint: "What the OpenAI key is for — and the key itself, one for the whole server.",
       title: "OpenAI subscription",
@@ -1087,6 +1126,31 @@ const RU: TelegramUi = {
     "Раздел существует, и место под него занято; текст и изображение, объясняющие, как устроен бот в этом проекте, ещё готовятся. Здесь ничего не сломано — здесь пока просто ничего не написано.",
   aboutSoonTitle: "Это описание сейчас пишется.",
 
+  connect: {
+    allowed: "Привязано собеседников: {n}. Пишите боту — он отвечает.",
+    closedWith: "Сессия закрыта:",
+    lead:
+      "Бот уже работает на сервере — кнопка показывает его живой экран прямо здесь. Напишите боту с телефона: код привязки появится ниже сам, и подтвердить его можно одним нажатием.",
+    loginLink: "страница «Подписка Claude»",
+    needsLogin: "Агент ещё не вошёл в подписку Claude —",
+    needsToken: "Сначала сохраните токен бота в карточке выше.",
+    none: "Пока никто не привязан. Напишите боту с телефона — код появится здесь.",
+    pair: "Подтвердить",
+    pairFirst: "Сначала нажмите «Показать живую сессию»: команду привязки принимает та сессия, в которой работает канал.",
+    pairHint: "Команда выполнится в сессии выше — дописывать ничего не нужно. Ответ увидите там же.",
+    pairTitle: "Бот получил сообщение — подтвердите, что это вы",
+    reset: "Сбросить терминал",
+    show: "Показать живую сессию",
+    showAgain: "Показать заново",
+    statusClosed: "сессия закрыта",
+    statusConnected: "сессия на экране",
+    statusConnecting: "подключение…",
+    statusIdle: "не открыта",
+    ticketFailed: "Дверь билета ответила",
+    ticketForbidden: "Живая сессия доступна только архитектору проекта.",
+    ticketUnreachable: "Дверь билета недоступна.",
+    title: "Активация бота",
+  },
   agent: {
     allowed: "привязано собеседников: {n}",
     bot: {
@@ -1107,18 +1171,7 @@ const RU: TelegramUi = {
     botAutomationLead:
       "Основной бот проекта: вы пишете ему с телефона, отвечает Claude Code. Токен, введённый здесь, попадает в тот же файл, который читает плагин каналов, — настроите отсюда или из терминала, бот получится один и тот же.",
     botAutomationTitle: "Telegram-бот — агент автоматизации",
-    dialogDescription:
-      "Вход в подписку Claude для всего сервера — ей думают и бот, и память.",
-    dialogTitle: "Подписка Claude",
-    lead: "Этим бот и думает. Сообщение из Telegram попадает прямо в живую сессию Claude Code на вашем сервере, а ответ возвращается в Telegram — по вашей подписке, без оплаты API. Без этого входа не работает ничего из того, что ниже: ни бот, ни ответы.",
-    newTab: "Открыть отдельной вкладкой",
-    openTerminal: "Войти в подписку",
     pending: "ожидают подтверждения: {n}",
-    statusOff: "вход не выполнен",
-    statusOn: "вход выполнен",
-    title: "Подписка Claude Code",
-    unreachable:
-      "Служба чата не отвечает, поэтому страницу входа показать нечем. На вашем компьютере это нормально: служба живёт на сервере.",
   },
 
   facts: {
@@ -1399,6 +1452,10 @@ const RU: TelegramUi = {
     settings: {
       hint: "Токен, связь и всё, без чего бот не отвечает.",
       title: "Настройки",
+    },
+    "telegram-connect": {
+      hint: "Обе половины бота в одном месте: токен, по которому его узнают, и активация, после которой он вам отвечает.",
+      title: "Подключение Telegram-бота",
     },
     openai: {
       hint: "Зачем нужен ключ OpenAI — и сам ключ, один на весь сервер.",

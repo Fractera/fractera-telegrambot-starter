@@ -1,13 +1,12 @@
 "use client";
 
-import { BotIcon, RotateCcwIcon, SendIcon } from "lucide-react";
+import { BotIcon, RotateCcwIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AgentSetupModal } from "./agent-setup-modal.client";
 import { AuthFlowModal } from "./auth-flow-modal.client";
 import {
   type XtermHandle,
   XtermTerminal,
-} from "./xterm-terminal.client";
+} from "@/components/terminal/xterm-terminal.client";
 import { Button } from "@/components/ui/button";
 import { createMouseFilter, MOUSE_OFF } from "@/lib/fractera/mouse-filter.mjs";
 import { extractAuthUrl } from "@/lib/fractera/terminal-auth.mjs";
@@ -75,7 +74,6 @@ export function TerminalPanel({ lang }: { lang: string }) {
   const [status, setStatus] = useState<Status>("idle");
   const [note, setNote] = useState("");
   const [authUrl, setAuthUrl] = useState<string | null>(null);
-  const [setupOpen, setSetupOpen] = useState(false);
   // Какой режим идёт сейчас: команду привязки принимает ТОЛЬКО сессия с
   // каналом. Отправленная в оболочку, она была бы просто ненайденной командой.
   const [mode, setMode] = useState<Mode>("system");
@@ -241,67 +239,28 @@ export function TerminalPanel({ lang }: { lang: string }) {
     [send]
   );
 
-  // Кнопка открывает окно подключения бота. 🪦 До 181-3 она же входила в
-  // подписку; вход уехал на страницу «Подписка Claude».
-  const handleOpenSetup = useCallback(() => {
-    setSetupOpen(true);
-  }, []);
+  // 🪦 ЗДЕСЬ БЫЛО ОКНО ПОДКЛЮЧЕНИЯ БОТА — УБРАНО 181-7 словом владельца:
+  // «Ты на вкладке терминал оставил подключение бота. Это неправильное место его
+  // размещения. Оттуда убрать». Токен, живая сессия и привязка живут в пункте меню
+  // «Подключение Telegram-бота»; вход в подписку — на странице «Подписка Claude»
+  // (181-3). Терминал снова просто оболочка сервера.
 
-  const handleCloseSetup = useCallback(() => {
-    setSetupOpen(false);
-  }, []);
-
-  // Запуск канала закрывает окно: дальше человек смотрит в терминал — там
-  // появляется код привязки, и окно его закрыло бы.
-  const handleLaunchChannel = useCallback(() => {
-    setSetupOpen(false);
+  // Показать живую сессию агента в этой вкладке. Та же способность есть на
+  // вкладке «Подключение Telegram-бота» — там она рядом с привязкой.
+  const handleAttachAgent = useCallback(() => {
     setMode("claude-channel");
     connect("claude-channel");
   }, [connect]);
 
-  // 🔒 КОМАНДА ПРИВЯЗКИ УХОДИТ В ТЕРМИНАЛ, А НЕ В ДВЕРЬ, И ЭТО НЕ ЛЕНЬ.
-  // Привязку выполняет САМА сессия Claude Code: это её слэш-команда, и
-  // состояние ожидания живёт у неё в памяти. Дверь, дописавшая `access.json`
-  // в обход, разошлась бы с тем, что помнит плагин, — и разошлась бы молча.
-  const handlePair = useCallback(
-    (code: string) => {
-      send({ data: `/telegram:access pair ${code}\n`, type: "stdin" });
-      termRef.current?.focus();
-    },
-    [send]
-  );
+  // 🪦 ОТПРАВКА КОМАНДЫ ПРИВЯЗКИ УБРАНА ОТСЮДА 181-7 вместе с окном: она живёт в
+  // островке активации на вкладке «Подключение Telegram-бота», и закон 115 переехал
+  // туда же — привязку выполняет сама сессия, а не дверь.
 
   // 🔒 РУЧНОЙ СБРОС — НЕ ЛИШНЯЯ КНОПКА, А ПРИЗНАНИЕ ГРАНИЦЫ. Два слоя выше
   // лечат случаи, которые мы УМЕЕМ заметить: смену режима и обрыв сокета.
   // Программа внутри живого PTY способна испортить состояние терминала и не
   // умереть при этом, и заметить такое из браузера нечем. Тогда человеку нужна
   // не догадка агента, а кнопка.
-  // 🔒 ПОДКЛЮЧЕНИЕ К ЖИВОЙ СЕССИИ АГЕНТА, А НЕ ЗАПУСК ВТОРОЙ (119).
-  //
-  // ✗ ЧЕМ ОПЛАЧЕНО. Владелец: «когда я открываю терминал, я не вижу никаких
-  // зависших сообщений, почему мой терминал пуст? На первом тестировании каждое
-  // моё сообщение отображалось в терминале». Он был прав: в первом испытании он
-  // ЗАПУСКАЛ канал в этой самой вкладке — вкладка и БЫЛА сессией. Уведя канал под
-  // pm2, мы получили живучесть и потеряли видимость, и цену тогда не назвали.
-  //
-  // 🔒 КНОПКА ПОДКЛЮЧАЕТ, А НЕ ЗАПУСКАЕТ. Набрать здесь `claude --channels` значило
-  // бы завести ВТОРОГО опрашивателя того же бота, а Telegram отдаёт каждое
-  // обновление ровно одному читателю: переписка владельца поделилась бы пополам,
-  // молча. `tmux attach` показывает ТОТ ЖЕ экран, что живёт под pm2.
-  //
-  // 🪦 БЫЛО `tmux attach` — ЗАМЕНЕНО НА `screen -r` 2026-09-05 (122), И ЗАМЕНА
-  // ОПЛАЧЕНА РЕГРЕССИЕЙ. Под tmux цикл опроса плагина умирал каждые пять минут:
-  // процесс жив, pm2 `online`, а ответ в Telegram не доходил. Измерено замером
-  // соединения каждые 25 с в течение восьми минут — `script` и `screen` дали ноль
-  // обрывов, `tmux` обрывался дважды. `screen` даёт и стабильность, и подключаемость.
-  //
-  // 🔒 И ЭТО ЖЕ ЕДИНСТВЕННЫЙ СПОСОБ ОТВЕТИТЬ НА МОДАЛЬНЫЙ ВОПРОС CLI: вопрос о
-  // политике путей плагин в Telegram не пересылает, и 2026-09-05 такой вопрос
-  // держал бота молчащим два часа — нажать клавишу было некому. Теперь есть кому.
-  const handleAttachAgent = useCallback(() => {
-    send({ data: "screen -r fractera-agent\n", type: "stdin" });
-    termRef.current?.focus();
-  }, [send]);
 
   const handleReset = useCallback(() => {
     termRef.current?.reset();
@@ -348,16 +307,6 @@ export function TerminalPanel({ lang }: { lang: string }) {
             ОТМЕНЕНО 181-3: вход в подписку уехал на страницу «Подписка Claude».
             Эта кнопка открывает окно подключения бота. */}
         <Button
-          onClick={handleOpenSetup}
-          className="text-white/80 hover:bg-white/10 hover:text-white"
-          size="sm"
-          title="Telegram-бот: токен, живая сессия, привязка"
-          variant="ghost"
-        >
-          <SendIcon size={14} />
-          Подключение бота
-        </Button>
-        <Button
           onClick={handleAttachAgent}
           className="text-white/80 hover:bg-white/10 hover:text-white"
           size="sm"
@@ -401,16 +350,6 @@ export function TerminalPanel({ lang }: { lang: string }) {
           ref={termRef}
         />
       </div>
-
-      {setupOpen ? (
-        <AgentSetupModal
-          channelRunning={mode === "claude-channel"}
-          lang={lang}
-          onClose={handleCloseSetup}
-          onLaunchChannel={handleLaunchChannel}
-          onPair={handlePair}
-        />
-      ) : null}
 
       {authUrl ? (
         <AuthFlowModal

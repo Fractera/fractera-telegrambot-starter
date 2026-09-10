@@ -19,6 +19,7 @@ import { TaskParseSection } from "./_components/task-parse-section";
 import { TelegramAbout } from "./_components/telegram-about";
 import { TelegramSettings } from "./_components/telegram-settings";
 import { OpenAiTab } from "./_components/openai-tab";
+import { TelegramConnect } from "./_components/telegram-connect";
 import { architectLayerUi } from "./_i18n/architect-layer.i18n";
 import { telegramUi } from "./_i18n/telegram.i18n";
 import { queryAutomationsLive, readAutomationQuery } from "./_lib/automations";
@@ -487,6 +488,10 @@ async function BotSettingsGate({
                   where={`logs-${view}`}
                 />
               ))}
+
+            {active === "telegram-connect" && (
+              <TelegramConnect lang={lang} ui={ui} />
+            )}
 
             {active === "openai" && <OpenAiTab ui={ui} />}
 

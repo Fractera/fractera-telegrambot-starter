@@ -1,23 +1,23 @@
-import { AlertTriangle, Bot, CheckCircle2, Cpu, XCircle } from "lucide-react"
+import { Bot, CheckCircle2 } from "lucide-react"
 import { Small } from "@/components/ui/typography"
-import { appDialogUi } from "@/components/dialog/app-dialog.i18n"
 import { readAgentChannel } from "@/lib/architect/agent-channel"
 import { AgentBotForm } from "./agent-bot.client"
-import { ClaudeTerminal } from "./claude-terminal.client"
 import { SettingsCard } from "./settings-card"
 import type { TelegramUi } from "../_i18n/telegram.i18n"
 
-// КАНАЛ АГЕНТА: ПОДПИСКА CLAUDE CODE И ДВА ЕГО БОТА (шаг 117, 2026-09-05).
+// КАНАЛ АГЕНТА: TELEGRAM-БОТ (шаг 117, 2026-09-05; карточка подписки убрана 181-6).
 //
-// 🔒 ПОДПИСКА СТОИТ ПЕРВОЙ КАРТОЧКОЙ, И ЭТО ПРЯМОЕ СЛОВО ВЛАДЕЛЬЦА: «самое
-// главное, чего здесь не хватает, — первым пунктом авторизация в подписке Claude
-// Code». Довод сильнее порядка привычки: без входа в подписку не работает НИЧЕГО
-// из того, что ниже, — ни бот, ни ответы. Ключи OpenAI и Anthropic отвечают на
-// вопрос «чем оплачено дополнительное», а этот — «работает ли агент вообще».
+// 🪦 «ПОДПИСКА СТОИТ ПЕРВОЙ КАРТОЧКОЙ» — ОТМЕНЕНО 2026-09-10 СЛОВОМ ВЛАДЕЛЬЦА:
+// «remove |Подписка Claude Code вход выполнен claude.ai Этим бот и думает…|».
+// Прежний довод (2026-09-05) был верен, пока входу негде было жить: «без входа в
+// подписку не работает НИЧЕГО из того, что ниже». Теперь у входа есть своё место —
+// пункт меню «Подписка Claude» и страница `/{lang}/claude-subscription` (181-2), а
+// карточка была вторым входом к той же вещи.
 //
-// 🔒 ОДИН ВОПРОС ЧАТУ НА СТРАНИЦУ, А НЕ ПО ОДНОМУ НА КАРТОЧКУ. Все три карточки
-// показывают ОДНО состояние, снятое в одну секунду; три отдельных запроса дали бы
-// три разных мгновения и объяснимую только кодом рассинхронизацию.
+// 🔒 УБРАНА ЦЕЛИКОМ, А НЕ СПРЯТАНА: вместе с ней удалены островок
+// `claude-terminal.client.tsx`, расчёт `agentTerminalUrl()` (181-3) и девять слов
+// словаря. Поверхность, вычеркнутая наполовину, оставляет код, который следующий
+// агент примет за работающий.
 //
 // 🔒 БОТОВ РОВНО ДВА, И ВТОРОЙ ЗАВЕДЁН ПУСТЫМ НАМЕРЕННО (решение владельца
 // 2026-09-05): №1 — агент автоматизации, №2 — агент разработки, «позже сделаем
@@ -33,67 +33,9 @@ export async function AgentChannelSection({ lang, ui }: { lang: string; ui: Tele
   const w = ui.agent
   const state = await readAgentChannel()
 
-  const subscribed = state.available && state.subscription.loggedIn
-
   return (
     <>
-      {/* ── 1. Подписка Claude Code ─────────────────────────────────────── */}
-      <SettingsCard
-        mark={{ "data-agent-subscription": subscribed ? "on" : "off" }}
-        icon={<Cpu className="size-4 text-muted-foreground" />}
-        title={w.title}
-        open
-        status={
-          subscribed ? (
-            <span
-              data-agent-state="on"
-              className="inline-flex items-center gap-1.5 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 text-[length:var(--fs-small)] text-emerald-800 dark:text-emerald-200"
-            >
-              <CheckCircle2 className="size-3.5" />
-              {w.statusOn}
-              {state.subscription.method && (
-                <span className="font-mono opacity-70">{state.subscription.method}</span>
-              )}
-            </span>
-          ) : (
-            <span
-              data-agent-state="off"
-              className="inline-flex items-center gap-1.5 text-[length:var(--fs-small)] text-muted-foreground"
-            >
-              <XCircle className="size-3.5" />
-              {w.statusOff}
-            </span>
-          )
-        }
-        bodyClassName="flex flex-col gap-3 p-3"
-      >
-        <Small className="leading-relaxed text-muted-foreground">{w.lead}</Small>
-
-        {state.available ? (
-          <div className="flex flex-wrap items-center gap-2">
-            <ClaudeTerminal
-              href={`/${lang}/claude-subscription`}
-              ui={appDialogUi(lang)}
-              labels={{
-                open: w.openTerminal,
-                title: w.dialogTitle,
-                description: w.dialogDescription,
-                newTab: w.newTab,
-              }}
-            />
-          </div>
-        ) : (
-          <div
-            data-agent-chat="unreachable"
-            className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-2"
-          >
-            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
-            <Small className="leading-relaxed">{w.unreachable}</Small>
-          </div>
-        )}
-      </SettingsCard>
-
-      {/* ── 2. Бот №1 — агент автоматизации ─────────────────────────────── */}
+      {/* ── Бот №1 — агент автоматизации ─────────────────────────────── */}
       <SettingsCard
         mark={{ "data-agent-bot-card": "automation" }}
         icon={<Bot className="size-4 text-muted-foreground" />}
