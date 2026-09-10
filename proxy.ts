@@ -201,8 +201,11 @@ export async function proxy(request: NextRequest) {
     pathname === "/api/fractera/known" ||
     pathname === "/api/fractera/soul" ||
     pathname === "/api/fractera/pty-ticket" ||
-    pathname === "/api/fractera/misses" ||
-    pathname === "/api/fractera/memory-test"
+    pathname === "/api/fractera/misses"
+    // 🪦 ЗДЕСЬ СТОЯЛА ДВЕРЬ СТЕНДА ПАМЯТИ — УЕХАЛА НА СВОЮ СЛУЖБУ 2026-09-10
+    // (178-4). Она была четвёртой дверью этого класса; правило, по которому её
+    // сюда вписали, живо и работает — им же её отсюда и убрали, вместе с самой
+    // дверью. Восстанавливается из git.
   ) {
     return NextResponse.next();
   }

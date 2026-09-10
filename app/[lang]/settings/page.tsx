@@ -13,7 +13,6 @@ import { AutomationsView } from "./_components/automations-view";
 import { InProgress } from "./_components/in-progress";
 import { PassportBody } from "./_components/passport-body.client";
 import { KnownTable } from "./_components/known-table.client";
-import { MemoryBench } from "./_components/memory-bench.client";
 import { SectionIntro } from "./_components/section-intro.client";
 import { StarterCard } from "./_components/starter-card";
 import { TaskParseSection } from "./_components/task-parse-section";
@@ -486,13 +485,11 @@ async function BotSettingsGate({
                 </div>
               ))}
 
-            {/* 🔒 СТЕНД ПАМЯТИ (176). Слова уезжают островку ПЕРЕЧИСЛЕННЫМИ
-                ПОИМЁННО, а не словарём целиком: тип не сужает рантайм — по
-                проводу уедет всё переданное, даже неотрисованное. Закон уже
-                оплачен в панели дважды за один шаг. */}
-            {active === "memory-test" && (
-              <MemoryBench tablesWords={ui.memoryTables} testWords={ui.memoryTest} />
-            )}
+            {/* 🪦 ЗДЕСЬ БЫЛ СТЕНД ПАМЯТИ (176), И ОН УЕХАЛ НА СВОЮ СЛУЖБУ
+                2026-09-10 (178-4): `memory.aifa.dev`, раздел «Тест памяти».
+                Слово владельца: «чтобы мы прям память тестировали из памяти, а
+                не из чата». Там он зовёт исполнителей напрямую — сети в цепочке
+                не осталось вовсе. Восстанавливается из git. */}
           </div>
         </WorkspaceShell>
       </div>

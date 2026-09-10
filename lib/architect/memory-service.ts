@@ -64,88 +64,16 @@ async function call(method: string, body: unknown): Promise<Record<string, unkno
   }
 }
 
-// ── СТЕНД (176-1): ТО ЖЕ САМОЕ, НО БЕЗ ПРИГЛАЖИВАНИЯ ─────────────────────────
+// 🪦 ЗДЕСЬ ЖИЛИ `bench()` И `benchGet()` — ВЫЗОВЫ ДЛЯ СТЕНДА ПАМЯТИ (176-1).
+// Они возвращали ответ памяти целиком, включая отказ, и этим отличались от
+// `call()` выше: тому нужен готовый ответ или ничего, стенду — правда.
 //
-// 🔒 ЗДЕСЬ ОТВЕТ ВОЗВРАЩАЕТСЯ ЦЕЛИКОМ, ВКЛЮЧАЯ `ok:false`, И ЭТО НЕ ДУБЛЬ
-// `call()`, А ДРУГОЙ ДОГОВОР. `call()` служит ЭКРАНУ: ему нужен готовый ответ
-// или ничего. Стенду нужно ровно обратное — увидеть, как память отвечает НА
-// САМОМ ДЕЛЕ, отказ включительно. Свести их в одну функцию значило бы отнять у
-// стенда его единственный смысл.
-// 🛑 И КОД HTTP ЧИТАЕТСЯ ТОЖЕ: память отвечает `200` с `ok:false`, а `501` — на
-// непостроенный метод. Стенд обязан показывать разницу, а не сливать её в «нет».
-
-export type BenchAnswer = {
-  /** Код HTTP службы; `0`, если до неё не дошли вовсе. */
-  status: number
-  /** Тело ответа как есть. `null`, когда пришло не-JSON. */
-  body: unknown
-  /** Сколько заняло, в миллисекундах: разбор фразы идёт 6–10 секунд. */
-  ms: number
-  /** Почему ответа нет вовсе — словами. Пусто, когда служба ответила хоть чем-то. */
-  trouble: string | null
-}
-
-/** Позвать метод памяти и вернуть ВСЁ, что она сказала. */
-export async function bench(method: string, body: unknown): Promise<BenchAnswer> {
-  const key = secret()
-  const started = Date.now()
-  if (!key) {
-    return { body: null, ms: 0, status: 0, trouble: "нет ключа машины (DATA_SECRET)" }
-  }
-  try {
-    const res = await fetch(`${MEMORY}/v1/${method}`, {
-      body: JSON.stringify(body ?? {}),
-      cache: "no-store",
-      headers: { "Content-Type": "application/json", "x-data-secret": key },
-      method: "POST",
-    })
-    const text = await res.text()
-    let parsed: unknown = null
-    try {
-      parsed = JSON.parse(text)
-    } catch {
-      parsed = { raw: text.slice(0, 2000) }
-    }
-    return { body: parsed, ms: Date.now() - started, status: res.status, trouble: null }
-  } catch (e) {
-    return {
-      body: null,
-      ms: Date.now() - started,
-      status: 0,
-      trouble: `служба памяти недоступна: ${String((e as Error).message)}`,
-    }
-  }
-}
-
-/** Тот же приём для чтения: договор и каталог таблиц живут на GET. */
-export async function benchGet(path: string): Promise<BenchAnswer> {
-  const key = secret()
-  const started = Date.now()
-  if (!key) {
-    return { body: null, ms: 0, status: 0, trouble: "нет ключа машины (DATA_SECRET)" }
-  }
-  try {
-    const res = await fetch(`${MEMORY}/v1/${path}`, {
-      cache: "no-store",
-      headers: { "x-data-secret": key },
-    })
-    const text = await res.text()
-    let parsed: unknown = null
-    try {
-      parsed = JSON.parse(text)
-    } catch {
-      parsed = { raw: text.slice(0, 2000) }
-    }
-    return { body: parsed, ms: Date.now() - started, status: res.status, trouble: null }
-  } catch (e) {
-    return {
-      body: null,
-      ms: Date.now() - started,
-      status: 0,
-      trouble: `служба памяти недоступна: ${String((e as Error).message)}`,
-    }
-  }
-}
+// УДАЛЕНЫ 2026-09-10 (178-4) ВМЕСТЕ СО СТЕНДОМ: он уехал на саму службу памяти
+// и зовёт исполнителей напрямую, без сети. Здесь у них не осталось ни одного
+// зовущего — измерено грепом, а не предположено.
+// 🔒 СПОСОБНОСТЬ, НАПИСАННАЯ И НЕ ПОДКЛЮЧЁННАЯ, СНАРУЖИ НЕОТЛИЧИМА ОТ
+// ОТСУТСТВУЮЩЕЙ, а изнутри хуже: следующий агент строит на ней, не проверив,
+// что её никто не зовёт. Восстанавливается из git.
 
 /**
  * Чей это человек — спрашиваем у памяти.
