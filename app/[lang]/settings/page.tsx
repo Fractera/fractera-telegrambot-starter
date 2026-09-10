@@ -13,6 +13,7 @@ import { AutomationsView } from "./_components/automations-view";
 import { InProgress } from "./_components/in-progress";
 import { PassportBody } from "./_components/passport-body.client";
 import { KnownTable } from "./_components/known-table.client";
+import { MemoryBench } from "./_components/memory-bench.client";
 import { SectionIntro } from "./_components/section-intro.client";
 import { StarterCard } from "./_components/starter-card";
 import { TaskParseSection } from "./_components/task-parse-section";
@@ -485,15 +486,12 @@ async function BotSettingsGate({
                 </div>
               ))}
 
-            {/* 🔒 СТЕНД ПАМЯТИ (176). Дверь построена, поверхность приезжает
-                следующим подшагом — и раздел говорит это словами: пункт меню,
-                за которым молча пусто, читается как поломка, а не как «рано». */}
+            {/* 🔒 СТЕНД ПАМЯТИ (176). Слова уезжают островку ПЕРЕЧИСЛЕННЫМИ
+                ПОИМЁННО, а не словарём целиком: тип не сужает рантайм — по
+                проводу уедет всё переданное, даже неотрисованное. Закон уже
+                оплачен в панели дважды за один шаг. */}
             {active === "memory-test" && (
-              <InProgress
-                label={ui.pages["memory-test"].title}
-                lead={ui.skeleton.inProgress}
-                where="memory-test"
-              />
+              <MemoryBench tablesWords={ui.memoryTables} testWords={ui.memoryTest} />
             )}
           </div>
         </WorkspaceShell>

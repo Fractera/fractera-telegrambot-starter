@@ -537,6 +537,42 @@ export type TelegramUi = {
     kindLocation: string;
     forwarded: string;
   };
+  /** Слова стенда памяти — верхние две колонки (176-2). */
+  memoryTest: {
+    lead: string;
+    say: string;
+    ask: string;
+    raw: string;
+    sayHint: string;
+    askHint: string;
+    rawHint: string;
+    rawMethod: string;
+    rawBody: string;
+    send: string;
+    sending: string;
+    inputTitle: string;
+    answerTitle: string;
+    nothingYet: string;
+    nothingSent: string;
+    /** Что лента живёт только в браузере — сказано, а не умолчано. */
+    volatile: string;
+    failed: string;
+    took: string;
+    status: string;
+  };
+  /** Слова нижней половины — таблицы памяти (176-3). */
+  memoryTables: {
+    title: string;
+    lead: string;
+    refresh: string;
+    loading: string;
+    empty: string;
+    down: string;
+    rows: string;
+    columns: string;
+    noRows: string;
+    shown: string;
+  };
 };
 
 const EN: TelegramUi = {
@@ -1020,6 +1056,39 @@ const EN: TelegramUi = {
       rag: "Agentic RAG",
       vectors: "Vector store",
     },
+  },
+  memoryTables: {
+    columns: "columns",
+    down: "The memory service did not answer",
+    empty: "Memory has not built a single table yet. Say something to it above — the tables appear on their own, and nobody declares them in advance.",
+    lead: "Everything memory built out of what it was told. Tables and columns are created by memory itself, at the moment it needs them.",
+    loading: "reading…",
+    noRows: "the table exists, no rows in it yet",
+    refresh: "Refresh",
+    rows: "rows",
+    shown: "shown",
+    title: "What memory built",
+  },
+  memoryTest: {
+    answerTitle: "Memory's answer",
+    ask: "Ask",
+    askHint: "The phrase goes to recall. Empty field means everything memory knows.",
+    failed: "The bench could not reach the door",
+    inputTitle: "What we send",
+    lead: "Phrases go straight to the memory service. There is no agent in this chain — what you see is memory itself, with nothing added and nothing hidden.",
+    nothingSent: "Nothing sent yet.",
+    nothingYet: "Memory has not answered yet — send a phrase on the left.",
+    raw: "Raw call",
+    rawBody: "Request body, JSON",
+    rawHint: "Any method of the contract, body as JSON. A method that is not built answers 501 — and the bench shows that too.",
+    rawMethod: "Method name",
+    say: "Say",
+    sayHint: "The phrase goes to remember — the same way a person tells the bot something.",
+    send: "Send",
+    sending: "sending…",
+    status: "status",
+    took: "took",
+    volatile: "The list lives in this browser tab and disappears on reload.",
   },
   soonLead:
     "The place for it is here, and it is deliberately empty rather than hidden: a section that appears out of nowhere later is harder to notice than one that says it is coming.",
@@ -1513,6 +1582,39 @@ const RU: TelegramUi = {
       rag: "Агентный RAG",
       vectors: "Векторное хранилище",
     },
+  },
+  memoryTables: {
+    columns: "колонок",
+    down: "Служба памяти не ответила",
+    empty: "Память пока не построила ни одной таблицы. Скажите ей что-нибудь выше — таблицы появляются сами, заранее их никто не объявляет.",
+    lead: "Всё, что память построила из сказанного. Таблицы и колонки она заводит сама, в тот момент, когда они ей нужны.",
+    loading: "читаем…",
+    noRows: "таблица есть, строк в ней пока нет",
+    refresh: "Обновить",
+    rows: "строк",
+    shown: "показано",
+    title: "Что память построила",
+  },
+  memoryTest: {
+    answerTitle: "Ответ памяти",
+    ask: "Спросить",
+    askHint: "Фраза уходит в recall. Пустое поле — всё, что памяти известно.",
+    failed: "Стенд не достучался до двери",
+    inputTitle: "Что отправляем",
+    lead: "Фразы уходят прямо в службу памяти. Агента в этой цепочке нет — вы видите саму память, без добавленного и без скрытого.",
+    nothingSent: "Пока ничего не отправляли.",
+    nothingYet: "Память ещё не отвечала — отправьте фразу слева.",
+    raw: "Сырой вызов",
+    rawBody: "Тело запроса, JSON",
+    rawHint: "Любой метод договора, тело — JSON. Непостроенный метод отвечает 501, и стенд это тоже покажет.",
+    rawMethod: "Имя метода",
+    say: "Сказать",
+    sayHint: "Фраза уходит в remember — так же, как человек рассказывает что-то боту.",
+    send: "Отправить",
+    sending: "отправляем…",
+    status: "код",
+    took: "заняло",
+    volatile: "Список живёт в этой вкладке браузера и исчезает при перезагрузке.",
   },
   soonLead:
     "Место под него здесь, и оно намеренно пустое, а не спрятанное: раздел, появившийся потом из ниоткуда, заметить труднее, чем тот, который сам сказал, что он будет.",

@@ -191,11 +191,18 @@ export async function proxy(request: NextRequest) {
   // на который ушёл день отладки в 157-3.
   // 🛑 ТРЕТЬЯ ДВЕРЬ ЭТОГО ЖЕ КЛАССА ЗА ДВА ДНЯ. Признак, по которому их искать:
   // дверь сама зовёт `fracteraSession()` — значит привратник ей мешает, а не помогает.
+  // 🔒 ЧЕТВЁРТАЯ — СТЕНД ПАМЯТИ (176-1, 2026-09-10), И ОНА НАЙДЕНА ПРИЗНАКОМ,
+  // А НЕ ОТЛАДКОЙ. Правило из строки выше сработало как прибор: дверь зовёт
+  // `fracteraSession()` сама — значит её имя обязано стоять здесь. ✗ без этой
+  // строки островок стенда получил бы `307` и прочитал HTML вместо JSON, а
+  // выглядело бы это как «память не отвечает» — то есть обвинён был бы ровно
+  // тот, кого стенд заведён испытывать.
   if (
     pathname === "/api/fractera/known" ||
     pathname === "/api/fractera/soul" ||
     pathname === "/api/fractera/pty-ticket" ||
-    pathname === "/api/fractera/misses"
+    pathname === "/api/fractera/misses" ||
+    pathname === "/api/fractera/memory-test"
   ) {
     return NextResponse.next();
   }
