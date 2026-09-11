@@ -1,7 +1,5 @@
 import { Suspense } from "react"
-import { headers } from "next/headers"
-import { publicSiteUrl } from "@/lib/fractera/auth-url"
-import { Breadcrumbs } from "@/components/nav/breadcrumbs.server"
+import { PageCrumbs } from "@/components/nav/page-crumbs.server";
 import { Eyebrow, H1, Lead, Small } from "@/components/ui/typography"
 import { automationByIdLive, listAutomations } from "../../settings/_lib/automations"
 import { automationUi } from "./_i18n/automation.i18n"
@@ -72,10 +70,6 @@ async function AutomationBody({
   params: Promise<{ id: string; lang: string }>
 }) {
   const { id, lang } = await params
-  // Корень без субдомена выводится из хоста запроса — см. крошки ниже.
-  const h = await headers()
-  const host = h.get("x-forwarded-host") ?? h.get("host") ?? ""
-  const proto = h.get("x-forwarded-proto") ?? "https"
   const ui = automationUi(lang)
   // 🔒 ЖИВАЯ ЗАПИСЬ ИЩЕТСЯ ПЕРВОЙ, ОБРАЗЕЦ — ЗАПАСНЫМ (найдено владельцем
   // 2026-09-08): страница отвечала «такой нет» о записи, которая есть в базе,
@@ -85,8 +79,7 @@ async function AutomationBody({
   return (
     <main className="mx-auto flex w-full max-w-[1100px] flex-1 flex-col gap-8 px-6 py-10 md:px-8">
       <div className="flex flex-col gap-4">
-        <Breadcrumbs
-          rootHref={publicSiteUrl(host, proto)}
+        <PageCrumbs
           trail={[
             { href: `/${lang}`, label: ui.layer },
             { label: ui.title },

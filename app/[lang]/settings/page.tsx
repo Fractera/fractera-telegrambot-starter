@@ -3,9 +3,7 @@ import { join } from "node:path";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { appDialogUi } from "@/components/dialog/app-dialog.i18n";
-import { headers } from "next/headers";
-import { publicSiteUrl } from "@/lib/fractera/auth-url";
-import { Breadcrumbs } from "@/components/nav/breadcrumbs.server";
+import { PageCrumbs } from "@/components/nav/page-crumbs.server";
 import { Eyebrow, H1, Lead, Small } from "@/components/ui/typography";
 import { WorkspaceShell } from "@/components/workspace/workspace-shell";
 import { readChannels } from "@/lib/architect/channels";
@@ -103,10 +101,6 @@ async function BotSettingsGate({
   searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const { lang } = await params;
-  // Корень без субдомена выводится из хоста запроса — см. крошки ниже.
-  const h = await headers();
-  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "";
-  const proto = h.get("x-forwarded-proto") ?? "https";
   if (!(LANGS as readonly string[]).includes(lang)) {
     notFound();
   }
@@ -209,8 +203,7 @@ async function BotSettingsGate({
             поисковика из `lib/jsonld`, а служба бота обязана жить и без слота
             на 3000. Причины расписаны в самом компоненте. */}
         <div className="flex flex-col gap-4">
-          <Breadcrumbs
-            rootHref={publicSiteUrl(host, proto)}
+          <PageCrumbs
             trail={[
               { href: `/${lang}`, label: t.layer },
               { href: hrefOfTelegramSection(lang, "about"), label: ui.title },
