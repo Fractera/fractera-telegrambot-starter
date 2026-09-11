@@ -1,39 +1,51 @@
+import { Suspense } from "react";
+import { headers } from "next/headers";
 import { shellUi } from "./shell.i18n";
 import { ThemeToggle } from "./theme-toggle.client";
+import { publicMemoryUrl } from "@/lib/fractera/auth-url";
 
-// ПОДВАЛ СЛУЖБЫ — СТРОКА КОПИРАЙТА И ПЕРЕКЛЮЧАТЕЛЬ ТЕМЫ. ВСЁ.
+// ПОДВАЛ СЛУЖБЫ — ВЕРХНИЙ БЛОК СО ССЫЛКАМИ И СТРОКА КОПИРАЙТА.
 //
-// 🎯 РЕШЕНИЕ ВЛАДЕЛЬЦА 2026-09-06, ДОСЛОВНО: «убирай из футера всё… внизу
-// остаются у футера название Fractera — хардкод и иконки для работы с темой день
-// или ночь или системная… значит от футера у нас остаётся только надпись год —
-// Fractera, все права защищены».
+// 🎯 РЕШЕНИЕ ВЛАДЕЛЬЦА 2026-09-11: «на двух страницах, которые мы сделали —
+// страница чата и страница памяти, — верни второй верхний блок футера для
+// страниц архитектора. И разместить там две ссылки, пока только перелинковкой
+// друг на друга; больше добавлять ссылок не нужно».
 //
-// 🔒 ПОЧЕМУ ЭТО НЕ ОБЕДНЕНИЕ, А ОТВЯЗКА. Прежний подвал (481 строка) читал
-// `APP-CONFIG` и `PLATFORM-CONFIG` порта 3000: меню групп, соцсети, ссылки в
-// панель и слой архитектора, куки-баннер, переключатель языка, кнопка аккаунта,
-// ширина приложения. Всё это — чужие настройки; сотри владелец порт 3000, и
-// подвал показал бы пустоту или повёл в никуда. Слово владельца того же дня:
-// «никакие другие импорты из слоя 3000 нам не нужны».
+// 🪦 ЭТОТ БЛОК СНИМАЛИ 2026-09-06 ЦЕЛИКОМ, И ТОГДА ЭТО БЫЛО ВЕРНО: прежний
+// подвал на 481 строку читал `APP-CONFIG` и `PLATFORM-CONFIG` порта 3000 —
+// меню групп, соцсети, ссылки в панель. Сотри владелец 3000, и подвал повёл бы
+// в никуда. Теперь блок вернулся БЕЗ единого чужого конфига: в нём ровно одна
+// ссылка, и её адрес выводится из хоста запроса.
 //
-// 🔒 ИМЯ «Fractera» ЗАХАРДКОЖЕНО ПО ЕГО ПРЯМОМУ СЛОВУ. Прежде оно бралось из
-// `cfg.short_name` — имени чужого приложения.
+// 🔒 ССЫЛКА ОДНА НА СЛУЖБУ, И ЭТО ЧИСЛО, А НЕ НЕДОДЕЛКА. Две службы, по ссылке
+// на каждой — это и есть перелинковка, о которой шла речь. Третью сюда
+// добавлять нельзя, пока её не назовут: подвал, растущий сам по себе, через
+// месяц снова станет меню на 481 строку.
 //
-// 🛑 ГОД БЕРЁТСЯ ИЗ `new Date()`, И ПОД `cacheComponents` ЭТО ОТКАЗ СБОРКИ:
-// «used `new Date()` before accessing either uncached data or Request data».
-// Измерено сборкой, а не предположено. Лечение стоит в `app/[lang]/layout.tsx` —
-// адаптер `connection()` перед вызовом; здесь оно НЕ повторяется, потому что
-// вторая защита от той же беды означала бы два места, где её чинят.
+// 🛑 АДРЕС СОСЕДА ВЫВОДИТСЯ ИЗ ХОСТА, А НЕ ПИШЕТСЯ КОНСТАНТОЙ. На домене это
+// `memory.<апекс>`, на голом IP — соседний порт. Константа увела бы
+// человека с его сервера на наш, и он бы этого не заметил.
 //
-// 🪦 УДАЛЕНЫ ВМЕСТЕ С ПРЕЖНИМ ПОДВАЛОМ И ВОССТАНАВЛИВАЮТСЯ ИЗ GIT:
-// `footer-menu.server.tsx`, `footer-menu.i18n.ts`, `admin-link.client.tsx`,
-// `app-width-toggle.client.tsx`, `cookie-settings-button.*`,
-// `footer-social-dropdown.client.tsx`.
+// 🛑 ЗАГОЛОВКИ ЧИТАЮТСЯ ПОД `<Suspense>`: под `cacheComponents` обращение к
+// запросу вне границы ожидания роняет пререндер. В этом проекте закон оплачен
+// сборкой трижды за один день — здесь он применён заранее.
+//
+// 🛑 ГОД БЕРЁТСЯ ИЗ `new Date()`, и лечение стоит в `app/[lang]/layout.tsx`:
+// адаптер `connection()` перед вызовом. Здесь оно НЕ повторяется — две защиты
+// от одной беды означают два места, где её чинят.
 
 export function SiteFooter({ lang }: { lang: string }) {
   const ui = shellUi(lang);
 
   return (
     <footer className="w-full border-border border-t">
+      {/* ВЕРХНИЙ БЛОК: соседние службы одной строкой. */}
+      <div className="w-full border-border border-b px-6 py-4 md:px-8">
+        <Suspense fallback={<div className="h-5" />}>
+          <SiblingLink lang={lang} />
+        </Suspense>
+      </div>
+
       <div className="flex w-full flex-wrap items-center justify-between gap-3 px-6 py-4 md:px-8">
         <span className="text-[length:var(--fs-small)] text-muted-foreground">
           © {new Date().getFullYear()} Fractera. {ui.rights}
@@ -43,5 +55,32 @@ export function SiteFooter({ lang }: { lang: string }) {
         />
       </div>
     </footer>
+  );
+}
+
+/**
+ * Ссылка на соседнюю службу.
+ *
+ * 🛑 ПУСТОЙ АДРЕС — ЗАКОННЫЙ ИСХОД, И ТОГДА ССЫЛКИ НЕТ ВОВСЕ. Машина без домена
+ * и без порта соседа сосчитать его не может; ссылка в никуда хуже её отсутствия.
+ */
+async function SiblingLink({ lang }: { lang: string }) {
+  const h = await headers();
+  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "";
+  const proto = h.get("x-forwarded-proto") ?? "https";
+  const ui = shellUi(lang);
+  const href = publicMemoryUrl(host, proto);
+
+  if (!href) return <div className="h-5" />;
+
+  return (
+    <nav aria-label="Fractera" className="flex flex-wrap items-center gap-4">
+      <a
+        className="text-[length:var(--fs-small)] text-muted-foreground hover:text-foreground"
+        href={`${href}/${lang}`}
+      >
+        {ui.memoryService}
+      </a>
+    </nav>
   );
 }

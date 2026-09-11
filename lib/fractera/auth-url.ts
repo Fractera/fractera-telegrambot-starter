@@ -76,3 +76,14 @@ export function publicSiteUrl(host: string, proto: string): string {
 export function publicAdminUrl(host: string, proto: string): string {
   return siblingByHost(host, proto, "admin.", "3002") || process.env.NEXT_PUBLIC_ADMIN_URL || "";
 }
+
+/**
+ * Публичный адрес соседней службы — служба памяти (186-4).
+ *
+ * 🔒 ТОТ ЖЕ ВЫВОД, ЧТО У ВХОДА И У САЙТА, И ЖИВЁТ ОН ЗДЕСЬ ЖЕ: два места,
+ * считающие один адрес, расходятся так, что одна половина продолжает работать.
+ * 🛑 Пустая строка — законный ответ: подвал тогда не рисует ссылку вовсе.
+ */
+export function publicMemoryUrl(host: string, proto: string): string {
+  return siblingByHost(host, proto, "memory.", "3700");
+}
