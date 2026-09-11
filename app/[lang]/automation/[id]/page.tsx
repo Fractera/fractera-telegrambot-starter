@@ -1,4 +1,6 @@
 import { Suspense } from "react"
+import { headers } from "next/headers"
+import { publicSiteUrl } from "@/lib/fractera/auth-url"
 import { Breadcrumbs } from "@/components/nav/breadcrumbs.server"
 import { Eyebrow, H1, Lead, Small } from "@/components/ui/typography"
 import { automationByIdLive, listAutomations } from "../../settings/_lib/automations"
@@ -70,6 +72,10 @@ async function AutomationBody({
   params: Promise<{ id: string; lang: string }>
 }) {
   const { id, lang } = await params
+  // Корень без субдомена выводится из хоста запроса — см. крошки ниже.
+  const h = await headers()
+  const host = h.get("x-forwarded-host") ?? h.get("host") ?? ""
+  const proto = h.get("x-forwarded-proto") ?? "https"
   const ui = automationUi(lang)
   // 🔒 ЖИВАЯ ЗАПИСЬ ИЩЕТСЯ ПЕРВОЙ, ОБРАЗЕЦ — ЗАПАСНЫМ (найдено владельцем
   // 2026-09-08): страница отвечала «такой нет» о записи, которая есть в базе,
@@ -80,7 +86,12 @@ async function AutomationBody({
     <main className="mx-auto flex w-full max-w-[1100px] flex-1 flex-col gap-8 px-6 py-10 md:px-8">
       <div className="flex flex-col gap-4">
         <Breadcrumbs
-          trail={[{ label: ui.layer }, { label: ui.title }, { label: item?.name ?? id }]}
+          rootHref={publicSiteUrl(host, proto)}
+          trail={[
+            { href: `/${lang}`, label: ui.layer },
+            { label: ui.title },
+            { label: item?.name ?? id },
+          ]}
         />
 
         <header className="flex flex-col gap-4 border-border border-b pb-8">
